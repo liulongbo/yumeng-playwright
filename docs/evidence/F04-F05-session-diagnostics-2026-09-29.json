@@ -1,0 +1,1585 @@
+{
+  "schema_version": "session-diagnostics.v1",
+  "observed_at": "2026-09-29T06:32:32.646795+00:00",
+  "unit_id": "unit-local-mac-02",
+  "session_health": {
+    "status": "INDETERMINATE",
+    "expected_account_id": "ID: 1865332309937515",
+    "observed_account_id": null,
+    "protected_page_verified": true,
+    "login_page_verified": false,
+    "challenge_verified": false,
+    "checked_at": "2026-09-29T06:32:32.505867Z",
+    "browser_version": null,
+    "browser_environment_hash": null,
+    "evidence_reason": "PROTECTED_PAGE_ACCOUNT_UNREADABLE"
+  },
+  "browser": {
+    "playwright_reported_version": "154.0.8037.58",
+    "executable_reported_version": "154.0.8037.58",
+    "executable_sha256": "633aa60f1ee2346804e006071d8f6a2114106e9c17abd601fe61bf9754638740",
+    "environment_hash": "bdffc6c42532a68c5ba6a92cc8a7f1e83229715236ebdaa59bbb9ae3556b3e49",
+    "headless": false,
+    "launch_args": [
+      "--disable-quic",
+      "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--window-position=60,60",
+      "--window-size=1440,960"
+    ],
+    "service_workers": "allow",
+    "normal_close_confirmed": true
+  },
+  "profile": {
+    "path": "/Users/yaoyao/Documents/02-Work/予梦/01-定向爬取+定时更新/.runtime/profiles/unit-local-mac-02",
+    "files": [
+      {
+        "path": "Default/Cookies",
+        "exists": true,
+        "kind": "file",
+        "size": 36864,
+        "mtime": "2026-09-29T06:31:32.038427+00:00"
+      },
+      {
+        "path": "Default/Local Storage",
+        "exists": true,
+        "kind": "directory",
+        "size": 96,
+        "mtime": "2026-09-27T05:59:04.519446+00:00"
+      },
+      {
+        "path": "Default/Session Storage",
+        "exists": true,
+        "kind": "directory",
+        "size": 256,
+        "mtime": "2026-09-29T06:31:02.138628+00:00"
+      },
+      {
+        "path": "Default/IndexedDB",
+        "exists": true,
+        "kind": "directory",
+        "size": 96,
+        "mtime": "2026-09-27T06:18:06.804503+00:00"
+      },
+      {
+        "path": "Local State",
+        "exists": true,
+        "kind": "file",
+        "size": 11486,
+        "mtime": "2026-09-29T06:32:32.618512+00:00"
+      },
+      {
+        "path": "Default/Preferences",
+        "exists": true,
+        "kind": "file",
+        "size": 12137,
+        "mtime": "2026-09-29T06:32:32.618040+00:00"
+      }
+    ]
+  },
+  "cookies": [
+    {
+      "name": "ttwid",
+      "domain": ".bytedance.com",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1822024779.378364,
+      "last_update": null,
+      "value_hmac": "10f921d29ea4401d06b5b46b76b8ec550ed5c36657dda09a0918b608f4a80a7c"
+    },
+    {
+      "name": "bd_sso_hi3jfd",
+      "domain": ".bytednsdoc.com",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1822025937.167678,
+      "last_update": null,
+      "value_hmac": "1fc35e872a1476ba3a97b27970b9694c58cee04fa728609030a148c65d6771f1"
+    },
+    {
+      "name": "HMACCOUNT_BFESS",
+      "domain": ".hm.baidu.com",
+      "path": "/",
+      "secure": true,
+      "http_only": false,
+      "same_site": "None",
+      "session": false,
+      "expires": 1825048773.470057,
+      "last_update": null,
+      "value_hmac": "884d24421a0731b313eac00be1ad0dad78d75f48b3aa399b68b6b9daf0960948"
+    },
+    {
+      "name": "d_ticket",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1822198708.207826,
+      "last_update": null,
+      "value_hmac": "ca1c462fcf5a113bfb7ea714d6aec2cf7dc0c2b37ddb669c6c788b0307fb74ee"
+    },
+    {
+      "name": "n_mh",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1801030708.207972,
+      "last_update": null,
+      "value_hmac": "eb14eee1eec64da72d68dca891d5f041c572d57b9f95f30222d89b3a4f41feb0"
+    },
+    {
+      "name": "odin_tt",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1822198708.207899,
+      "last_update": null,
+      "value_hmac": "4db8be38088dc4af838835ab34587fde16b8925790bec6db922b4f2b43444c50"
+    },
+    {
+      "name": "passport_auth_status",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1793081002.937491,
+      "last_update": null,
+      "value_hmac": "29a3bbd30fc77332b65204191d61f6571d2c9def1ec35e26caa0b304ed4d7452"
+    },
+    {
+      "name": "passport_auth_status_ss",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1793081002.93753,
+      "last_update": null,
+      "value_hmac": "29a3bbd30fc77332b65204191d61f6571d2c9def1ec35e26caa0b304ed4d7452"
+    },
+    {
+      "name": "passport_csrf_token",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": true,
+      "http_only": false,
+      "same_site": "None",
+      "session": false,
+      "expires": 1795672945.713364,
+      "last_update": null,
+      "value_hmac": "75440600c990456a41b21ea571dff8e8aaf3b94cb0233e0b8d7fd10c244abf5e"
+    },
+    {
+      "name": "passport_csrf_token_default",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": false,
+      "http_only": false,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795672945.713493,
+      "last_update": null,
+      "value_hmac": "75440600c990456a41b21ea571dff8e8aaf3b94cb0233e0b8d7fd10c244abf5e"
+    },
+    {
+      "name": "passport_mfa_token",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795846708.20767,
+      "last_update": null,
+      "value_hmac": "06f84ef403b2bd3ff3f2b05b933740fae417cb9923b4950f1611f1389e69d6d5"
+    },
+    {
+      "name": "sid_ucp_sso_v1",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795846707.208274,
+      "last_update": null,
+      "value_hmac": "8a44e578a0de2185182f6ccbf47508003c0708079e2967507575c3a8a9fcbac4"
+    },
+    {
+      "name": "ssid_ucp_sso_v1",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1795846707.20834,
+      "last_update": null,
+      "value_hmac": "8a44e578a0de2185182f6ccbf47508003c0708079e2967507575c3a8a9fcbac4"
+    },
+    {
+      "name": "sso_auth_status",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1793081002.93757,
+      "last_update": null,
+      "value_hmac": "4b69af47ca25d189de886b0c21772c0d93885b51b96f99aa1e275cce41e74627"
+    },
+    {
+      "name": "sso_auth_status_ss",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1793081002.937605,
+      "last_update": null,
+      "value_hmac": "4b69af47ca25d189de886b0c21772c0d93885b51b96f99aa1e275cce41e74627"
+    },
+    {
+      "name": "sso_uid_tt",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795846707.208033,
+      "last_update": null,
+      "value_hmac": "4a7332225cbbf3d04389523fb045c3ccefc86ddff44c32a7f8c5601a79983f50"
+    },
+    {
+      "name": "sso_uid_tt_ss",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1795846707.208093,
+      "last_update": null,
+      "value_hmac": "4a7332225cbbf3d04389523fb045c3ccefc86ddff44c32a7f8c5601a79983f50"
+    },
+    {
+      "name": "toutiao_sso_user",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795846707.208156,
+      "last_update": null,
+      "value_hmac": "92be3e64b392f0e94c2b7638fc9f2d95c3d79e7226b886a83dc9664422e3fbaa"
+    },
+    {
+      "name": "toutiao_sso_user_ss",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1795846707.208216,
+      "last_update": null,
+      "value_hmac": "92be3e64b392f0e94c2b7638fc9f2d95c3d79e7226b886a83dc9664422e3fbaa"
+    },
+    {
+      "name": "tt_webid",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": false,
+      "http_only": false,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1822198708.802656,
+      "last_update": null,
+      "value_hmac": "309e3c4dc3ed1d5247fa8be067f673cd6ca2b666002de4064216adb8a8bb7913"
+    },
+    {
+      "name": "ttwid",
+      "domain": ".oceanengine.com",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1822199021.279644,
+      "last_update": null,
+      "value_hmac": "fabcc991addb51884bfb68214b267bb9ac28a1826ef1555dd9860fea24488934"
+    },
+    {
+      "name": "HMACCOUNT",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": false,
+      "same_site": "Lax",
+      "session": true,
+      "expires": -1,
+      "last_update": null,
+      "value_hmac": "884d24421a0731b313eac00be1ad0dad78d75f48b3aa399b68b6b9daf0960948"
+    },
+    {
+      "name": "Hm_lpvt_5d77c979053345c4bd8db63329f818ec",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": false,
+      "same_site": "Lax",
+      "session": true,
+      "expires": -1,
+      "last_update": null,
+      "value_hmac": "aeb6bcd84fede03d37def3a4f1bcd7ebea256cb2d831ac7ecabac6de16b9c729"
+    },
+    {
+      "name": "Hm_lvt_5d77c979053345c4bd8db63329f818ec",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": false,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1822199463,
+      "last_update": null,
+      "value_hmac": "e188d51a17cd96dba2ba8b7a69fd43ba61c7549aece9b4b1a9969095842ef691"
+    },
+    {
+      "name": "has_biz_token",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795846711.589792,
+      "last_update": null,
+      "value_hmac": "b683080e319249d87ff50f2de7590868ce3198573f9c3aa950b6e191e031ad01"
+    },
+    {
+      "name": "is_staff_user",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795846711.589778,
+      "last_update": null,
+      "value_hmac": "b683080e319249d87ff50f2de7590868ce3198573f9c3aa950b6e191e031ad01"
+    },
+    {
+      "name": "passport_auth_status",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1793081003.120068,
+      "last_update": null,
+      "value_hmac": "e88a19aef333085b8c8ac4a3715a4116bb98504b7490e13523dc2a55e5c0204a"
+    },
+    {
+      "name": "passport_auth_status_ss",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1793081003.120082,
+      "last_update": null,
+      "value_hmac": "e88a19aef333085b8c8ac4a3715a4116bb98504b7490e13523dc2a55e5c0204a"
+    },
+    {
+      "name": "passport_csrf_token",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": true,
+      "http_only": false,
+      "same_site": "None",
+      "session": false,
+      "expires": 1795673003.119967,
+      "last_update": null,
+      "value_hmac": "4aec6972b8467ef1fb172198bb74c52ee681e9b757ba77282f0212e8ea59f4e5"
+    },
+    {
+      "name": "passport_csrf_token_default",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": false,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795673003.120048,
+      "last_update": null,
+      "value_hmac": "4aec6972b8467ef1fb172198bb74c52ee681e9b757ba77282f0212e8ea59f4e5"
+    },
+    {
+      "name": "possess_scene_star_id",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": false,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1790835511.809618,
+      "last_update": null,
+      "value_hmac": "c0626aeba1918dc6cfcc5994cbcb8eae76030c65f549243941e33b560ce7d610"
+    },
+    {
+      "name": "session_tlb_tag",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1795846711.589762,
+      "last_update": null,
+      "value_hmac": "4b2d37a352e95c50992a322e9113e7f05328550e0ca654c2251a99edf555dc4c"
+    },
+    {
+      "name": "sessionid",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795846711.589732,
+      "last_update": null,
+      "value_hmac": "71b847bee69cff448bdfb684d16ca27faf996613f956ff2c63bb8e0818c34db6"
+    },
+    {
+      "name": "sessionid_ss",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1795846711.589747,
+      "last_update": null,
+      "value_hmac": "71b847bee69cff448bdfb684d16ca27faf996613f956ff2c63bb8e0818c34db6"
+    },
+    {
+      "name": "sid_guard",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1821766711.589639,
+      "last_update": null,
+      "value_hmac": "82bc3c408afe923f76616e1893921f7ebefba12053ddcaa26b0335083d0c29f0"
+    },
+    {
+      "name": "sid_tt",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795846711.589717,
+      "last_update": null,
+      "value_hmac": "71b847bee69cff448bdfb684d16ca27faf996613f956ff2c63bb8e0818c34db6"
+    },
+    {
+      "name": "sid_ucp_v1",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795846711.589806,
+      "last_update": null,
+      "value_hmac": "d3b2b217914ba7cf9f1c0daf0a23485e761aaae361b246bf38d5fb6c4ffe7f83"
+    },
+    {
+      "name": "ssid_ucp_v1",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1795846711.589823,
+      "last_update": null,
+      "value_hmac": "d3b2b217914ba7cf9f1c0daf0a23485e761aaae361b246bf38d5fb6c4ffe7f83"
+    },
+    {
+      "name": "star_sessionid",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": true,
+      "expires": -1,
+      "last_update": null,
+      "value_hmac": "71b847bee69cff448bdfb684d16ca27faf996613f956ff2c63bb8e0818c34db6"
+    },
+    {
+      "name": "tt_webid",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": false,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1822199462.779544,
+      "last_update": null,
+      "value_hmac": "9e79520a0864f8191c897a96ae28c72df161c0c24a60674ca1f226f7b43dc401"
+    },
+    {
+      "name": "uid_tt",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795846711.589682,
+      "last_update": null,
+      "value_hmac": "94c1e1753900b822927ba054b47c359f7bc8d8f5f7fcc7830a9bc7eef9f2c6b5"
+    },
+    {
+      "name": "uid_tt_ss",
+      "domain": ".xingtu.cn",
+      "path": "/",
+      "secure": true,
+      "http_only": true,
+      "same_site": "None",
+      "session": false,
+      "expires": 1795846711.5897,
+      "last_update": null,
+      "value_hmac": "94c1e1753900b822927ba054b47c359f7bc8d8f5f7fcc7830a9bc7eef9f2c6b5"
+    },
+    {
+      "name": "fg_uid",
+      "domain": "api.feelgood.cn",
+      "path": "/",
+      "secure": true,
+      "http_only": false,
+      "same_site": "None",
+      "session": false,
+      "expires": 1822198898.162755,
+      "last_update": null,
+      "value_hmac": "8ed4d71d25030d2d3b0c920aeb9726a881e6b43042faf4c73fd5b4a953a0c298"
+    },
+    {
+      "name": "security_iframe_cookie_detect",
+      "domain": "lf3-static.bytednsdoc.com",
+      "path": "/obj/eden-cn/fapybjlz_lm_zlp/ljhwZthlaukjlkulzlp/security",
+      "secure": true,
+      "http_only": false,
+      "same_site": "None",
+      "session": true,
+      "expires": -1,
+      "last_update": null,
+      "value_hmac": "f78a0bac24e884c2cadfab27223abaf0a3dc6bbd1281d0e2aba9761ec5d26deb"
+    },
+    {
+      "name": "gd_random",
+      "domain": "sso.oceanengine.com",
+      "path": "/xingtu/login",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1791267821.089822,
+      "last_update": null,
+      "value_hmac": "44230f17e93e87297bdad8446f36093c23706bcfdefe1ad8ae4150cb68df8c16"
+    },
+    {
+      "name": "s_v_web_id",
+      "domain": "sso.oceanengine.com",
+      "path": "/",
+      "secure": false,
+      "http_only": false,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795673886,
+      "last_update": null,
+      "value_hmac": "273b4fd0a8f00e5efe73e1d0b99ac86f20803197ab25d2c5a98083d017edaed1"
+    },
+    {
+      "name": "csrf_session_id",
+      "domain": "www.xingtu.cn",
+      "path": "/",
+      "secure": true,
+      "http_only": false,
+      "same_site": "None",
+      "session": true,
+      "expires": -1,
+      "last_update": null,
+      "value_hmac": "93a0e34b3e1afa71a15c4dfa60cb421f052b8ad91c1953d73d9101284cd7224e"
+    },
+    {
+      "name": "gd_random",
+      "domain": "www.xingtu.cn",
+      "path": "/fallback",
+      "secure": false,
+      "http_only": true,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1791093941.334794,
+      "last_update": null,
+      "value_hmac": "7f139cec4289e126bf9ffbf7676483c52a89da80829555987c708a635fb44260"
+    },
+    {
+      "name": "s_v_web_id",
+      "domain": "www.xingtu.cn",
+      "path": "/",
+      "secure": false,
+      "http_only": false,
+      "same_site": "Lax",
+      "session": false,
+      "expires": 1795674428,
+      "last_update": null,
+      "value_hmac": "d28520ca173df614a4c3a808874d1d2ecff791d7a66760220960819f5b2d6de2"
+    }
+  ],
+  "storage": {
+    "origin": "https://www.xingtu.cn",
+    "local_storage": [
+      {
+        "key": "=^_^=athena_web_id",
+        "value_hmac": "4b539ee9b6e09490f05c0032b6774cd57775510283f6c4dc556c1d27c53536ec"
+      },
+      {
+        "key": "AD_HOME_PAGE_FEEDBACK_SHOWN",
+        "value_hmac": "4bbba6046fc2eff73b4598fe7b3000130ea6f4bb1d073fc60a22f2a177339c21"
+      },
+      {
+        "key": "ARGUS_XSS_V3",
+        "value_hmac": "5345ff47708ebdbd24f9f54ccb882b97fa2ae465afab448192f438eb50247b27"
+      },
+      {
+        "key": "Hm_lvt_5d77c979053345c4bd8db63329f818ec",
+        "value_hmac": "aab3c796d23a66b77a4f9293367d3a9cf7a8108447194ecd8929ed09a0ecaf84"
+      },
+      {
+        "key": "INSIGHT_DEMAND_INDUSTRY_AVAILABLE",
+        "value_hmac": "606a79d1ad775a278b9da60e9a4d101986460c836df249c28a21d91b0d2e36e2"
+      },
+      {
+        "key": "LAST_MESSAGE_CENTER_SHOW_TIMESTAMP",
+        "value_hmac": "d5e33bf1f850f94c5ed414b6a5199648ab09592181470359bd4c21bb78418699"
+      },
+      {
+        "key": "PREFERENCE_KEY",
+        "value_hmac": "fb3056ec52fe57064e2b5c33c8b4544781b1096e8f33d7f6c0a9ac43a11bb482"
+      },
+      {
+        "key": "SLARDARgoofy_deploy_micro_fe_sdk",
+        "value_hmac": "2b304a10874761ce23c6d3ab16344ccee92a097d7a78d1b1f74f08cfd8cc5f71"
+      },
+      {
+        "key": "SLARDARstar_fe",
+        "value_hmac": "471d9c4a0e3aaa8fb113adc378e67cfc907d2f319f5195009b84e0072bf0594a"
+      },
+      {
+        "key": "SLARDARstar_massive",
+        "value_hmac": "58fa1b113cb9a4fd3f37e863f6b501acecbf8e5b498efb8e318d5d2eaf16a0e6"
+      },
+      {
+        "key": "STAR_GUIDE_LOCAL_STORAGE_KEY",
+        "value_hmac": "a92b8f150427e4f6766e11ac1ae8dc680dc0e0dac53ab2735d8d6c8e39985a4b"
+      },
+      {
+        "key": "STAR_NEW_LOCAL_STORAGE_KEY",
+        "value_hmac": "a92b8f150427e4f6766e11ac1ae8dc680dc0e0dac53ab2735d8d6c8e39985a4b"
+      },
+      {
+        "key": "__tea_cache_first_1574",
+        "value_hmac": "f78a0bac24e884c2cadfab27223abaf0a3dc6bbd1281d0e2aba9761ec5d26deb"
+      },
+      {
+        "key": "__tea_cache_first_1581",
+        "value_hmac": "f78a0bac24e884c2cadfab27223abaf0a3dc6bbd1281d0e2aba9761ec5d26deb"
+      },
+      {
+        "key": "__tea_cache_first_2018",
+        "value_hmac": "f78a0bac24e884c2cadfab27223abaf0a3dc6bbd1281d0e2aba9761ec5d26deb"
+      },
+      {
+        "key": "__tea_cache_refer_1581",
+        "value_hmac": "c70372510b4f3cc1bc8a3eef31e55bdebf092c5d2790f7dd9efd7cb373ed1e51"
+      },
+      {
+        "key": "__tea_cache_tokens_1574",
+        "value_hmac": "083b611e8bed9002e9280ac307e765c8241d0f397364f2ae351b8d5c520a8f8f"
+      },
+      {
+        "key": "__tea_cache_tokens_1581",
+        "value_hmac": "2cb53cdf2a083bfafee7968e7ad6108382a38a031ddf8c26f87cabe79930ffc6"
+      },
+      {
+        "key": "__tea_cache_tokens_2018",
+        "value_hmac": "4deca7675380dc6caee5ab4088fddefb95904c78eb91953699065bab378eb36c"
+      },
+      {
+        "key": "__tea_sdk_ab_version_1581",
+        "value_hmac": "54e22d3b6055644553a9291c54aa21ee116f1d4c7e9dc4966c7ac75e5c0aedee"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSeedBaseInfo\",{\"o_author_id\":\"6763236841366749188\",\"range\":90}]",
+        "value_hmac": "e9eadcb37cafb4e9f56ea2b8bfaf310551065efd254e26537a67b4e7a54ab2b1"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSeedBaseInfo\",{\"o_author_id\":\"6849131371793743886\",\"range\":30}]",
+        "value_hmac": "3a1ab0544cf56ac1496f88a27b69402dba8dd9772325ad3cd280120ee6f23969"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSeedBaseInfo\",{\"o_author_id\":\"6935067985597956133\",\"range\":30}]",
+        "value_hmac": "256735a9eff8521e9a9ec2b6f668979b3fd51a334c64577c336b4f5ffd282476"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSeedBaseInfo\",{\"o_author_id\":\"7153794378790600712\",\"range\":30}]",
+        "value_hmac": "36218a0341583ec7fb3a70a88a7fd8214b6be9924ed62f06d64db88a48f2eb18"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSeedBaseInfo\",{\"o_author_id\":\"7201315409155342395\",\"range\":30}]",
+        "value_hmac": "e34f60237000577217bacde3317ce65c03f58f9b8502a63b5b43d1ba47810b1d"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSeedBaseInfo\",{\"o_author_id\":\"7360610271510921225\",\"range\":30}]",
+        "value_hmac": "6721d50e1dfa6533171b7882aa35d7f5d5ed04d3ef87538b1bad846d5c4f8ee0"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSeedBaseInfo\",{\"o_author_id\":\"7646720304210771978\",\"range\":30}]",
+        "value_hmac": "038a1452f4b0be501a03dea485243acd1674b1afd805440bba44ad536e1507e5"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSpreadInfo\",{\"o_author_id\":\"6763236841366749188\"}]",
+        "value_hmac": "20a225a3c4eaac283cfd05ec5fcfb0d62589748eb67fb85c1e00d3decb4bf9cf"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSpreadInfo\",{\"o_author_id\":\"6849131371793743886\"}]",
+        "value_hmac": "c73c8c80f6c42a5478d028b6bb840481408979edd821c2dc1f9248b17633287f"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSpreadInfo\",{\"o_author_id\":\"6935067985597956133\"}]",
+        "value_hmac": "26ed17c5182757ba53f17fd893e4a1b23d165160b610b3c8ee447f1e8ac67dba"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSpreadInfo\",{\"o_author_id\":\"6989750547695796260\"}]",
+        "value_hmac": "bed8014e21b35bbec0c8e0c215c709461fb652773f6c28c98da9dd1628b4d672"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSpreadInfo\",{\"o_author_id\":\"7153794378790600712\"}]",
+        "value_hmac": "13e0e9ec3093b2cdedeeb1fd6212a6d5d9de25ec5ad8db3d0d14376ee7b6c817"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSpreadInfo\",{\"o_author_id\":\"7201315409155342395\"}]",
+        "value_hmac": "35764aadbe4aa6117f3f4a2228d9e37e23da2e570c9e0b3c1c8747b7b9c1cf1b"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSpreadInfo\",{\"o_author_id\":\"7360610271510921225\"}]",
+        "value_hmac": "8448ac0076e3824cfd9280150072b2712c8a1fa383a8d0cabf86e6c35f25f64f"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorCommerceSpreadInfo\",{\"o_author_id\":\"7646720304210771978\"}]",
+        "value_hmac": "1da4a31afa0ad3425b64d310cae47a15320b1c041c2ee6db22b09117d5aee883"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorContractBaseInfo\",{\"o_author_id\":\"6763236841366749188\",\"range\":90}]",
+        "value_hmac": "5cc594dc30ab3cd2d6ece19527f671ad89ea7aca3cfe226f90b04cb6f1c6a4f9"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorContractBaseInfo\",{\"o_author_id\":\"6849131371793743886\",\"range\":90}]",
+        "value_hmac": "4fa4a17be3edd686b7984598c9c7ce61e3069ec9a11d193d29a56e9fc62a8593"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorContractBaseInfo\",{\"o_author_id\":\"6935067985597956133\",\"range\":90}]",
+        "value_hmac": "dd26805ed434fae2447cb3b88b93e41ce8f1463ef2a16874bbbaba415d556771"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorContractBaseInfo\",{\"o_author_id\":\"6989750547695796260\",\"range\":90}]",
+        "value_hmac": "3560f9b4c36edd07811f5fb4a6bf9a35c5bc60337ce5ace943ff86a90435690b"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorContractBaseInfo\",{\"o_author_id\":\"7153794378790600712\",\"range\":90}]",
+        "value_hmac": "75eff77bdbe35477d31dc95bcc88aa2beb94d50b60e070d57bb8f2c4b5617525"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorContractBaseInfo\",{\"o_author_id\":\"7201315409155342395\",\"range\":90}]",
+        "value_hmac": "c1d442a6ac9dbc27774d3658e8ec8cea734041eb3e22d559c021d98b25b9289f"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorContractBaseInfo\",{\"o_author_id\":\"7360610271510921225\",\"range\":90}]",
+        "value_hmac": "2ac6c175810e28b11bc4b687bc15ba340a38e933192a816d119f0f0e10e72921"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorContractBaseInfo\",{\"o_author_id\":\"7646720304210771978\",\"range\":90}]",
+        "value_hmac": "61be763d62e944a0c634581278a543f7c3a0ad0898964e7666b24ed316ff9213"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorGlobalInfo\",{\"o_author_id\":\"6763236841366749188\"}]",
+        "value_hmac": "0b9f3aa380dc4b057936923bd0297dfe4c918ce253e2e1917ef4a283c60e1af9"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorGlobalInfo\",{\"o_author_id\":\"6849131371793743886\"}]",
+        "value_hmac": "db229857625a3898250be9654241fd8d016456cdbef7c87470a24402cb959489"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorGlobalInfo\",{\"o_author_id\":\"6935067985597956133\"}]",
+        "value_hmac": "6fc37d9867695ae02de7f1cf6e97feea7275b0ec59802ac539bf6ea5cbf6f8ed"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorGlobalInfo\",{\"o_author_id\":\"6989750547695796260\"}]",
+        "value_hmac": "5ecd8ed8d859c6c92c6bc553708acb046a96eb45bcaf531028326e6e4f952e2e"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorGlobalInfo\",{\"o_author_id\":\"7153794378790600712\"}]",
+        "value_hmac": "5982e135a6d595f5c0dd8c8baa1207589d091b8940acac495994b6875cebf218"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorGlobalInfo\",{\"o_author_id\":\"7201315409155342395\"}]",
+        "value_hmac": "de9b126f0a332f5d7011e6de296594007aa7dd9e40abe3a8eb58adba07049c42"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorGlobalInfo\",{\"o_author_id\":\"7360610271510921225\"}]",
+        "value_hmac": "22bf88f18d67d084a1fb265c06ed59c25fa9aa4f70acbf2643d76711fb79c80c"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorGlobalInfo\",{\"o_author_id\":\"7646720304210771978\"}]",
+        "value_hmac": "008c1e30d76ad84f24190f1d7c01926503eb5218599240ecdb2eef7e2f026c66"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorOrderExperience\",{\"o_author_id\":\"6763236841366749188\",\"period\":90}]",
+        "value_hmac": "40cd66e3ad473d20d1f4fe707fd113063c8eab6e632a1a1b8b8bfb750a0cccfa"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorOrderExperience\",{\"o_author_id\":\"6849131371793743886\",\"period\":30}]",
+        "value_hmac": "fc6db8a2e3f57e13933d6d6f0215c3aa6352938a7e07d8f5287f55aa615f4a29"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorOrderExperience\",{\"o_author_id\":\"6935067985597956133\",\"period\":30}]",
+        "value_hmac": "a70388957550d1bf793f6df05dfc1fbe2a9f212365656c6263e8ee0baa317afe"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorOrderExperience\",{\"o_author_id\":\"7153794378790600712\",\"period\":30}]",
+        "value_hmac": "17dcd5de308f8256f69d721d726c962733582ce7853cb4fdc6123e4029d388b9"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorOrderExperience\",{\"o_author_id\":\"7201315409155342395\",\"period\":30}]",
+        "value_hmac": "e6486fe7c6459cf1636626fbe3eb17d9e7d1317240f6e1c0e8233e1e9f8c6c0f"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorOrderExperience\",{\"o_author_id\":\"7360610271510921225\",\"period\":30}]",
+        "value_hmac": "d09a4b9213432e85e79d10a8682deefd1a94e4f6891d5573d1c31e6ad1386088"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorOrderExperience\",{\"o_author_id\":\"7646720304210771978\",\"period\":30}]",
+        "value_hmac": "897cd49c481abd0dba41bed7cbc7783ddac84a6fc8c000d80be52ca4343f7f63"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorSideBaseInfo\",{\"o_author_id\":\"6763236841366749188\"}]",
+        "value_hmac": "43df04791a454fb588c3863c82ea2d4827541269a0f2d3f8e858e7be68379359"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorSideBaseInfo\",{\"o_author_id\":\"6849131371793743886\"}]",
+        "value_hmac": "c33ee036c2bd412327f0550460cf209855aff8d4d4de60efac70bf7500b9f1ce"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorSideBaseInfo\",{\"o_author_id\":\"6935067985597956133\"}]",
+        "value_hmac": "b8de9781b55a4a8ed41720596e76ac19f91bc1d082bbb0b06098232256689591"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorSideBaseInfo\",{\"o_author_id\":\"6989750547695796260\"}]",
+        "value_hmac": "f7b704fbd5c0a02887a0a250cdbe0c70d3edfeb487febce4f2c6adf7ff28b710"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorSideBaseInfo\",{\"o_author_id\":\"7153794378790600712\"}]",
+        "value_hmac": "c8f78246a406d7b6c2d3fdd654e9652679a10cd95eab20d435e2acbd2f84ebcf"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorSideBaseInfo\",{\"o_author_id\":\"7201315409155342395\"}]",
+        "value_hmac": "6370892dc60a46ae1c28eb4a28444ebe742b2c285e9c4c34c54f9f6a87acae3a"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorSideBaseInfo\",{\"o_author_id\":\"7360610271510921225\"}]",
+        "value_hmac": "7b21c1252ef2e329a35ee54b344bf74ac729291e8f97c1b125a2bd10183dbbc7"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorSideBaseInfo\",{\"o_author_id\":\"7646720304210771978\"}]",
+        "value_hmac": "ad4db09bdc06e1d264196974567a75e124a02373f3a84e3fff77e2275a034986"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageProductList\",{\"star_author_id\":\"6763236841366749188\",\"time_period\":90}]",
+        "value_hmac": "2e78fa474bbd0588200d479ef65005310c38fff28bc7b9661cf8db3068064a10"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageProductList\",{\"star_author_id\":\"6849131371793743886\",\"time_period\":30}]",
+        "value_hmac": "6a2b177f6d59cc533c3cf53117711cd19ed09e7ee4d3b8af85cf6e3c5ac2aa6b"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageProductList\",{\"star_author_id\":\"6935067985597956133\",\"time_period\":30}]",
+        "value_hmac": "e0181e11be8b74f1186db85d468aad6174071fc26e42ce043b972b7968c35387"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageProductList\",{\"star_author_id\":\"7153794378790600712\",\"time_period\":30}]",
+        "value_hmac": "8b05e8a6c7059e5cb8d4edf872723f235e32504e7f3180fd5eec78fddf8ed852"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageProductList\",{\"star_author_id\":\"7201315409155342395\",\"time_period\":30}]",
+        "value_hmac": "e0ab99c7dc7af16b73f3127cdc0fa3c829239135e746526df39f1fa29bfc5091"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageProductList\",{\"star_author_id\":\"7360610271510921225\",\"time_period\":30}]",
+        "value_hmac": "229161836e7e959c6060b7478eddd45691d2321e5686a064be2c99cb05bf663d"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageProductList\",{\"star_author_id\":\"7646720304210771978\",\"time_period\":30}]",
+        "value_hmac": "8b3428d6da83b0407df019e59a06a7481a2e1100500a569c93e24b1e74010b9d"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageStat\",{\"star_author_id\":\"6763236841366749188\",\"time_period\":90}]",
+        "value_hmac": "beea8f818db7831641e49ee5c5d0374621a07a871d56539310ab955b0298b364"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageStat\",{\"star_author_id\":\"6849131371793743886\",\"time_period\":30}]",
+        "value_hmac": "44b40c5cdb8d81120a35a26fe3cf2ca7db4ea930ac3fc0a245248ca15134296f"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageStat\",{\"star_author_id\":\"6935067985597956133\",\"time_period\":30}]",
+        "value_hmac": "76a1f01f49ba804df84633b37edc81501ce632dfb35f26fe71b4591072b8aba8"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageStat\",{\"star_author_id\":\"7153794378790600712\",\"time_period\":30}]",
+        "value_hmac": "a318fd0eb92974ccd494e7b7b096423038f1461e3d84fb8954ab7165118ba3cd"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageStat\",{\"star_author_id\":\"7201315409155342395\",\"time_period\":30}]",
+        "value_hmac": "89ec81374337ce6ea4abfe09e5c39cd9269ce197edac04e68c51982c24fe21ac"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageStat\",{\"star_author_id\":\"7360610271510921225\",\"time_period\":30}]",
+        "value_hmac": "d941bbb83af4eb8b216aa4d74c53403d9c52543d12ab960d858ea5734cfd7ce1"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"aggregator.getAuthorVideoLiveLinkageStat\",{\"star_author_id\":\"7646720304210771978\",\"time_period\":30}]",
+        "value_hmac": "12942c0ba47f4f4a089e6b7ebe96f849b5b4f22f7f3c21912b42223a8400c2e0"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author-transition-price-status\",\"6763236841366749188\"]",
+        "value_hmac": "570f2fea36f2bf70770fdcfc4e9ae5761ef8d57ab8878d10a42426f00f9998ae"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author-transition-price-status\",\"6849131371793743886\"]",
+        "value_hmac": "cba20f267fa5dd64e7caf4e2745e39d58f8d2ae8d159278dec6b9a76f8f0a7d1"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author-transition-price-status\",\"6935067985597956133\"]",
+        "value_hmac": "be9ee0a08c74aef91c344c0f41a6cd1b7716a5e9ef542b9cd5735e30f58f3eef"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author-transition-price-status\",\"6989750547695796260\"]",
+        "value_hmac": "d9f4a6d278d3071031cabb3cb9ad06f510a1cd729869df5e14387673e75bdc22"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author-transition-price-status\",\"7153794378790600712\"]",
+        "value_hmac": "a58c7687aa4d13a7c74a81178cfeff6caf92d1374b6da671061006ff6c4fb654"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author-transition-price-status\",\"7201315409155342395\"]",
+        "value_hmac": "42d1227538b6836699b379dbf2138b232cfe1e1cca19dedcd54a7f2728e12849"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author-transition-price-status\",\"7360610271510921225\"]",
+        "value_hmac": "0168fcf490e0d0a53d96470490822174c121677f665b28c9a6c9b95930a917da"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author-transition-price-status\",\"7646720304210771978\"]",
+        "value_hmac": "2c31d63b115e53c9d6aaef6d89f944614e700b69cf70e29121954ed1cab7d9dd"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorBaseInfo\",{\"need_linkage_info\":true,\"need_sec_uid\":true,\"o_author_id\":\"6763236841366749188\",\"platform_channel\":1,\"platform_source\":1,\"recommend\":true}]",
+        "value_hmac": "007165834ffd154215e56c7319d6a585954184f16d94e305b0e673f6435a8747"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorBaseInfo\",{\"need_linkage_info\":true,\"need_sec_uid\":true,\"o_author_id\":\"6849131371793743886\",\"platform_channel\":1,\"platform_source\":1,\"recommend\":true}]",
+        "value_hmac": "41264b6c9a29bcfce5661a4479b2320ab0097c627d33b394db243645619074b9"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorBaseInfo\",{\"need_linkage_info\":true,\"need_sec_uid\":true,\"o_author_id\":\"6935067985597956133\",\"platform_channel\":1,\"platform_source\":1,\"recommend\":true}]",
+        "value_hmac": "4eac1dd5f9587175f902fe41836d9bf4f90c39652f51f006a142253705f60a0e"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorBaseInfo\",{\"need_linkage_info\":true,\"need_sec_uid\":true,\"o_author_id\":\"6989750547695796260\",\"platform_channel\":1,\"platform_source\":1,\"recommend\":true}]",
+        "value_hmac": "20f8ab5c051267fe327dd17685b2c84d504a35b1f8bec466afe1af7167d7acae"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorBaseInfo\",{\"need_linkage_info\":true,\"need_sec_uid\":true,\"o_author_id\":\"7153794378790600712\",\"platform_channel\":1,\"platform_source\":1,\"recommend\":true}]",
+        "value_hmac": "a3e405025bb88b71ca953148aef4ed2952fb94a18db6a0fe788df0e1a215c5eb"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorBaseInfo\",{\"need_linkage_info\":true,\"need_sec_uid\":true,\"o_author_id\":\"7201315409155342395\",\"platform_channel\":1,\"platform_source\":1,\"recommend\":true}]",
+        "value_hmac": "7b9878aedfac59204b63ac906ec046ad572db9a15ca8a19a4bf39b0380fe5ce0"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorBaseInfo\",{\"need_linkage_info\":true,\"need_sec_uid\":true,\"o_author_id\":\"7360610271510921225\",\"platform_channel\":1,\"platform_source\":1,\"recommend\":true}]",
+        "value_hmac": "292109212fbfc150953a0e9e679ae8ace8121dc5d1f4234607013b616980e9d0"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorBaseInfo\",{\"need_linkage_info\":true,\"need_sec_uid\":true,\"o_author_id\":\"7646720304210771978\",\"platform_channel\":1,\"platform_source\":1,\"recommend\":true}]",
+        "value_hmac": "edf8a4e24b7f96130754efd186f9c759b26ac5fcb67253c1b05aeee472ac3cb6"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorMarketingInfo\",\"douyin_pic\",{\"o_author_id\":\"6849131371793743886\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "91cae24af9ba94a3c9bb2903f0b29e7e12e4acd211d71cff81c87ff633d1c845"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorMarketingInfo\",\"douyin_pic\",{\"o_author_id\":\"6935067985597956133\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "98cfb07b58bf22034bac161d2261b33c411d5ed8facf0d700d6e9152b89ee092"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorMarketingInfo\",\"douyin_pic\",{\"o_author_id\":\"7153794378790600712\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "597a5d65de5ebb7c69778df05ace56da0ac0a81547e4da468ce0234f170996f6"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorMarketingInfo\",\"douyin_pic\",{\"o_author_id\":\"7360610271510921225\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "4409893453facd06e580e07a3dea5db2f92bc7c90f420eff233b0ee47c473e5c"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorMarketingInfo\",\"douyin_pic\",{\"o_author_id\":\"7646720304210771978\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "a93935bcefab94c6b5647dec1e9cb70b0f2caee36bca9568b32282f5ffe3ab6d"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorMarketingInfo\",{\"o_author_id\":\"6935067985597956133\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "a0666689afe66c011381a42c19f5c1594cad56fc5d47bd43b34a16c33c790f17"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorPlatformChannelInfoV2\",{\"o_author_id\":\"6763236841366749188\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "6a936611dc4261b51e020d6d271e571f6b218a105711ac6d7b75bd8ccbcf6be7"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorPlatformChannelInfoV2\",{\"o_author_id\":\"6849131371793743886\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "eae9e9f386b8c5070217ded5f8bc63dd3cfd68059abbde07382c9506e128c5b2"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorPlatformChannelInfoV2\",{\"o_author_id\":\"6935067985597956133\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "2bc65d129f91a435cefeebbf72fd3c181ee458752d93638e44b15106bec9b80a"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorPlatformChannelInfoV2\",{\"o_author_id\":\"6989750547695796260\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "69dd2923b524a27e8b5ee1c84e01c43971f4d0f29724e0b94649dfd1e5959c54"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorPlatformChannelInfoV2\",{\"o_author_id\":\"7153794378790600712\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "5f66d3a67cc04fdb78e3cc82e1dd1cb2a4e70f9215ff4b957fb02ae6c6b28c66"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorPlatformChannelInfoV2\",{\"o_author_id\":\"7201315409155342395\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "0f60b9863ad02190eb74666d2b63381e555bec3822b508b8f9ef98990a6b2b9c"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorPlatformChannelInfoV2\",{\"o_author_id\":\"7360610271510921225\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "e978db4b0761b1a2325bc9c92719239d60bc921a0bca30a305a6dafdeb991f0f"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"author.getAuthorPlatformChannelInfoV2\",{\"o_author_id\":\"7646720304210771978\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "d6d2e4b4f123a1c477072c03e9575ad14f4dce8bf0f0083464b61bb84e82decd"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.checkAuthorDisplay\",{\"o_author_id\":\"6763236841366749188\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "46e8437d271ee1a56c7300ea581708cdf2909d4c92fad1cc8bcf8fe94cb93d53"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.checkAuthorDisplay\",{\"o_author_id\":\"6849131371793743886\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "ca966f1e1d72016a081ca346b83ed1266afabd63fd66cc61cf5ae077577eea2a"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.checkAuthorDisplay\",{\"o_author_id\":\"6935067985597956133\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "6dd70049267a33a7394d7ce35252cbce9f2a6c566b0c8ed5d93317b00076a1db"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.checkAuthorDisplay\",{\"o_author_id\":\"6989750547695796260\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "b8d9fd86696acae54bb7ef0346f642779eea83705cfde491ae949b0c26cb6a5e"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.checkAuthorDisplay\",{\"o_author_id\":\"7153794378790600712\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "41906c6e42be5b73c170aea570de43ad7e7711417ec533c035e403b73b3669c0"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.checkAuthorDisplay\",{\"o_author_id\":\"7201315409155342395\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "0227e22013460bd312a1468c083f4125b58a292fe56683f9222e955c01c3bb35"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.checkAuthorDisplay\",{\"o_author_id\":\"7360610271510921225\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "b109b82f0686a23c77ef7d67019f60bf2feffd3717946ad69d776e41b217df86"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.checkAuthorDisplay\",{\"o_author_id\":\"7646720304210771978\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "d8ba2cab6dd329b54f471c5c4e52a23b3ea06a5d1abed2b50e94e68d13d559bf"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.externalMultiGetItem\",{\"format\":\"webp\",\"item_ids\":[\"7627732806936940411\",\"7648979289962351609\",\"7690505233314799483\",\"7690161474714999205\",\"7660470735975382138\",\"7637390232586248613\",\"7656415337932277115\",\"7678251397045040826\"],\"need_cover_url\":true,\"platform_source\":1,\"tpl\":\"tplv-9hvokabxw2-video_cover\",\"use_cache\":false}]",
+        "value_hmac": "66b1431b43ddc46909e1fb347f8bc5f9b0c247d9cc2068bd12177959c4732d4a"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.externalMultiGetItem\",{\"format\":\"webp\",\"item_ids\":[\"7632246125902187828\",\"7631173836158930239\",\"7690589514208726299\",\"7690587376573238537\",\"7633384146458479872\",\"7667898071925214498\"],\"need_cover_url\":true,\"platform_source\":1,\"tpl\":\"tplv-9hvokabxw2-video_cover\",\"use_cache\":false}]",
+        "value_hmac": "2b46b519dad58c634d021304fde2f9b1b16f4d8a97fdd0d2835a7e8259b9d013"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.externalMultiGetItem\",{\"format\":\"webp\",\"item_ids\":[\"7633752548247080228\",\"7668633679073119494\",\"7689767947652418858\",\"7688656318613261610\",\"7678692870307450163\",\"7644516653958499619\",\"7628910226867031305\",\"7667167756319558963\"],\"need_cover_url\":true,\"platform_source\":1,\"tpl\":\"tplv-9hvokabxw2-video_cover\",\"use_cache\":false}]",
+        "value_hmac": "42dde944520e76f0ad33b37a2f95255e8f9fd1ff3c7c7f9215a7d8830e6f35f8"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.externalMultiGetItem\",{\"format\":\"webp\",\"item_ids\":[\"7655543730929225010\",\"7629569808266267967\",\"7690518697173191978\",\"7690486050812202255\",\"7633726299567148288\",\"7654784910451871017\",\"7657866820468100393\",\"7624452843096837426\"],\"need_cover_url\":true,\"platform_source\":1,\"tpl\":\"tplv-9hvokabxw2-video_cover\",\"use_cache\":false}]",
+        "value_hmac": "05098ba831b73b23244aafdc727b2caafc6754b2afc2916c6d3adcd2605b66bb"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.externalMultiGetItem\",{\"format\":\"webp\",\"item_ids\":[\"7660479528342441268\",\"7625620960170872064\",\"7690595826481024297\",\"7690557290092432650\",\"7630089474432584995\",\"7688991438457113871\",\"7655733396332629254\",\"7642988652699700532\"],\"need_cover_url\":true,\"platform_source\":1,\"tpl\":\"tplv-9hvokabxw2-video_cover\",\"use_cache\":false}]",
+        "value_hmac": "587067ab07b97d66cb4a5b4cc485b5cc423c489a31fce8c43ba43bd828714bde"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.externalMultiGetItem\",{\"format\":\"webp\",\"item_ids\":[\"7665668814033896570\",\"7689667701305200761\",\"7690533950917802213\",\"7690486802361044601\",\"7629668072052608753\",\"7651902784736472165\",\"7665322361532860345\",\"7644491894126460347\"],\"need_cover_url\":true,\"platform_source\":1,\"tpl\":\"tplv-9hvokabxw2-video_cover\",\"use_cache\":false}]",
+        "value_hmac": "ea98e70e3ee574a2ca4699c8709554106521d3bc5d6130bfe9f957539c1954f9"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorConvertAbility\",{\"industry_id\":0,\"o_author_id\":\"6763236841366749188\",\"platform_channel\":1,\"platform_source\":1,\"range\":3}]",
+        "value_hmac": "3f33e5c9185abaa55e847e4f89be0d0ab2c31e1aae905bf60c60e6b9ee536e2e"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorConvertAbility\",{\"industry_id\":0,\"o_author_id\":\"6849131371793743886\",\"platform_channel\":1,\"platform_source\":1,\"range\":2}]",
+        "value_hmac": "558460d1669391903372a0a681523b297350a6447dc29d8b5bda5c4d416bf9ac"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorConvertAbility\",{\"industry_id\":0,\"o_author_id\":\"6935067985597956133\",\"platform_channel\":1,\"platform_source\":1,\"range\":2}]",
+        "value_hmac": "ccbb1bdb2c5b25e0b522f35c71bbd0302852f430a1424b8449e6d969c626bec7"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorConvertAbility\",{\"industry_id\":0,\"o_author_id\":\"7153794378790600712\",\"platform_channel\":1,\"platform_source\":1,\"range\":2}]",
+        "value_hmac": "8d1719c96c98e5f7fe4f09ab6617256374355e2e9773993e5b13e3c7c7e25611"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorConvertAbility\",{\"industry_id\":0,\"o_author_id\":\"7201315409155342395\",\"platform_channel\":1,\"platform_source\":1,\"range\":2}]",
+        "value_hmac": "49c99f74d663a24fead86656b687fbd1d2165a80a41d01e636be67d71d37bd88"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorConvertAbility\",{\"industry_id\":0,\"o_author_id\":\"7360610271510921225\",\"platform_channel\":1,\"platform_source\":1,\"range\":2}]",
+        "value_hmac": "45d7ecb095559d60fd500314485511061da0f1b522c63dce553df78da14baf60"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorConvertAbility\",{\"industry_id\":0,\"o_author_id\":\"7646720304210771978\",\"platform_channel\":1,\"platform_source\":1,\"range\":2}]",
+        "value_hmac": "1fc4e51968874ee87102dbd182546c800af82ae703a632703c7d99cc01234db8"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorCpInfo\",{\"o_author_id\":\"6763236841366749188\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "fead1def2a4d24bb1d82e8520d03ec7ef0c851616a20ae24720dbc20b7358625"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorCpInfo\",{\"o_author_id\":\"6849131371793743886\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "867204e615490807dae4aa7777b408db761a024fbbed8178a084476b85022057"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorCpInfo\",{\"o_author_id\":\"6935067985597956133\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "402f998194c2a9e91a985cd15020b5f367fb9a5359e7a02853b94ee3ae760205"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorCpInfo\",{\"o_author_id\":\"6989750547695796260\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "c51a69e6b403d2c303b2f698b2d90b9f6883a50fd2b8b93feec1c7da9a2b38f8"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorCpInfo\",{\"o_author_id\":\"7153794378790600712\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "bc41b0f1610fa29922a54c705201dc2d8fc8813239618b972a7d6f3015e88477"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorCpInfo\",{\"o_author_id\":\"7201315409155342395\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "bf4d483664edc47bb6517c506ac855efe6fa2debe7b6072f9e933f8b38196e31"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorCpInfo\",{\"o_author_id\":\"7360610271510921225\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "d8bb136cc0c9766fa189b885f0c5263c1855bb31eb5dd1ee198bf120dff5fc8d"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorCpInfo\",{\"o_author_id\":\"7646720304210771978\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "210a04aaf9ce36504d4412e6ffc57596b5c0f6cbb57113b95d4a1d7ce855595a"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLinkStruct\",{\"o_author_id\":\"6763236841366749188\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "4c96cacc474a721bbd7ada56f80374689e560dc752173032383c58764ebc9d89"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLinkStruct\",{\"o_author_id\":\"6849131371793743886\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "4dd15d5be0bcab63d660b4c6c405b6f5d9036899ec4fe8f8ad347239a275bc5a"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLinkStruct\",{\"o_author_id\":\"6935067985597956133\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "b5e72cf07f87646686727d5b07f4d2366ad1bb65780b5ffc643889f6c17af6b6"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLinkStruct\",{\"o_author_id\":\"6989750547695796260\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "55686fdf5f08aad52135a83f9b18c78f322381be8b78faf44acf3cb19632fbf3"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLinkStruct\",{\"o_author_id\":\"7153794378790600712\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "d87d9e480d8bff5094b62ecfdd526668c09c9d0d8d2d64c33934e50a78c9945c"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLinkStruct\",{\"o_author_id\":\"7201315409155342395\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "46bd9d50e6e8fd9c3bb5adf7d906e1d9bea0160cbbde56fbcde9f2e42c52bd6e"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLinkStruct\",{\"o_author_id\":\"7360610271510921225\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "dce51d80d67858cb52c1d0257c48bb4c4268fa1b865b26f06d9baf3cc2dea0e8"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLinkStruct\",{\"o_author_id\":\"7646720304210771978\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "dac2c9b788f139c62bd7209ceac643eeb54d5501c8fd2e69945e38100d1673b9"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalInfo\",{\"o_author_id\":\"6763236841366749188\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "b0759bc4b635f9fc2dbc17346916ce2003d596e699725db36c2cf1ec4a8db1f0"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalInfo\",{\"o_author_id\":\"6849131371793743886\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "7fe29a7d0e6e548da8149fafe9c4bac914940b80a8a6a92f56f55eac950bb87f"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalInfo\",{\"o_author_id\":\"6935067985597956133\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "a9a50ce33be3c7e33b3592dfed8250b81f7311e4638a5561966fd65edff79894"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalInfo\",{\"o_author_id\":\"6989750547695796260\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "602971b96fb7c5947f3842195565e77747fb51c549d118ced3b374abaeae66f0"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalInfo\",{\"o_author_id\":\"7153794378790600712\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "a8790bc0160a39777862fd49defbfce45bba68bc55871e5465f44258f62195fd"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalInfo\",{\"o_author_id\":\"7201315409155342395\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "5933fbbaa424231c94b73f283e43ba1d3c45f85b6260e62b9f0ea0fe271b9091"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalInfo\",{\"o_author_id\":\"7360610271510921225\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "87c08699fb81aeb73fe78bc3c5655be1c60b00a7e2f05149997c70830c8da9cf"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalInfo\",{\"o_author_id\":\"7646720304210771978\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "e3e480f90381afff0290073ed55d648168feedf4b74daa3acc66ded55545ccfe"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalSalesPerformance\",{\"local_item_type\":\"0\",\"o_author_id\":\"6763236841366749188\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "304de275598d9cef4b61224c09737b2ff4160b31d5de0208acd33273e93ca392"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalSalesPerformance\",{\"local_item_type\":\"0\",\"o_author_id\":\"6849131371793743886\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "4cad8f065b163d82272d5d40aeee2d008849a0d0808f1ebfad47341223acc10f"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalSalesPerformance\",{\"local_item_type\":\"0\",\"o_author_id\":\"6935067985597956133\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "644abda2856464ebfa0bb85bb9bbc65ce53736d40aa73da8118be3671e0c46ef"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalSalesPerformance\",{\"local_item_type\":\"0\",\"o_author_id\":\"6989750547695796260\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "443b2a8fa8b0f6d99f47f456ba3306a43076784589fed6e65803f9cd1e184b12"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalSalesPerformance\",{\"local_item_type\":\"0\",\"o_author_id\":\"7153794378790600712\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "75d7a24367ca57615621efac602d5e04dff9d20829c24c42a2522e5838f6f6e8"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalSalesPerformance\",{\"local_item_type\":\"0\",\"o_author_id\":\"7201315409155342395\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "db29955195807afcb77601c77bab67aa5e3a367ba71029feb91cc0d758ed390d"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalSalesPerformance\",{\"local_item_type\":\"0\",\"o_author_id\":\"7360610271510921225\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "7864339d1a8915f12af160e59bad5c67eecfc6e77d5dd1eea8f6557e65ce1e96"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorLocalSalesPerformance\",{\"local_item_type\":\"0\",\"o_author_id\":\"7646720304210771978\",\"platform_channel\":1,\"platform_source\":1,\"time_range\":30}]",
+        "value_hmac": "f19134c6a64fc51f511cf85852ffe1b506f6208b258c31cc42a018a9709f515c"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorRecommendVideosV2\",{\"o_author_id\":\"6763236841366749188\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "5da0b5278bd4a4a7d51e829c4b79b51c5b7f0522173eff7eb16494b95522828a"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorRecommendVideosV2\",{\"o_author_id\":\"6849131371793743886\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "952373e91fc33d1628d7610ff20d7603aef32b35526652d7112374f6506bb54f"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorRecommendVideosV2\",{\"o_author_id\":\"6935067985597956133\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "f912c51e512772d8c601a241df5baa91aa86b3dde5879536affba5c1117e4cb5"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorRecommendVideosV2\",{\"o_author_id\":\"6989750547695796260\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "8dd873bdaad71b339efcf4516954e40f73eebb97bb501229b9c1b165195bfce7"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorRecommendVideosV2\",{\"o_author_id\":\"7153794378790600712\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "a949262b5908fa6bcd93ff889d075a94ec3d10ce64a2f4b5914eee7a7b6c4be7"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorRecommendVideosV2\",{\"o_author_id\":\"7201315409155342395\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "f631e52abf560d95f688335eecebe6d558b9b13df4b90f70bb3245ac5b0d08e2"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorRecommendVideosV2\",{\"o_author_id\":\"7360610271510921225\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "7326acaec5d831a24931d5fb7835550e9c921ec632239ccafe72f837410b89ab"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorSpreadInfo\",{\"flow_type\":0,\"o_author_id\":\"6989750547695796260\",\"only_assign\":false,\"platform_channel\":1,\"platform_source\":1,\"range\":2,\"type\":1}]",
+        "value_hmac": "5f85ed7977c2ae36d3a125e50f19df386f6478fb148c37f857d896ef8b764558"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorSpreadInfo\",{\"flow_type\":1,\"o_author_id\":\"6763236841366749188\",\"only_assign\":true,\"platform_channel\":1,\"platform_source\":1,\"range\":2,\"type\":2}]",
+        "value_hmac": "a1009c2034108036e04ef650df398a17f8d5bc459150969e0b2d7438015530ca"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorSpreadInfo\",{\"flow_type\":1,\"o_author_id\":\"6763236841366749188\",\"only_assign\":true,\"platform_channel\":1,\"platform_source\":1,\"range\":3,\"type\":2}]",
+        "value_hmac": "9e370d31e00ccafca467a08054ba1384bb72435c894cccbe83ff4c36e495a235"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorSpreadInfo\",{\"flow_type\":1,\"o_author_id\":\"6849131371793743886\",\"only_assign\":true,\"platform_channel\":1,\"platform_source\":1,\"range\":2,\"type\":2}]",
+        "value_hmac": "ac87710700fd825d2262d7fbb58c17a38315e7f2e817fa080b634b3f547e89be"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorSpreadInfo\",{\"flow_type\":1,\"o_author_id\":\"6935067985597956133\",\"only_assign\":true,\"platform_channel\":1,\"platform_source\":1,\"range\":2,\"type\":2}]",
+        "value_hmac": "a50b6dc433575b97031cc13a347c0067a7325e73de06a0e0b6e4a1696f4b3754"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorSpreadInfo\",{\"flow_type\":1,\"o_author_id\":\"6989750547695796260\",\"only_assign\":true,\"platform_channel\":1,\"platform_source\":1,\"range\":2,\"type\":2}]",
+        "value_hmac": "3ddbcc9a98cd7328136a9da9574adbc46a596793dc8997202623f5306c0d0607"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorSpreadInfo\",{\"flow_type\":1,\"o_author_id\":\"7153794378790600712\",\"only_assign\":true,\"platform_channel\":1,\"platform_source\":1,\"range\":2,\"type\":2}]",
+        "value_hmac": "27044e3b40c03d411e60a2ab0e91e0a45b9ef8275e208e8a771865233326ec1f"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorSpreadInfo\",{\"flow_type\":1,\"o_author_id\":\"7201315409155342395\",\"only_assign\":true,\"platform_channel\":1,\"platform_source\":1,\"range\":2,\"type\":2}]",
+        "value_hmac": "1d7c119d8bd47f86d679b39be205236ab14d67c5902db613747b6d318a88d077"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorSpreadInfo\",{\"flow_type\":1,\"o_author_id\":\"7360610271510921225\",\"only_assign\":true,\"platform_channel\":1,\"platform_source\":1,\"range\":2,\"type\":2}]",
+        "value_hmac": "1c30b75c393dec737e578c60b3d5de014d834a8c52388c9101de9de58e8d7fac"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"data_space.getAuthorSpreadInfo\",{\"flow_type\":1,\"o_author_id\":\"7646720304210771978\",\"only_assign\":true,\"platform_channel\":1,\"platform_source\":1,\"range\":2,\"type\":2}]",
+        "value_hmac": "64c04622408d2789cd2e53ccc1d395831f9de015ee466a260aec43bef3fc5848"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"generic.getIndustryCategory\",{\"o_author_id\":\"6763236841366749188\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "fdf71a70401f2293dccde49e92d07d9dd676c79a9e80e1aae3ce4bb6a000a710"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"generic.getIndustryCategory\",{\"o_author_id\":\"6849131371793743886\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "4451acea5c1715de71b8701af8d5bda4358d36b4cacf5a0b2f10ff3fe80cb997"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"generic.getIndustryCategory\",{\"o_author_id\":\"6935067985597956133\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "c991d9f7a8c715f87f82c594b2a57b6ad6f594f4ca38c26c1af7e43390f13318"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"generic.getIndustryCategory\",{\"o_author_id\":\"6989750547695796260\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "d4c008b42866c6823090409b1324d9bf2f242b8b217ebcc8da685511dcfa9cbb"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"generic.getIndustryCategory\",{\"o_author_id\":\"7153794378790600712\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "7282dbc9780cf60c1480e4070e32677104fce888ff3815fef2964a3d39b32328"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"generic.getIndustryCategory\",{\"o_author_id\":\"7201315409155342395\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "8be08c0601001bb618614d959dc0de1bd4c3a89707b11468ed8e7062f272ca1e"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"generic.getIndustryCategory\",{\"o_author_id\":\"7360610271510921225\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "bfb46f5f6cfdaf06ab70a503054abfb579d53ec539f7cf5375ffee7d76fab707"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"generic.getIndustryCategory\",{\"o_author_id\":\"7646720304210771978\",\"platform_channel\":1,\"platform_source\":1}]",
+        "value_hmac": "ce7a257ec31e9997a3d00b70608515bdb240452f1834e2baee2e60f9a64b168e"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_author.authorGetBusinessCardInfo\",{\"o_author_id\":\"6763236841366749188\"}]",
+        "value_hmac": "5a0982d18a2e96d7e0158e903bd35c5b79eb22e2242945b7d7b497d8180d624a"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_author.authorGetBusinessCardInfo\",{\"o_author_id\":\"6849131371793743886\"}]",
+        "value_hmac": "f0dbb094a93fe1b0258dc8960ceaff13f0c0e1633bdaf863f973689687295064"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_author.authorGetBusinessCardInfo\",{\"o_author_id\":\"6989750547695796260\"}]",
+        "value_hmac": "87c7867d2f7ef06a68f61d7353fc633485ca283ed056a4202051df286698c995"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_author.authorGetBusinessCardInfo\",{\"o_author_id\":\"7201315409155342395\"}]",
+        "value_hmac": "6387cc2166f1363d4b3988c5cdc559f6546999e2a9f311da71f93308c8c4c242"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_author.authorGetBusinessCardInfo\",{\"o_author_id\":\"7360610271510921225\"}]",
+        "value_hmac": "04bdd4c4e5955b5e4c1c6e1b3bd8e31339ae34f010d8fa1b21f4439118b66dcc"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_author.authorGetBusinessCardInfo\",{\"o_author_id\":\"7646720304210771978\"}]",
+        "value_hmac": "71863f3b1fa233cf317f8d7cd6302f86353f9f65d2802eed3799f02b83306627"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_author.userCheckPlayletInvestmentEntrance\",null]",
+        "value_hmac": "deacb6fd1948e7b627b734688cc2d42387f1863add78b04a24d5a199c907e50c"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_marketing.getResourceList\",\"1061\"]",
+        "value_hmac": "5a240d08b75891590f84c12b4752a4e84dca8f09e01e6c5d1e00b802dc35384e"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_search.getAuthorsRankIn\",{\"author_ids\":[\"6763236841366749188\"],\"biz_scene\":\"douyin_flow_split_video_author_ranks\",\"platform_channel\":1}]",
+        "value_hmac": "8b50995a1699a22c5d8fb94c91c2a7188491ecfc8560795c63f5c012ad1e27ef"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_search.getAuthorsRankIn\",{\"author_ids\":[\"6849131371793743886\"],\"biz_scene\":\"douyin_flow_split_video_author_ranks\",\"platform_channel\":1}]",
+        "value_hmac": "5d3763f50dcdbd3c5ea8bd6773d7ea070f4b2dc0ae6828ae24094b866d1a8049"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_search.getAuthorsRankIn\",{\"author_ids\":[\"6935067985597956133\"],\"biz_scene\":\"douyin_flow_split_video_author_ranks\",\"platform_channel\":1}]",
+        "value_hmac": "f887573e9bc877a46fad67f0a25a9179734fa7fc29c418b09c2e9812a3c50fe6"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_search.getAuthorsRankIn\",{\"author_ids\":[\"6989750547695796260\"],\"biz_scene\":\"douyin_flow_split_video_author_ranks\",\"platform_channel\":1}]",
+        "value_hmac": "ef878cde56824c560659a9a97922d5c753140f525aeb1a6143366b10e3980b9b"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_search.getAuthorsRankIn\",{\"author_ids\":[\"7153794378790600712\"],\"biz_scene\":\"douyin_flow_split_video_author_ranks\",\"platform_channel\":1}]",
+        "value_hmac": "75e5cecd354fcc54fdb5099d2ba8f32d71f9313175484183fcfb5719799aae70"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_search.getAuthorsRankIn\",{\"author_ids\":[\"7201315409155342395\"],\"biz_scene\":\"douyin_flow_split_video_author_ranks\",\"platform_channel\":1}]",
+        "value_hmac": "da55382e49d1c701e1e01bfbd45538a0700cc6db4a0fff7c6fea5c85664fd23b"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_search.getAuthorsRankIn\",{\"author_ids\":[\"7360610271510921225\"],\"biz_scene\":\"douyin_flow_split_video_author_ranks\",\"platform_channel\":1}]",
+        "value_hmac": "7243e4ebbac1a71d1845bfbf2f627ef8159797a8e6122d8e3c43994396e6bc50"
+      },
+      {
+        "key": "localStorage-tanstack-query-[\"go_search.getAuthorsRankIn\",{\"author_ids\":[\"7646720304210771978\"],\"biz_scene\":\"douyin_flow_split_video_author_ranks\",\"platform_channel\":1}]",
+        "value_hmac": "edb3bcbddb6fe1d5f70a62922db03c5573b8a6aa13c4aacdbcd0d0f46af9403f"
+      },
+      {
+        "key": "web_runtime_security_uid",
+        "value_hmac": "272e1f7a778b8153c0dc1441f44428505b7856c69fb46c7334163191a4b3ecb4"
+      },
+      {
+        "key": "web_runtime_switcher_isgray",
+        "value_hmac": "b683080e319249d87ff50f2de7590868ce3198573f9c3aa950b6e191e031ad01"
+      },
+      {
+        "key": "web_runtime_switcher_latest",
+        "value_hmac": "1e05e459b3a7df07e4bfb169fbd73309ebb92518d9d71accd587294c2f450a80"
+      },
+      {
+        "key": "web_security_runtime_cache_https://lf-security.bytegoofy.com/obj/security-secsdk/config_1048.js",
+        "value_hmac": "60b42203951046b00347b93e190e763fd46b2e4f105a03f7c9c91205a385b38e"
+      },
+      {
+        "key": "web_security_runtime_cache_https://lf-security.bytegoofy.com/obj/security-secsdk/project_1048.js",
+        "value_hmac": "bcace5650ce462f6707c83364182ab210f500b0c4421760e193984b609f00bee"
+      },
+      {
+        "key": "web_security_runtime_cache_https://lf-security.bytegoofy.com/obj/security-secsdk/strategy_1048.js?v=1",
+        "value_hmac": "d4855b094b6415e6818c6708a481c6e0f5f519cb07f7e0a5e74a43476bffb427"
+      }
+    ],
+    "session_storage": [
+      {
+        "key": "HMACCOUNT",
+        "value_hmac": "884d24421a0731b313eac00be1ad0dad78d75f48b3aa399b68b6b9daf0960948"
+      },
+      {
+        "key": "Hm_lpvt_5d77c979053345c4bd8db63329f818ec",
+        "value_hmac": "aeb6bcd84fede03d37def3a4f1bcd7ebea256cb2d831ac7ecabac6de16b9c729"
+      },
+      {
+        "key": "STAR_GUIDE_SESSION_STORAGE_KEY",
+        "value_hmac": "96ebe012c43c0c520058b814570e37098f339eb8930b71ca12613f6aae30fc29"
+      },
+      {
+        "key": "STAR_NEW_SESSION_STORAGE_KEY",
+        "value_hmac": "69e86bfbe3c162c3a3eb499143d07cc6df8d9907986423ff8bc198af1386232a"
+      },
+      {
+        "key": "__mock_info",
+        "value_hmac": "52bffc4f0eaac64a830ebe14ec639c4349fa3159ab49552115788672720a174e"
+      },
+      {
+        "key": "__tea_session_id_1574",
+        "value_hmac": "9853534925685fd9820afd2d3d8ce4ca8fabc7811b36656da82be4142724746d"
+      },
+      {
+        "key": "__tea_session_id_1581",
+        "value_hmac": "d4ac0daf7b2a57dad41396138e16be56261a213aa2e9da82ee3fbf0172866d0c"
+      },
+      {
+        "key": "__touch_drainage_info",
+        "value_hmac": "a9377387d30575c1c4cf3ccf733afccecd4533f4ef75afa47ba42f15d80034e9"
+      },
+      {
+        "key": "_tea_cache_duration",
+        "value_hmac": "5f026aad30f4619b6d0556bbc7e2e1be7a22223e3194928e3e35e827ec3c36dd"
+      },
+      {
+        "key": "btm_launch_id",
+        "value_hmac": "b27d191ea7a6f004edd5739a0749b10fbe220b682fe0278bb1ca77a9f2cddbd8"
+      }
+    ],
+    "indexed_db": [],
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+    "client_hints": {
+      "brands": [
+        {
+          "brand": "Chromium",
+          "version": "154"
+        },
+        {
+          "brand": "Google Chrome",
+          "version": "154"
+        },
+        {
+          "brand": "Not A(Brand",
+          "version": "99"
+        }
+      ],
+      "mobile": false,
+      "platform": "macOS"
+    },
+    "locale": "zh-CN",
+    "timezone": "Asia/Shanghai"
+  },
+  "limitations": [
+    "cookie last_update is unavailable through Playwright and is recorded as null",
+    "only storage visible to the verified entry origin is summarized",
+    "values are local HMACs and cannot be compared if the HMAC key changes"
+  ]
+}

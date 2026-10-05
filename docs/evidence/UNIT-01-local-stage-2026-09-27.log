@@ -1,0 +1,233 @@
+# UNIT-01 本地开发验证阶段：实际执行命令与结果
+# 记录时间：2026-09-27T10:59:47+0800（Asia/Shanghai）
+# 环境：macOS 26.5.2 / Python 3.13.5 / Playwright 1.63.0 / 系统 Chrome 154.0.8037.57 / PostgreSQL 18.3 (127.0.0.1:55439) / Docker 守护进程不可用
+
+$ ruff check backend conftest.py tests scripts
+All checks passed!
+exit=0
+
+$ ruff format --check backend conftest.py tests scripts
+26 files already formatted
+exit=0
+
+$ mypy backend/src
+Success: no issues found in 14 source files
+exit=0
+
+$ pytest backend/tests/unit -q
+....................................................                     [100%]
+52 passed in 0.13s
+exit=0
+
+$ pytest backend/tests/contract -q
+..........                                                               [100%]
+10 passed in 10.04s
+exit=0
+
+$ pytest backend/tests/integration -q
+.......................                                                  [100%]
+23 passed in 106.16s (0:01:46)
+exit=0
+
+$ pytest tests/e2e -q
+..                                                                       [100%]
+2 passed in 1.29s
+exit=0
+
+## 本地真实执行：CLI 入口与门槛（数据库 xingtu_local_dev）
+
+$ xingtu doctor
+{
+  "live_status": "UNVERIFIED",
+  "coverage_gaps": [
+    "U02: 筛选枚举、重置、填写、回读及组合未核验",
+    "U04: 搜索分页、终点、身份与主页全部字段来源未核验",
+    "U06: 账号识别、受保护页面及会话状态未核验",
+    "U07/U08: 硬件、DNS、断线隔离、旧进程隔离未核验"
+  ],
+  "database_configured": true,
+  "segment_budget": {
+    "active_seconds": 7200.0,
+    "candidate_scan_floor": 200,
+    "candidate_scan_multiplier": 5
+  },
+  "evidence_default": {
+    "kind": "local",
+    "endpoint": null,
+    "bucket": null,
+    "directory": null
+  },
+  "f06": "NOT_ATTEMPTED"
+}
+exit=0
+
+$ xingtu migrate --environment development
+all pending migrations applied or already present
+exit=0
+
+$ psql ... \dt | grep execution_units 与 schema_migrations
+ version 
+---------
+       1
+       2
+(2 rows)
+
+ unit_id | account_ref | line_ref | network_mode | state 
+---------+-------------+----------+--------------+-------
+(0 rows)
+
+exit=0
+
+$ xingtu register-unit --config .runtime/units/local-dev-mac.json
+{"unit_id": "unit-local-mac-01", "state": "NEEDS_LOGIN", "network_mode": "local_development"}
+exit=0
+
+$ xingtu browser-check --config .runtime/units/local-dev-mac.json
+{
+  "network_mode": "local_development",
+  "proxy_configured": false,
+  "browser_channel": null,
+  "browser_executable_path": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "executable_reported_version": "154.0.8037.57",
+  "playwright_version": "1.63.0",
+  "launch_ok": true,
+  "playwright_reported_version": "154.0.8037.57",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+  "profile_directory": "/Users/yaoyao/Documents/02-Work/予梦/01-定向爬取+定时更新/.runtime/profiles/unit-local-mac-01",
+  "page_opened": true,
+  "browser_stopped": true
+}
+exit=0
+
+$ xingtu production-preflight --config .runtime/units/local-dev-mac.json  # 预期拒绝：本地单元不是生产线路
+{"error_code": "RESOURCE_UNAVAILABLE", "reason": "LOCAL_DEVELOPMENT_UNIT_IS_NOT_A_PRODUCTION_LINE"}
+exit=2
+
+$ xingtu enable-contract --registry contracts/douyin_xingtu.unverified.json --actor local-verify  # 预期拒绝：未核验注册表
+{"error_code": "PLATFORM_PAGE_CHANGED", "reason": "UNVERIFIED_REGISTRY"}
+exit=2
+
+$ psql ... 登记后单元绑定（含 network_mode）
+      unit_id      |    line_ref     |   network_mode    |    state    | session_version 
+-------------------+-----------------+-------------------+-------------+-----------------
+ unit-local-mac-01 | local-dev-macos | local_development | NEEDS_LOGIN |               0
+(1 row)
+
+
+$ python - <<'PY'  # 仅用于负向门槛测试：直接落一个未核验契约的根任务
+bash: line 4: python: command not found
+exit=127
+root_task_id=
+
+$ make smoke-local UNIT_CONFIG=.runtime/units/gate-check.json ROOT_TASK_ID=  # 预期 FAILED + PLATFORM_PAGE_CHANGED:UNVERIFIED_REGISTRY
+.venv/bin/python scripts/local_smoke.py --config ".runtime/units/gate-check.json" --root-task-id "" --timeout-seconds "120"
+Traceback (most recent call last):
+  File "/Users/yaoyao/Documents/02-Work/予梦/01-定向爬取+定时更新/scripts/local_smoke.py", line 161, in <module>
+    main()
+    ~~~~^^
+  File "/Users/yaoyao/Documents/02-Work/予梦/01-定向爬取+定时更新/scripts/local_smoke.py", line 154, in main
+    raise SystemExit(asyncio.run(run(args)))
+                     ~~~~~~~~~~~^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/Users/yaoyao/Documents/02-Work/予梦/01-定向爬取+定时更新/scripts/local_smoke.py", line 57, in run
+    task = repo.get(args.root_task_id)
+  File "/Users/yaoyao/Documents/02-Work/予梦/01-定向爬取+定时更新/backend/src/xingtu/repository.py", line 330, in get
+    return self._load(conn, root)
+           ~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/yaoyao/Documents/02-Work/予梦/01-定向爬取+定时更新/backend/src/xingtu/repository.py", line 314, in _load
+    row = conn.execute(
+          ~~~~~~~~~~~~^
+        "SELECT payload FROM root_tasks WHERE root_task_id=%s"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        + (" FOR UPDATE" if lock else ""),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        (root,),
+        ^^^^^^^^
+    ).fetchone()
+    ^
+  File "/Users/yaoyao/Documents/02-Work/予梦/01-定向爬取+定时更新/.venv/lib/python3.13/site-packages/psycopg/connection.py", line 304, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.InvalidTextRepresentation: invalid input syntax for type uuid: ""
+CONTEXT:  unnamed portal parameter $1 = ''
+make: *** [smoke-local] Error 1
+exit=2
+
+## 复测（修复：.venv/bin/python 路径与 root_task_id UUID 校验）
+
+$ .venv/bin/python scripts/local_smoke.py --root-task-id '' ...  # 预期清晰拒绝，不再抛 psycopg 栈
+{"error": "ROOT_TASK_ID_MUST_BE_UUID", "value": ""}
+exit=2
+
+$ .venv/bin/python - <<'PY'  # 仅用于负向门槛测试：直接落一个未核验契约的根任务
+ed71b5c4-b770-48f7-b9cd-d8a26114fcad
+root_task_id=ed71b5c4-b770-48f7-b9cd-d8a26114fcad
+
+$ make smoke-local UNIT_CONFIG=.runtime/units/gate-check.json ROOT_TASK_ID=ed71b5c4-b770-48f7-b9cd-d8a26114fcad  # 预期终态 FAILED + PLATFORM_PAGE_CHANGED:UNVERIFIED_REGISTRY
+.venv/bin/python scripts/local_smoke.py --config ".runtime/units/gate-check.json" --root-task-id "ed71b5c4-b770-48f7-b9cd-d8a26114fcad" --timeout-seconds "120"
+{
+  "root_task_id": "ed71b5c4-b770-48f7-b9cd-d8a26114fcad",
+  "workflow_state": "FAILED",
+  "task_state": "FAILED",
+  "failure_reason": "PLATFORM_PAGE_CHANGED: UNVERIFIED_REGISTRY",
+  "valid_count": 0,
+  "profile_complete_count": 0,
+  "discovered_count": 0,
+  "scanned_count_segment": 0,
+  "search_exhausted": false,
+  "search_generation": 0,
+  "rescan_reasons": [],
+  "diagnostics": [],
+  "draft_results": []
+}
+exit=0
+
+## 真实浏览器登录尝试（受人工资源限制未完成）
+
+$ rm -rf .runtime/research/r01-login && xingtu research --config .runtime/units/local-dev-mac.json \
+    --url https://www.xingtu.cn/ --out .runtime/research/r01-login \
+    --login-wait-seconds 1500 --login-done-file .runtime/research/login.done \
+    --steps .runtime/research/steps-login.json
+
+- 进程按 local_development 模式启动成功：创建项目独立 profile `.runtime/profiles/unit-local-mac-01`（目录 0700、锁文件 0600），创建研究输出目录 `.runtime/research/r01-login`（0700）。
+- 已打开 https://www.xingtu.cn/，等待人工登录/平台验证。
+- 用户反馈（2026-09-27）：**手机号码不在身边，当前无法接收平台验证码，因此本次无法完成登录**；并说明这不是代码问题。
+- 处理：主动取消该研究进程（job cancell），未产生任何登录后证据；`.runtime/research/r01-login/` 为空。
+- 影响：会话入口、账号标识、受保护页面、搜索分页与主页字段**全部未登记**；`contracts/douyin_xingtu.verified.json` 未创建，平台契约保持 `UNVERIFIED`。不做任何推测填写。
+
+## 本轮未执行项
+
+- 真实会话/账号身份证据（U02/U04/U06）：因人工登录未完成。
+- 真实搜索分页、终点、筛选枚举与回读（U02/U04）：依赖会话。
+- 真实主页逐模块字段对照（U04）：依赖会话。
+- F04/F05 真实小样本采集与持久化核对：依赖已核验注册表。
+- 生产线路/蜂窝/DNS/断线隔离与旧执行者撤销（U07/U08）：本轮范围外，且本地证据不能替代。
+- `make dev` / `make stop`（Compose）：Docker 守护进程不可用。
+- `make setup`、S3/MinIO 证据路径、封面存储（U09）：未执行。
+
+## 最终静态复测（在最后一次代码改动 scripts/local_smoke.py 之后执行）
+
+$ ruff check backend conftest.py tests scripts
+All checks passed!
+exit=0
+$ ruff format --check backend conftest.py tests scripts
+26 files already formatted
+exit=0
+$ mypy backend/src
+Success: no issues found in 14 source files
+exit=0
+$ pytest backend/tests/unit backend/tests/contract -q
+..............................................................           [100%]
+62 passed in 10.81s
+exit=0
+$ pytest tests/e2e -q
+..                                                                       [100%]
+2 passed in 1.85s
+exit=0

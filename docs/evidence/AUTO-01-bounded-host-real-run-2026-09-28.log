@@ -1,0 +1,46 @@
+== command ==
+XINGTU_DATABASE_URL=postgresql://xingtu_test@127.0.0.1:55439/xingtu_local_dev \
+XINGTU_TEMPORAL_TEST_BINARY="$PWD/.runtime/temporal-test/temporal-v1.9.1" \
+make smoke-local UNIT_CONFIG=.runtime/units/local-dev-mac-02.json \
+  ROOT_TASK_ID=aa179d9b-68cf-4035-870e-a1b96332e098 TIMEOUT_SECONDS=1200
+exit=0
+
+== unit after run ==
+state=NEEDS_LOGIN mode=None owner=None browser_stopped=True session_version=6 verified_account_id='ID: 1865332309937515' failure_reason=None
+
+== audit ==
+2026-09-28T15:23:44.383924+08:00 | browser-host:887c0810-9bdd-469a-83d6-96e232efe438 | promote_maintenance_to_collect:unit-local-mac-02
+2026-09-28T15:22:51.938612+08:00 | local-verify | internal_acceptance.start
+2026-09-28T14:38:28.210912+08:00 | AUTO-01 | invalidate_session:unit-local-mac-02:SESSION_NOT_PERSISTED_AFTER_RESTART
+
+== published snapshot field status ==
+creator 6935067985597956133
+   platform_creator_id    COLLECTED  raw='6935067985597956133'          observed_at=2026-09-28T07:26:57.276268Z session_version=6 contract=xingtu-ad-creator-square-v1
+   nickname               COLLECTED  raw='阿里北杯'                         observed_at=2026-09-28T07:26:57.276354Z session_version=6 contract=xingtu-ad-creator-square-v1
+   avatar_uri             COLLECTED  raw='https://p11.douyinpic.com/awem' observed_at=2026-09-28T07:26:57.276367Z session_version=6 contract=xingtu-ad-creator-square-v1
+   followers              COLLECTED  raw='4091398'                      observed_at=2026-09-28T07:26:57.276375Z session_version=6 contract=xingtu-ad-creator-square-v1
+   gender                 COLLECTED  raw='2'                            observed_at=2026-09-28T07:26:57.276418Z session_version=6 contract=xingtu-ad-creator-square-v1
+   city                   COLLECTED  raw='长宁区'                          observed_at=2026-09-28T07:26:57.276426Z session_version=6 contract=xingtu-ad-creator-square-v1
+   province               COLLECTED  raw='上海市'                          observed_at=2026-09-28T07:26:57.276432Z session_version=6 contract=xingtu-ad-creator-square-v1
+   mcn_name               NO_DATA    raw=''                             observed_at=2026-09-28T07:26:57.276438Z session_version=6 contract=xingtu-ad-creator-square-v1
+   content_theme_labels   COLLECTED  raw='["\\u65f6\\u5c1a\\u5986\\u5bb9","\\' observed_at=2026-09-28T07:26:57.276444Z session_version=6 contract=xingtu-ad-creator-square-v1
+creator 7646720304210771978
+   platform_creator_id    COLLECTED  raw='7646720304210771978'          observed_at=2026-09-28T07:26:55.554437Z session_version=6 contract=xingtu-ad-creator-square-v1
+   nickname               COLLECTED  raw='姜乘澜'                          observed_at=2026-09-28T07:26:55.555200Z session_version=6 contract=xingtu-ad-creator-square-v1
+   avatar_uri             COLLECTED  raw='https://p11.douyinpic.com/awem' observed_at=2026-09-28T07:26:55.555231Z session_version=6 contract=xingtu-ad-creator-square-v1
+   followers              COLLECTED  raw='19383152'                     observed_at=2026-09-28T07:26:55.555247Z session_version=6 contract=xingtu-ad-creator-square-v1
+   gender                 COLLECTED  raw='2'                            observed_at=2026-09-28T07:26:55.557972Z session_version=6 contract=xingtu-ad-creator-square-v1
+   city                   NO_DATA    raw=''                             observed_at=2026-09-28T07:26:55.557997Z session_version=6 contract=xingtu-ad-creator-square-v1
+   province               NO_DATA    raw=''                             observed_at=2026-09-28T07:26:55.558015Z session_version=6 contract=xingtu-ad-creator-square-v1
+   mcn_name               COLLECTED  raw='弄新妆'                          observed_at=2026-09-28T07:26:55.558026Z session_version=6 contract=xingtu-ad-creator-square-v1
+   content_theme_labels   COLLECTED  raw='["\\u9ad8\\u9885\\u9876\\u53d1\\u57' observed_at=2026-09-28T07:26:55.558037Z session_version=6 contract=xingtu-ad-creator-square-v1
+
+== search/candidate counters ==
+  state='PARTIAL_COMPLETED'
+  failure_reason='PROFILE_SCOPE_INCOMPLETE'
+  valid_count=2
+  profile_complete_count=0
+  featured_status='NOT_ATTEMPTED'
+  featured_complete_count=0
+  pipeline_complete=False
+  checkpoint revision=52 discovered=20 scanned=20

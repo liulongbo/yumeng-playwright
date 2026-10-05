@@ -1,0 +1,709 @@
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+
+import psycopg
+import pytest
+from xingtu.domain import CollectorError, ReleaseDisposition
+
+
+def test_start_idempotency_conflict_and_concurrent_delivery(repo, plan):
+    def create():
+        return repo.create(
+            plan,
+            "unit",
+            "key",
+            "test",
+            adapter_version="synthetic-v1",
+            contract_version="synthetic-v1",
+            modules=["basic"],
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        roots = list(pool.map(lambda _: create(), range(4)))
+    assert len(set(roots)) == 1
+    with repo.connect() as conn:
+        assert conn.execute("SELECT count(*) AS n FROM task_dispatches").fetchone()["n"] == 1
+    with pytest.raises(CollectorError, match="IDEMPOTENCY_CONFLICT"):
+        repo.create(
+            plan.model_copy(update={"target_count": 3}),
+            "unit",
+            "key",
+            "test",
+            adapter_version="synthetic-v1",
+            contract_version="synthetic-v1",
+            modules=["basic"],
+        )
+
+
+def test_transaction_rolls_back_checkpoint_and_count(repo, started):
+    with pytest.raises(RuntimeError):
+        with repo.edit(started.root_task_id, started) as (task, _):
+            task.valid_count = 1
+            task.checkpoint.cursor = "would-skip-page"
+            raise RuntimeError("storage failure")
+    task = repo.get(started.root_task_id)
+    assert task.valid_count == 0 and task.checkpoint.cursor is None
+
+
+def test_lease_expiry_quarantines_and_rejects_stale_write(repo, started):
+    with repo.connect() as conn:
+        conn.execute("UPDATE execution_units SET lease_until=now()-interval '1 second'")
+    with pytest.raises(CollectorError, match="isolation"):
+        repo.acquire("unit", "new-owner")
+    assert repo.unit("unit")["state"] == "QUARANTINED"
+    with pytest.raises(CollectorError, match="LEASE_LOST"):
+        with repo.edit(started.root_task_id, started):
+            pass
+
+
+def test_recover_stopped_unit_handles_expired_lease_in_one_step(repo, started):
+    with repo.connect() as conn:
+        conn.execute("UPDATE execution_units SET lease_until=now()-interval '1 second'")
+    repo.recover_stopped_unit("unit", "test")
+    unit = repo.unit("unit")
+    assert unit["state"] == "SESSION_UNVERIFIED"
+    assert unit["owner"] is None
+    assert unit["browser_stopped"] is True
+    assert unit["last_session_status"] == "INDETERMINATE"
+    generation, _ = repo.acquire("unit", "new-owner")
+    assert generation > started.lease_generation
+
+
+async def test_snapshot_database_immutability(repo, started):
+    from xingtu.engine import Engine
+
+    from backend.tests.synthetic import SyntheticAdapter
+
+    await Engine(repo, SyntheticAdapter(), started).run()
+    row = repo.results(started.root_task_id)[0]
+    with pytest.raises(psycopg.errors.RaiseException, match="immutable"):
+        with repo.connect() as conn:
+            conn.execute(
+                "UPDATE creator_snapshots SET payload='{}' WHERE snapshot_id=%s",
+                (row["snapshot_id"],),
+            )
+
+
+async def test_existing_creator_new_snapshot_and_failed_field_preserves_projection(repo, plan):
+    from xingtu.domain import ExecutionContext, uid
+    from xingtu.engine import Engine
+
+    from backend.tests.synthetic import SyntheticAdapter
+
+    roots = []
+    for fail in [None, "fans"]:
+        root = repo.create(
+            plan,
+            "unit",
+            uid(),
+            "test",
+            adapter_version="synthetic-v1",
+            contract_version="synthetic-v1",
+            modules=["basic", "commercial", "fans"],
+        )
+        roots.append(root)
+        task = repo.get(root)
+        gen, session = repo.acquire("unit", task.attempt_id)
+        ctx = ExecutionContext(
+            root_task_id=root,
+            task_id=task.task_id,
+            attempt_id=task.attempt_id,
+            execution_unit_id="unit",
+            lease_generation=gen,
+            session_version=session,
+            capability_version="synthetic-v1",
+            adapter_version="synthetic-v1",
+            contract_version="synthetic-v1",
+        )
+        await Engine(repo, SyntheticAdapter(failed_module=fail), ctx).run()
+        assert repo.get(root).valid_count == 2
+        repo.release(
+            "unit",
+            task.attempt_id,
+            gen,
+            stopped=True,
+            disposition=ReleaseDisposition.VERIFIED_READY,
+        )
+    with repo.connect() as conn:
+        assert conn.execute("SELECT count(*) AS n FROM platform_creators").fetchone()["n"] == 2
+        projections = conn.execute("SELECT projection FROM platform_creators").fetchall()
+        assert all(row["projection"]["fans.value"]["status"] == "COLLECTED" for row in projections)
+    assert repo.results(roots[0])[0]["snapshot_id"] != repo.results(roots[1])[0]["snapshot_id"]
+    assert repo.results(roots[0])[0]["payload"]["modules"]["fans"]["complete"]
+    assert not repo.results(roots[1])[0]["payload"]["modules"]["fans"]["complete"]
+
+
+def test_network_mode_is_persisted_and_immutable(repo):
+    from xingtu.domain import NetworkMode
+
+    repo.register_unit(
+        "local-unit", "acct", "local-dev", "/tmp/local-profile", NetworkMode.LOCAL_DEVELOPMENT.value
+    )
+    row = repo.unit("local-unit")
+    assert row["network_mode"] == "local_development"
+    # The historical fixture unit keeps the production-line binding.
+    assert repo.unit("unit")["network_mode"] == "production_line"
+    # A re-registration that changes the network binding is a hard error, not a silent switch.
+    import pytest
+    from xingtu.domain import CollectorError
+
+    with pytest.raises(CollectorError, match="immutable"):
+        repo.register_unit("local-unit", "acct", "local-dev", "/tmp/local-profile")
+    with repo.connect() as conn:
+        versions = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
+    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6]
+
+
+def test_login_resume_is_durable_idempotent_and_requires_released_browser(repo, started):
+    from xingtu.domain import TaskStatus
+
+    root = started.root_task_id
+    with repo.edit(root) as (task, conn):
+        task.state = TaskStatus.WAITING_FOR_LOGIN
+        conn.execute("UPDATE task_dispatches SET sent=true WHERE root_task_id=%s", (root,))
+    with pytest.raises(CollectorError, match="already has a browser host"):
+        repo.request_login_maintenance("unit", "test")
+    repo.release(
+        "unit",
+        started.attempt_id,
+        started.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.LOGIN_REQUIRED,
+    )
+    assert repo.request_login_maintenance("unit", "test") == 1
+    assert repo.request_login_maintenance("unit", "test") == 1
+    assert repo.get(root).state == TaskStatus.WAITING_FOR_LOGIN
+
+
+def test_invalidate_session_requires_stopped_unowned_unit(repo, started):
+    with pytest.raises(CollectorError, match="active browser cannot be invalidated"):
+        repo.invalidate_session("unit", "SESSION_RESTART_CHECK_FAILED", "test")
+
+    repo.release(
+        "unit",
+        started.attempt_id,
+        started.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.VERIFIED_READY,
+    )
+    repo.invalidate_session("unit", "SESSION_RESTART_CHECK_FAILED", "test")
+    unit = repo.unit("unit")
+    assert unit["state"] == "NEEDS_LOGIN"
+    assert unit["failure_reason"] == "SESSION_RESTART_CHECK_FAILED"
+
+
+def test_explicit_release_dispositions_do_not_confuse_account_or_unknown_session(repo, started):
+    repo.release(
+        "unit",
+        started.attempt_id,
+        started.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.ACCOUNT_MISMATCH,
+        reason="PROTECTED_PAGE_WRONG_ACCOUNT",
+    )
+    unit = repo.unit("unit")
+    assert unit["state"] == "ACCOUNT_MISMATCH"
+    assert unit["last_session_status"] == "ACCOUNT_MISMATCH"
+    assert unit["failure_reason"] == "PROTECTED_PAGE_WRONG_ACCOUNT"
+
+    generation, _ = repo.acquire("unit", "maintenance", maintenance=True)
+    repo.release(
+        "unit",
+        "maintenance",
+        generation,
+        stopped=True,
+        disposition=ReleaseDisposition.SESSION_UNVERIFIED,
+        reason="NO_REGISTERED_SESSION_SIGNAL",
+    )
+    unit = repo.unit("unit")
+    assert unit["state"] == "SESSION_UNVERIFIED"
+    assert unit["last_session_status"] == "INDETERMINATE"
+
+
+def test_scoped_contract_breaker_requires_distinct_subjects_and_fresh_lease(repo):
+    version = "synthetic-v1"
+    scope = "profile_identity"
+    assert (
+        repo.record_capability_failure(version, scope, "a", 1, "IDENTITY_UNREADABLE") == "ENABLED"
+    )
+    assert (
+        repo.record_capability_failure(version, scope, "a", 1, "IDENTITY_UNREADABLE") == "ENABLED"
+    )
+    assert (
+        repo.record_capability_failure(version, scope, "b", 1, "IDENTITY_UNREADABLE") == "ENABLED"
+    )
+    assert (
+        repo.record_capability_failure(version, scope, "c", 1, "IDENTITY_UNREADABLE") == "SUSPECTED"
+    )
+    repo.require_contract(version, {scope})
+    repo.require_contract(version, {"search"})
+    assert (
+        repo.record_capability_failure(version, scope, "d", 2, "IDENTITY_UNREADABLE") == "DISABLED"
+    )
+    with pytest.raises(CollectorError, match="CONTRACT_SCOPE_DISABLED:profile_identity"):
+        repo.require_contract(version, {scope})
+    # A disabled profile scope does not disable an unrelated search capability.
+    repo.require_contract(version, {"search"})
+    repo.enable_contract_scope(version, scope, "test", "verified fixture update")
+    repo.require_contract(version, {scope})
+    with repo.connect() as conn:
+        action = conn.execute(
+            "SELECT action FROM audit_logs WHERE action LIKE 'enable_contract_scope:%'"
+        ).fetchone()["action"]
+    assert action.endswith(":verified fixture update")
+
+
+def test_scoped_contract_breaker_can_be_disabled_for_rollback(repo, monkeypatch):
+    monkeypatch.setenv("XINGTU_SCOPED_CONTRACT_HEALTH", "false")
+    version, scope = "synthetic-v1", "profile_identity"
+    for index in range(4):
+        assert (
+            repo.record_capability_failure(
+                version, scope, f"rollback-{index}", index + 1, "IDENTITY_UNREADABLE"
+            )
+            == "ENABLED"
+        )
+    assert not repo.capability_has_failure_streak(version, scope)
+    with repo.connect() as conn:
+        row = conn.execute(
+            "SELECT count(*) AS n FROM contract_capability_health "
+            "WHERE contract_version=%s AND scope=%s",
+            (version, scope),
+        ).fetchone()
+    assert row and row["n"] == 0
+
+
+def _maintenance(repo, started, owner="browser-host"):
+    repo.release(
+        "unit",
+        started.attempt_id,
+        started.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.LOGIN_REQUIRED,
+    )
+    generation, session = repo.acquire(
+        "unit", owner, maintenance=True, root_task_id=started.root_task_id
+    )
+    return owner, generation, session
+
+
+def _promote(repo, started, owner, generation, session):
+    return repo.promote_maintenance_to_collect(
+        "unit",
+        owner,
+        generation,
+        session,
+        "synthetic-account",
+        "test",
+        account_verified=True,
+        protected_page_verified=True,
+        line_verified=True,
+    )
+
+
+def test_promote_maintenance_to_collect_is_atomic_audited_and_fenced(repo, started):
+    with repo.connect() as conn:
+        conn.execute(
+            "UPDATE task_dispatches SET sent=true WHERE root_task_id=%s",
+            (started.root_task_id,),
+        )
+    owner, generation, session = _maintenance(repo, started)
+    new_session = _promote(repo, started, owner, generation, session)
+    unit = repo.unit("unit")
+    assert new_session == session + 1
+    assert unit["mode"] == "collect"
+    assert unit["session_version"] == new_session
+    assert unit["verified_account_id"] == "synthetic-account"
+    assert unit["failure_reason"] is None
+    assert str(unit["current_root_task_id"]) == started.root_task_id
+    with repo.connect() as conn:
+        dispatch = conn.execute(
+            "SELECT sent FROM task_dispatches WHERE root_task_id=%s",
+            (started.root_task_id,),
+        ).fetchone()
+        audit = conn.execute(
+            "SELECT action FROM audit_logs WHERE root_task_id=%s ORDER BY id DESC LIMIT 1",
+            (started.root_task_id,),
+        ).fetchone()
+    assert dispatch["sent"] is True
+    assert audit["action"] == "promote_maintenance_to_collect:unit"
+
+    before = repo.unit("unit")
+    with pytest.raises(CollectorError, match="MAINTENANCE_LEASE_NOT_ACTIVE"):
+        _promote(repo, started, owner, generation, session)
+    after = repo.unit("unit")
+    assert after["session_version"] == before["session_version"]
+    assert after["mode"] == before["mode"]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("owner", "OWNER_OR_GENERATION_MISMATCH"),
+        ("generation", "OWNER_OR_GENERATION_MISMATCH"),
+        ("lease", "MAINTENANCE_LEASE_NOT_ACTIVE"),
+        ("session", "SESSION_VERSION_CONFLICT"),
+    ],
+)
+def test_promote_rejects_stale_fences_without_partial_update(repo, started, mutation, message):
+    owner, generation, session = _maintenance(repo, started)
+    call_owner, call_generation, call_session = owner, generation, session
+    if mutation == "owner":
+        call_owner = "stale-owner"
+    elif mutation == "generation":
+        call_generation -= 1
+    elif mutation == "lease":
+        with repo.connect() as conn:
+            conn.execute("UPDATE execution_units SET lease_until=now()-interval '1 second'")
+    else:
+        call_session -= 1
+    with repo.connect() as conn:
+        before_audits = conn.execute("SELECT count(*) AS n FROM audit_logs").fetchone()["n"]
+    with pytest.raises(CollectorError, match=message):
+        _promote(repo, started, call_owner, call_generation, call_session)
+    unit = repo.unit("unit")
+    assert unit["mode"] == "maintenance"
+    assert unit["session_version"] == session
+    assert unit["verified_account_id"] is None
+    with repo.connect() as conn:
+        assert conn.execute("SELECT count(*) AS n FROM audit_logs").fetchone()["n"] == before_audits
+
+
+def test_only_one_concurrent_maintenance_promotion_commits(repo, started):
+    owner, generation, session = _maintenance(repo, started)
+
+    def promote():
+        try:
+            return _promote(repo, started, owner, generation, session)
+        except CollectorError as exc:
+            return exc.reason
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: promote(), range(2)))
+    assert results.count(session + 1) == 1
+    assert results.count("MAINTENANCE_LEASE_NOT_ACTIVE") == 1
+    assert repo.unit("unit")["session_version"] == session + 1
+
+
+def test_reverse_transition_only_accepts_auth_or_challenge(repo, started):
+    owner, generation, session = _maintenance(repo, started)
+    new_session = _promote(repo, started, owner, generation, session)
+    with pytest.raises(CollectorError, match="NON_AUTH_FAILURE"):
+        repo.transition_collect_to_maintenance(
+            "unit", owner, generation, new_session, "PLATFORM_PERMISSION_DENIED", "test"
+        )
+    assert repo.unit("unit")["mode"] == "collect"
+
+    repo.transition_collect_to_maintenance(
+        "unit", owner, generation, new_session, "PLATFORM_SECURITY_CHALLENGE", "test"
+    )
+    unit = repo.unit("unit")
+    assert unit["mode"] == "maintenance"
+    assert unit["failure_reason"] == "PLATFORM_SECURITY_CHALLENGE"
+    assert unit["maintenance_deadline"] is not None
+
+
+def test_active_collect_rejects_concurrent_maintenance(repo, started):
+    with pytest.raises(CollectorError, match="unit occupied"):
+        repo.acquire(
+            "unit", "maintenance-owner", maintenance=True, root_task_id=started.root_task_id
+        )
+
+
+def test_request_login_maintenance_only_requeues_existing_waiting_root(repo, started):
+    from xingtu.domain import TaskStatus
+
+    with repo.edit(started.root_task_id) as (task, conn):
+        task.state = TaskStatus.WAITING_FOR_LOGIN
+        conn.execute(
+            "UPDATE task_dispatches SET sent=true WHERE root_task_id=%s",
+            (started.root_task_id,),
+        )
+    repo.release(
+        "unit",
+        started.attempt_id,
+        started.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.LOGIN_REQUIRED,
+    )
+    assert repo.request_login_maintenance("unit", "test") == 1
+    assert repo.request_login_maintenance("unit", "test") == 1
+    with repo.connect() as conn:
+        row = conn.execute(
+            "SELECT workflow_id,sent FROM task_dispatches WHERE root_task_id=%s",
+            (started.root_task_id,),
+        ).fetchone()
+        root_count = conn.execute("SELECT count(*) AS n FROM root_tasks").fetchone()["n"]
+    assert row == {"workflow_id": f"collect/{started.root_task_id}", "sent": False}
+    assert root_count == 1
+
+
+def test_repeated_login_confirmation_during_maintenance_reuses_owner(repo, started):
+    from xingtu.domain import TaskStatus
+
+    with repo.edit(started.root_task_id) as (task, _):
+        task.state = TaskStatus.WAITING_FOR_LOGIN
+    repo.release(
+        "unit",
+        started.attempt_id,
+        started.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.LOGIN_REQUIRED,
+    )
+    generation, session = repo.acquire(
+        "unit", "browser-host", maintenance=True, root_task_id=started.root_task_id
+    )
+    assert repo.request_login_maintenance("unit", "test") == 1
+    unit = repo.unit("unit")
+    assert unit["owner"] == "browser-host"
+    assert unit["generation"] == generation
+    assert unit["session_version"] == session
+    assert unit["mode"] == "maintenance"
+
+
+class _FakeRuntime:
+    def __init__(self, *, close_ok=True, context=None):
+        self.stopped = True
+        self.close_ok = close_ok
+        self.context = context or object()
+
+    @asynccontextmanager
+    async def open(self):
+        self.stopped = False
+        try:
+            yield self.context
+        finally:
+            if self.close_ok:
+                self.stopped = True
+            else:
+                raise RuntimeError("close not acknowledged")
+
+
+async def test_browser_host_owns_one_context_and_unverified_maintenance_stays_login_required(
+    repo, started, tmp_path, capabilities
+):
+    from xingtu.browser_host import BrowserHost
+    from xingtu.runtime import UnitConfig
+
+    from backend.tests.contract.test_browser_flow import registry
+
+    repo.release(
+        "unit",
+        started.attempt_id,
+        started.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.VERIFIED_READY,
+    )
+    config = UnitConfig.model_validate(
+        {
+            "unit_id": "unit",
+            "account_ref": "synthetic-account",
+            "expected_account_id": "synthetic-account",
+            "line_id": "local",
+            "profile_directory": tmp_path / "profile",
+            "registry_path": tmp_path / "registry.json",
+            "network_mode": "local_development",
+            "browser_channel": "chromium",
+        }
+    )
+    runtime = _FakeRuntime()
+    async with BrowserHost.lease(
+        repo,
+        config,
+        registry(capabilities),
+        tmp_path,
+        started.root_task_id,
+        "host-owner",
+        maintenance=True,
+        runtime=runtime,
+    ) as host:
+        assert host.browser is runtime.context
+        assert repo.unit("unit")["mode"] == "maintenance"
+        with pytest.raises(CollectorError, match="unit occupied"):
+            repo.acquire("unit", "second-host", maintenance=True)
+    unit = repo.unit("unit")
+    assert unit["state"] == "NEEDS_LOGIN"
+    assert unit["last_session_status"] == "LOGIN_REQUIRED"
+    assert unit["browser_stopped"] is True
+    assert unit["owner"] is None
+
+
+async def test_ready_collect_lease_must_reverify_before_returning_ready(
+    repo, started, tmp_path, capabilities
+):
+    from xingtu.browser_host import BrowserHost
+    from xingtu.runtime import UnitConfig
+
+    from backend.tests.contract.test_browser_flow import registry
+
+    repo.release(
+        "unit",
+        started.attempt_id,
+        started.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.VERIFIED_READY,
+    )
+    config = UnitConfig.model_validate(
+        {
+            "unit_id": "unit",
+            "account_ref": "synthetic-account",
+            "expected_account_id": "synthetic-account",
+            "line_id": "local",
+            "profile_directory": tmp_path / "profile",
+            "registry_path": tmp_path / "registry.json",
+            "network_mode": "local_development",
+            "browser_channel": "chromium",
+        }
+    )
+    async with BrowserHost.lease(
+        repo,
+        config,
+        registry(capabilities),
+        tmp_path,
+        started.root_task_id,
+        "host-owner",
+        maintenance=False,
+        runtime=_FakeRuntime(),
+    ):
+        pass
+    unit = repo.unit("unit")
+    assert unit["state"] == "SESSION_UNVERIFIED"
+    assert unit["last_session_status"] == "INDETERMINATE"
+
+
+async def test_browser_host_unconfirmed_close_quarantines(repo, started, tmp_path, capabilities):
+    from xingtu.browser_host import BrowserHost
+    from xingtu.runtime import UnitConfig
+
+    from backend.tests.contract.test_browser_flow import registry
+
+    repo.release(
+        "unit",
+        started.attempt_id,
+        started.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.VERIFIED_READY,
+    )
+    config = UnitConfig.model_validate(
+        {
+            "unit_id": "unit",
+            "account_ref": "synthetic-account",
+            "expected_account_id": "synthetic-account",
+            "line_id": "local",
+            "profile_directory": tmp_path / "profile",
+            "registry_path": tmp_path / "registry.json",
+            "network_mode": "local_development",
+            "browser_channel": "chromium",
+        }
+    )
+    with pytest.raises(RuntimeError, match="close not acknowledged"):
+        async with BrowserHost.lease(
+            repo,
+            config,
+            registry(capabilities),
+            tmp_path,
+            started.root_task_id,
+            "host-owner",
+            maintenance=True,
+            runtime=_FakeRuntime(close_ok=False),
+        ):
+            pass
+    unit = repo.unit("unit")
+    assert unit["state"] == "QUARANTINED"
+    assert unit["browser_stopped"] is False
+
+
+async def test_browser_host_promotes_and_collects_with_the_exact_same_context(
+    repo, started, tmp_path, capabilities, monkeypatch
+):
+    import xingtu.browser_host as host_module
+    from xingtu.browser_host import BrowserHost
+    from xingtu.runtime import UnitConfig
+
+    from backend.tests.contract.test_browser_flow import registry
+
+    class Page:
+        def __init__(self):
+            self.urls = []
+
+        async def goto(self, url, **_):
+            self.urls.append(url)
+
+    class Browser:
+        def __init__(self):
+            self.pages = [Page()]
+
+        async def new_page(self):
+            page = Page()
+            self.pages.append(page)
+            return page
+
+    verified = {}
+
+    async def clearance(page, _spec, _timeout):
+        verified["maintenance_page"] = page
+        return "synthetic-account"
+
+    class Verifier:
+        def __init__(self, browser, *_args, **_kwargs):
+            verified["browser"] = browser
+
+        async def check_session(self, page, **_):
+            verified["protected_page"] = page
+
+        async def close(self):
+            pass
+
+    monkeypatch.setattr(host_module, "wait_for_manual_clearance", clearance)
+    monkeypatch.setattr(host_module, "BrowserAdapter", Verifier)
+    repo.release(
+        "unit",
+        started.attempt_id,
+        started.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.VERIFIED_READY,
+    )
+    config = UnitConfig.model_validate(
+        {
+            "unit_id": "unit",
+            "account_ref": "synthetic-account",
+            "expected_account_id": "synthetic-account",
+            "line_id": "local",
+            "profile_directory": tmp_path / "profile",
+            "registry_path": tmp_path / "registry.json",
+            "network_mode": "local_development",
+            "browser_channel": "chromium",
+        }
+    )
+    browser = Browser()
+    async with BrowserHost.lease(
+        repo,
+        config,
+        registry(capabilities),
+        tmp_path,
+        started.root_task_id,
+        "host-owner",
+        maintenance=True,
+        runtime=_FakeRuntime(context=browser),
+    ) as host:
+        original_context = host.browser
+        new_session = await host.maintain_and_promote(timeout=10, actor="test")
+        assert host.mode == "collect"
+        assert host.browser is original_context is browser
+        assert verified == {
+            "maintenance_page": browser.pages[0],
+            "browser": browser,
+            "protected_page": browser.pages[0],
+        }
+        assert host.take_collection_page() is browser.pages[0]
+        assert host.take_collection_page() is None
+        assert len(browser.pages) == 1
+        assert new_session == started.session_version + 1
+        assert repo.unit("unit")["mode"] == "collect"
+    # The promotion above verified a live account and protected business capability, so a
+    # confirmed close returns the unit to READY: the persisted profile may be reused by the
+    # next task without another manual login.
+    unit = repo.unit("unit")
+    assert unit["state"] == "READY"
+    assert unit["browser_stopped"] is True
+    assert unit["owner"] is None

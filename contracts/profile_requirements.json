@@ -1,0 +1,12 @@
+{
+  "version": "full-homepage-inventory-v1",
+  "inventory_verified": false,
+  "modules": {
+    "basic": ["platform_creator_id", "nickname", "avatar_uri", "followers", "gender", "city", "province", "mcn_name", "content_theme_labels"],
+    "commercial": [],
+    "spread": [],
+    "fans": [],
+    "creation_and_fulfillment": []
+  },
+  "evidence_refs": []
+}

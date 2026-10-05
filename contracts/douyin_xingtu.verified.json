@@ -1,0 +1,299 @@
+{
+  "schema_version": "platform_registry.v1",
+  "contract_version": "xingtu-ad-creator-square-v1",
+  "adapter_version": "browser-v2",
+  "status": "VERIFIED",
+  "sample_kind": "live",
+  "verified_at": "2026-09-27T14:50:00+08:00",
+  "account_permission_type": "巨量星图广告主(客户)账号，具备达人广场找达人搜索权益；首个账号客户权益等级不足（search_for_author_square 返回 10003），本契约使用第二个已核验账号的真实观察",
+  "evidence_refs": [
+    "docs/evidence/UNIT-01-local-stage-2026-09-27.md",
+    "docs/evidence/UNIT-01-local-stage-2026-09-27.log"
+  ],
+  "capabilities": {
+    "version": "xingtu-ad-creator-square-v1",
+    "status": "VERIFIED",
+    "sample_kind": "live",
+    "evidence_refs": [
+      "docs/evidence/UNIT-01-local-stage-2026-09-27.md"
+    ],
+    "fields": [
+      {
+        "field": "keyword",
+        "operators": [
+          "eq"
+        ],
+        "keyword_mode": "content"
+      }
+    ],
+    "sorts": [
+      "score"
+    ],
+    "combinations": [
+      [
+        "keyword"
+      ]
+    ]
+  },
+  "allowed_hosts": [
+    "www.xingtu.cn",
+    "sso.oceanengine.com"
+  ],
+  "homepage_path_prefixes": [
+    "/ad/creator/author-homepage/"
+  ],
+  "action_interval_seconds": 2.0,
+  "operation_timeout_seconds": 90,
+  "session_boot_timeout_seconds": 180,
+  "response_body_max_bytes": 8000000,
+  "session": {
+    "entry_url": "https://sso.oceanengine.com/xingtu/login?role=1",
+    "account": {
+      "selector": "div.navigator-user__userid"
+    },
+    "protected_ready": {
+      "selector": "a.navigator-menu-item-link[href=\"/ad/creator/index\"]"
+    },
+    "error_selectors": {
+      "PLATFORM_SECURITY_CHALLENGE": {
+        "selector": "iframe[src*='rmc.bytedance.com/verifycenter/captcha/v2']"
+      }
+    },
+    "identity": {
+      "selector": "div.author-info span.copy-text"
+    }
+  },
+  "search": {
+    "entry_url": "https://www.xingtu.cn/ad/creator/market",
+    "default_bindings": {},
+    "reset_actions": [
+      {
+        "kind": "fill",
+        "locator": {
+          "selector": "input[placeholder=\"按内容关键词找达人\"]"
+        },
+        "value": ""
+      }
+    ],
+    "apply_actions": [
+      {
+        "kind": "fill",
+        "locator": {
+          "selector": "input[placeholder=\"按内容关键词找达人\"]"
+        },
+        "value": "$keyword"
+      },
+      {
+        "kind": "click",
+        "locator": {
+          "selector": "div.el-input-group__append"
+        }
+      }
+    ],
+    "next_actions": [],
+    "ready": {
+      "selector": "div.search-content--header"
+    },
+    "ready_hidden": [],
+    "readback": {
+      "keyword": {
+        "selector": "input[placeholder=\"按内容关键词找达人\"]",
+        "property": "value"
+      },
+      "keyword_mode": {
+        "selector": "span.search-type-radio-item--active",
+        "value_map": {
+          "内容找人": "3"
+        }
+      }
+    },
+    "requests": [
+      {
+        "key": "search",
+        "method": "POST",
+        "host": "www.xingtu.cn",
+        "path": "/gw/api/gsearch/search_for_author_square",
+        "request_match": {
+          "search_param.keyword": "$keyword",
+          "search_param.seach_type": "$keyword_mode",
+          "page_param.page": "$cursor"
+        },
+        "response_match": {},
+        "success_path": "base_resp.status_code",
+        "success_value": "0",
+        "error_codes": {
+          "10003": "PLATFORM_PERMISSION_DENIED"
+        }
+      }
+    ],
+    "result_request_key": "search",
+    "candidates_path": "authors",
+    "id_path": "star_id",
+    "homepage_path": null,
+    "homepage_template": "https://www.xingtu.cn/ad/creator/author-homepage/douyin-video/{platform_creator_id}",
+    "next_path": "pagination.page",
+    "exhausted_path": "pagination.has_more",
+    "exhausted_value": "false",
+    "pagination": "page",
+    "next_page_mode": "page_fetch",
+    "page_fetch_max_verified": 2,
+    "resume_supported": false,
+    "initial_cursor": "1",
+    "fixed_sort": true,
+    "single_page_only": false,
+    "binding_values": {
+      "keyword_mode": {
+        "content": "3"
+      }
+    },
+    "coverage_gaps": [
+      "页面 UI 滚动到底不产生下一页请求；已核验同一页面上下文复用原生请求头与请求体可取得 page=2。当前 page_fetch_max_verified=2，page=3 及以后和真实终点尚未核验，达到边界会以 SEARCH_CAPABILITY_LIMIT 停止而不报告平台耗尽",
+      "response_match 为空：平台搜索响应不回显关键词/页码，请求归属只由方法/主机/路径+请求体绑定判定",
+      "访问节奏未实测：action_interval_seconds=2.0 为保守值，平台限流阈值尚未核验",
+      "筛选条件只核验了关键词(内容找人)；合作诉求/匹配度/性价比/主题推荐等筛选项的填写与回读未核验",
+      "会话错误页只登记了空集：登录表单本身就是会话入口，无法用作失效判据；账号/受保护页面超时记 ACCOUNT_LOGIN_REQUIRED，安全挑战的具体选择器待核验",
+      "ready_hidden 为空集：结果区加载提示定位未核验（候选 xt-loading__wrapper 在页面上有多处匹配，登记为必须消失会造成严格模式误判）"
+    ]
+  },
+  "modules": [
+    {
+      "key": "basic",
+      "basic": true,
+      "entry": null,
+      "default_bindings": {},
+      "actions": [],
+      "ready": {
+        "selector": "div.author-info"
+      },
+      "ready_hidden": [],
+      "timeout_seconds": 60,
+      "requests": [
+        {
+          "key": "base",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/author/get_author_base_info",
+          "request_match": {
+            "o_author_id": "$creator_id"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        }
+      ],
+      "fields": [
+        {
+          "key": "platform_creator_id",
+          "name": "星图ID",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "id"
+          }
+        },
+        {
+          "key": "nickname",
+          "name": "达人昵称",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "nick_name"
+          }
+        },
+        {
+          "key": "avatar_uri",
+          "name": "头像",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "avatar_uri"
+          }
+        },
+        {
+          "key": "followers",
+          "name": "粉丝数",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "follower"
+          }
+        },
+        {
+          "key": "gender",
+          "name": "性别",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "gender"
+          }
+        },
+        {
+          "key": "city",
+          "name": "城市",
+          "kind": "text",
+          "empty_values": [
+            ""
+          ],
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "city"
+          }
+        },
+        {
+          "key": "province",
+          "name": "省份",
+          "kind": "text",
+          "empty_values": [
+            ""
+          ],
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "province"
+          }
+        },
+        {
+          "key": "mcn_name",
+          "name": "MCN公司",
+          "kind": "text",
+          "empty_values": [
+            ""
+          ],
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "mcn_name"
+          }
+        },
+        {
+          "key": "content_theme_labels",
+          "name": "内容主题标签",
+          "kind": "tags",
+          "empty_values": [
+            "[]"
+          ],
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "content_theme_labels"
+          }
+        }
+      ],
+      "period_source": null,
+      "absence": null,
+      "checkpoint_version": 1,
+      "coverage_gaps": []
+    }
+  ],
+  "featured": [],
+  "direct_api_enabled": false,
+  "raw_har_trace_enabled": false,
+  "coverage_gaps": []
+}

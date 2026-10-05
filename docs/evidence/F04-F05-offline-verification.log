@@ -1,0 +1,265 @@
+# F04/F05 离线验证命令记录
+# 2026-09-26T21:42:23+0800
+
+$ ruff check backend conftest.py tests scripts
+All checks passed!
+
+$ ruff format --check ...
+23 files already formatted
+
+$ mypy backend/src
+Success: no issues found in 13 source files
+
+
+$ pytest backend/tests/unit -q
+........................................                                 [100%]
+40 passed in 0.02s
+
+$ pytest backend/tests/contract -q
+..........                                                               [100%]
+10 passed in 10.28s
+
+$ pytest backend/tests/integration -q
+......................                                                   [100%]
+22 passed in 101.84s (0:01:41)
+
+$ pytest tests/e2e -q
+.                                                                        [100%]
+1 passed in 1.21s
+
+$ .venv/bin/xingtu --help
+usage: xingtu [-h]
+              {doctor,migrate,recover-unit,enable-contract,register-unit,login,worker,start,status,results,cancel,continue,retry,dispatch} ...
+
+F04/F05 内部验收工具，不绕过产品 P1 提交契约
+
+positional arguments:
+  {doctor,migrate,recover-unit,enable-contract,register-unit,login,worker,start,status,results,cancel,continue,retry,dispatch}
+
+options:
+  -h, --help            show this help message and exit
+
+$ .venv/bin/xingtu doctor
+{
+  "live_status": "UNVERIFIED",
+  "coverage_gaps": [
+    "U02: 筛选枚举、重置、填写、回读及组合未核验",
+    "U04: 搜索分页、终点、身份与主页全部字段来源未核验",
+    "U06: 账号识别、受保护页面及会话状态未核验",
+    "U07/U08: 硬件、DNS、断线隔离、旧进程隔离未核验"
+  ],
+  "database_configured": false,
+  "segment_budget": {
+    "active_seconds": 7200.0,
+    "candidate_scan_floor": 200,
+    "candidate_scan_multiplier": 5
+  },
+  "evidence_default": {
+    "kind": "local",
+    "endpoint": null,
+    "bucket": null,
+    "directory": null
+  },
+  "f06": "NOT_ATTEMPTED"
+}
+
+$ make dev  (Docker daemon not running)
+docker compose --env-file .runtime/development.env -f deploy/compose.yaml up -d
+unable to get image 'postgres:16.10': Cannot connect to the Docker daemon at unix:///Users/yaoyao/.docker/run/docker.sock. Is the docker daemon running?
+make: *** [dev] Error 1
+
+$ XINGTU_DATABASE_URL=<scratch> xingtu migrate --environment test
+migration 1 applied or already present
+exit=0
+
+$ xingtu register-unit --config .runtime/evidence-run/unit.json
+{"unit_id": "evidence-unit", "state": "NEEDS_LOGIN"}
+exit=0
+
+$ xingtu start (unverified registry must be refused)
+{"error_code": "PLATFORM_PAGE_CHANGED", "reason": "UNVERIFIED_REGISTRY"}
+exit=2
+
+$ xingtu enable-contract (unverified registry must be refused)
+{"error_code": "PLATFORM_PAGE_CHANGED", "reason": "UNVERIFIED_REGISTRY"}
+exit=2
+
+$ python .runtime/evidence-run/run.py  (explicitly artificial adapter, synthetic versions)
+Traceback (most recent call last):
+  File "/Users/yaoyao/Documents/02-Work/予梦/01-定向爬取+定时更新/.runtime/evidence-run/run.py", line 7, in <module>
+    from backend.tests.synthetic import SyntheticAdapter
+ModuleNotFoundError: No module named 'backend'
+
+$ python .runtime/evidence-run/run.py  (explicitly artificial adapter, synthetic versions)
+Traceback (most recent call last):
+  File "/Users/yaoyao/Documents/02-Work/予梦/01-定向爬取+定时更新/.runtime/evidence-run/run.py", line 47, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/Users/yaoyao/Documents/02-Work/予梦/01-定向爬取+定时更新/.runtime/evidence-run/run.py", line 37, in main
+    generation, session = repo.acquire("evidence-unit", task.attempt_id)
+                          ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yaoyao/Documents/02-Work/予梦/01-定向爬取+定时更新/backend/src/xingtu/repository.py", line 134, in acquire
+    raise CollectorError("ACCOUNT_LOGIN_REQUIRED", "unit needs verification")
+xingtu.domain.CollectorError: ACCOUNT_LOGIN_REQUIRED: unit needs verification
+
+$ python .runtime/evidence-run/run.py  (explicitly artificial adapter, synthetic versions)
+{"root_task_id": "e7b8bd6e-224f-41a2-835d-41341966c0e1", "state": "PARTIAL_COMPLETED"}
+
+$ xingtu status e7b8bd6e-224f-41a2-835d-41341966c0e1
+{
+  "root_task_id": "e7b8bd6e-224f-41a2-835d-41341966c0e1",
+  "task_id": "dfe7cf1d-b48d-480e-8bae-0690c1dd4208",
+  "attempt_id": "3e0181bc-1631-497f-88a8-ac15bd5c23c0",
+  "state": "PARTIAL_COMPLETED",
+  "version": 51,
+  "execution_unit_id": "evidence-unit",
+  "failure_reason": "FEATURED_NOT_ATTEMPTED",
+  "source": "internal_acceptance",
+  "segment": 0,
+  "valid_count": 2,
+  "profile_complete_count": 2,
+  "pipeline_complete": false,
+  "featured_status": "NOT_ATTEMPTED",
+  "discovered_count": 2,
+  "scanned_count_segment": 2,
+  "search_generation": 1,
+  "search_exhausted": false,
+  "exhaustion_evidence_refs": [],
+  "rescan_reasons": [
+    "CURSOR_INVALID"
+  ],
+  "unidentified_rows": [
+    {
+      "reason": "CANDIDATE_IDENTITY_UNREADABLE",
+      "detail": "items.0.id",
+      "source_ref": "evidence",
+      "operation_id": "cc4af23e-d38d-4161-a974-823d87165084"
+    },
+    {
+      "reason": "CANDIDATE_IDENTITY_UNREADABLE",
+      "detail": "items.0.id",
+      "source_ref": "evidence",
+      "operation_id": "30cc21d4-c2b6-4e18-8d03-5a6e424c69ca"
+    }
+  ],
+  "profile_checkpoint_versions": {
+    "fans": 1,
+    "basic": 1,
+    "commercial": 1
+  },
+  "draft_results": [
+    {
+      "creator_id": "55f0a5c6-8a65-4672-85f5-650798cda86d",
+      "platform_creator_id": "1",
+      "valid": true,
+      "state": "done",
+      "failure_reason": null,
+      "modules": {
+        "fans": {
+          "status": "COLLECTED",
+          "complete": true,
+          "coverage_gaps": [],
+          "fields": {
+            "value": {
+              "status": "COLLECTED",
+              "failure_reason": null
+            }
+          }
+        },
+        "basic": {
+          "status": "COLLECTED",
+          "complete": true,
+          "coverage_gaps": [],
+          "fields": {
+            "platform_creator_id": {
+              "status": "COLLECTED",
+              "failure_reason": null
+            },
+            "nickname": {
+
+$ xingtu results e7b8bd6e-224f-41a2-835d-41341966c0e1  (published snapshots)
+[
+  {
+    "creator_id": "55f0a5c6-8a65-4672-85f5-650798cda86d",
+    "first_position": 0,
+    "snapshot_id": "614fa685-88f7-47da-b27f-18ce6fbe1fa2",
+    "payload": {
+      "modules": {
+        "fans": {
+          "fields": [
+            {
+              "unit": null,
+              "value": "synthetic name",
+              "status": "COLLECTED",
+              "path_ref": null,
+              "field_key": "value",
+              "precision": null,
+              "raw_value": "synthetic",
+              "observed_at": "2026-09-26T13:44:45.779154Z",
+              "source_kind": "dom",
+              "operation_id": "0b518e63-2c54-4175-9b9a-f49aab3fe1a5",
+
+=== 最终校验 2026-09-26T21:46:51+0800 ===
+$ make check
+.venv/bin/ruff check backend conftest.py tests scripts
+All checks passed!
+.venv/bin/ruff format --check backend conftest.py tests scripts
+23 files already formatted
+.venv/bin/mypy backend/src
+Success: no issues found in 13 source files
+.venv/bin/pytest backend/tests/unit -q
+........................................                                 [100%]
+40 passed in 0.02s
+
+$ make test-contract
+.venv/bin/pytest backend/tests/contract -q
+..........                                                               [100%]
+10 passed in 9.77s
+
+$ make test-integration
+.venv/bin/pytest backend/tests/integration -q
+......................                                                   [100%]
+22 passed in 102.85s (0:01:42)
+
+$ make test-e2e
+.venv/bin/pytest tests/e2e -q
+.                                                                        [100%]
+1 passed in 1.22s
+
+=== 收尾校验 2026-09-26T21:49:07+0800 ===
+$ make check
+.venv/bin/ruff check backend conftest.py tests scripts
+All checks passed!
+.venv/bin/ruff format --check backend conftest.py tests scripts
+23 files already formatted
+.venv/bin/mypy backend/src
+Success: no issues found in 13 source files
+.venv/bin/pytest backend/tests/unit -q
+.........................................                                [100%]
+41 passed in 0.03s
+$ make test-contract
+.venv/bin/pytest backend/tests/contract -q
+..........                                                               [100%]
+10 passed in 10.13s
+$ make test-integration
+.venv/bin/pytest backend/tests/integration -q
+......................                                                   [100%]
+22 passed in 101.87s (0:01:41)
+$ make test-e2e
+.venv/bin/pytest tests/e2e -q
+.                                                                        [100%]
+1 passed in 0.94s
+
+$ make migrate ENVIRONMENT=test
+.venv/bin/xingtu migrate --environment "test"
+migration 1 applied or already present
+exit=0

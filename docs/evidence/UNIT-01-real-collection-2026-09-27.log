@@ -1,0 +1,480 @@
+# UNIT-01 本地真实采集验证：实际执行命令与结果
+# 记录时间：2026-09-27（Asia/Shanghai）；网络模式：local_development（本机 IP + 项目独立 Chrome profile）
+# 环境：macOS 26.5.2 / Python 3.13.5 / Playwright 1.63.0 / 系统 Chrome 154.0.8037.57 /
+#        PostgreSQL 18.3 (127.0.0.1:55439, 库 xingtu_local_dev) / Temporal 本地测试服务器 v1.9.1 / Docker 不可用
+
+## 1. 账号权益实测（F04 真实搜索的前置）
+
+账号一（unit-local-mac-01 / xingtu-account-01）在达人广场执行真实关键词搜索时，平台返回业务错误：
+  POST /gw/api/gsearch/search_for_author_square -> base_resp.status_code=10003
+  base_resp.status_message = "您的客户权益等级过低，暂时无法访问更多数据[...]"
+  DOM: 找到 0 个达人
+结论：不是代码或选择器问题，而是该账号客户权益等级不足；已改用账号二，未对该账号填写任何契约。
+
+账号二（unit-local-mac-02 / xingtu-account-02）同一请求返回 base_resp.status_code=0：
+  authors[] 长度 20；pagination.has_more=true / page=1 / limit=20 / total_count=10000；DOM: 找到 10000+ 个达人
+
+## 2. 平台契约登记（依据真实交互观察，未使用推测值）
+
+工具：xingtu research（仅 local_development 单元；主机白名单；只记录结构：方法/主机/路径/查询键/响应键路径/DOM 轮廓；
+      不记录请求头、Cookie、令牌或响应正文；原始件写入 .runtime/research/，仅脱敏结论进入本目录）
+
+实际研究轮次（run 目录位于 .runtime/research/，为受控临时件）：
+  - r01-login: 登录后落点 /ad/creator/index；确认会话入口与受保护页面
+  - r06-market: 人工登录会话内进入后台，登记 首页/找达人 导航链接
+  - r08-enter2: 客户入口 -> 后台 -> 达人广场；首次观察到 search_for_author_square
+  - r09-search: 账号一真实关键词搜索：10003 权益不足（见第 1 节）
+  - r12-account2: 账号二真实关键词搜索：authors[] 20 条，pagination.has_more=true
+  - r17-full: 点开达人主页：URL 形如 /ad/creator/author-homepage/douyin-video/<19位ID>；观察到基础资料/商业卡片接口
+  - r20-full: 完整链路复现（未重新登录）：搜索 + 主页；bind-check 证明主页 URL 的 ID 来自 author_get_base_info.id
+  - r21-pager: 验证会话入口握手后可直接深链到 /ad/creator/market；未观察到分页控件
+  - r22-bootstrap: 无人值守引导验证：新浏览器直接打开登录入口，应用自动加载（无需人工操作）
+
+登记出的关键契约（见 contracts/douyin_xingtu.verified.json）：
+  session.entry_url            = https://sso.oceanengine.com/xingtu/login?role=1
+  session.protected_ready      = a.navigator-menu-item-link[href="/ad/creator/index"]
+  session.account              = div.navigator-user__userid（实际文本 ID: 1865332309937515）
+  session.identity             = div.author-info span.copy-text（主页上等于星图ID的可见文本）
+  search.entry_url             = https://www.xingtu.cn/ad/creator/market
+  search.apply_actions         = fill input[placeholder=按内容关键词找达人] + click div.el-input-group__append
+  search.readback.keyword      = 同一输入框的 DOM property value
+  search.readback.keyword_mode = span.search-type-radio-item--active（value_map 内容找人 -> 3）
+  search.request               = POST /gw/api/gsearch/search_for_author_square
+         request_match: search_param.keyword / search_param.seach_type / page_param.page；success: base_resp.status_code == 0
+  search.candidates_path=authors / id_path=star_id / next_path=pagination.page / exhausted_path=pagination.has_more(=false)
+  search.homepage_template     = https://www.xingtu.cn/ad/creator/author-homepage/douyin-video/{platform_creator_id}
+  modules[0]=basic             = GET /gw/api/author/get_author_base_info?o_author_id=$creator_id
+         字段: id / nick_name / avatar_uri / follower / gender / city / province / mcn_name / content_theme_labels
+
+## 3. 真实登录核验（xingtu login）
+
+$ XINGTU_DATABASE_URL=<xingtu_local_dev> xingtu login --config .runtime/units/local-dev-mac-02.json --wait-seconds 300
+请在独立浏览器中人工登录星图账号；最长等待 300 秒（也可在终端按回车提前结束）。 网络模式=local_development，浏览器=154.0.8037.57。
+账号、受保护页面及线路核验通过；已增加 session_version，登录状态保存在独立 profile。
+LOGIN_EXIT=0
+单元状态：unit_id=unit-local-mac-02 state=READY session_version=4
+说明：本次无需人工干预即通过——新浏览器打开会话入口后应用自动完成握手；账号身份由 div.navigator-user__userid 读取并与 expected_account_id 精确比对，不一致报 WRONG_ACCOUNT。
+
+## 4. 真实采集（xingtu start + make smoke-local）
+
+$ xingtu start --plan .runtime/plans/local-smoke-beauty.json --config .runtime/units/local-dev-mac-02.json --key <uuid> --actor local-verify
+{"root_task_id": "a48d60c6-5e44-4b56-915d-474304fb4f17", "source": "internal_acceptance"}
+
+$ make smoke-local UNIT_CONFIG=.runtime/units/local-dev-mac-02.json ROOT_TASK_ID=a48d60c6-5e44-4b56-915d-474304fb4f17 TIMEOUT_SECONDS=900
+（真实 Activities.collect + CollectionWorkflow + Temporal 本地测试服务器；关键词 美妆、内容找人模式、目标 2 位）
+
+{
+  "root_task_id": "a48d60c6-5e44-4b56-915d-474304fb4f17",
+  "workflow_state": "PARTIAL_COMPLETED",
+  "task_state": "PARTIAL_COMPLETED",
+  "failure_reason": "FEATURED_NOT_ATTEMPTED",
+  "valid_count": 2,
+  "profile_complete_count": 2,
+  "discovered_count": 20,
+  "scanned_count_segment": 20,
+  "search_exhausted": false,
+  "search_generation": 0,
+  "rescan_reasons": [],
+  "diagnostics": [],
+  "draft_results": [
+    {
+      "platform_creator_id": "7646720304210771978",
+      "state": "done",
+      "valid": true,
+      "failure_reason": "FEATURED_COLLECTION_INCOMPLETE",
+      "modules": {
+        "basic": {
+          "status": "COLLECTED",
+          "complete": true,
+          "coverage_gaps": [],
+          "fields": {
+            "platform_creator_id": {
+              "status": "COLLECTED",
+              "value": "7646720304210771978",
+              "raw_value": "7646720304210771978",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "nickname": {
+              "status": "COLLECTED",
+              "value": "姜乘澜",
+              "raw_value": "姜乘澜",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "avatar_uri": {
+              "status": "COLLECTED",
+              "value": "https://p11.douyinpic.com/aweme/1080x1080/aweme-avatar/tos-cn-avt-0015_50d947b21daafecf06424796b99de17d.jpeg?from=3782654143",
+              "raw_value": "https://p11.douyinpic.com/aweme/1080x1080/aweme-avatar/tos-cn-avt-0015_50d947b21daafecf06424796b99de17d.jpeg?from=3782654143",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "followers": {
+              "status": "COLLECTED",
+              "value": {
+                "kind": "number",
+                "amount": "19380524",
+                "bound": "exact",
+                "quantum": "1"
+              },
+              "raw_value": "19380524",
+              "unit": "count",
+              "period_label": null,
+              "failure_reason": null
+            },
+            "gender": {
+              "status": "COLLECTED",
+              "value": "2",
+              "raw_value": "2",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "city": {
+              "status": "NO_DATA",
+              "value": null,
+              "raw_value": "",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "province": {
+              "status": "NO_DATA",
+              "value": null,
+              "raw_value": "",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "mcn_name": {
+              "status": "COLLECTED",
+              "value": "弄新妆",
+              "raw_value": "弄新妆",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "content_theme_labels": {
+              "status": "COLLECTED",
+              "value": [
+                "简约发型",
+                "高颅顶发型",
+                "时尚妆容"
+              ],
+              "raw_value": "[\"\\u7b80\\u7ea6\\u53d1\\u578b\",\"\\u9ad8\\u9885\\u9876\\u53d1\\u578b\",\"\\u65f6\\u5c1a\\u5986\\u5bb9\"]",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "platform_creator_id": "7352866656663633929",
+      "state": "done",
+      "valid": true,
+      "failure_reason": "FEATURED_COLLECTION_INCOMPLETE",
+      "modules": {
+        "basic": {
+          "status": "COLLECTED",
+          "complete": true,
+          "coverage_gaps": [],
+          "fields": {
+            "platform_creator_id": {
+              "status": "COLLECTED",
+              "value": "7352866656663633929",
+              "raw_value": "7352866656663633929",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "nickname": {
+              "status": "COLLECTED",
+              "value": "蛇蛇（美妆版)",
+              "raw_value": "蛇蛇（美妆版)",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "avatar_uri": {
+              "status": "COLLECTED",
+              "value": "https://p26.douyinpic.com/aweme/1080x1080/aweme-avatar/tos-cn-avt-0015_e40dce2f3361c6c4cd1cf4fcbf6d125b.jpeg?from=3782654143",
+              "raw_value": "https://p26.douyinpic.com/aweme/1080x1080/aweme-avatar/tos-cn-avt-0015_e40dce2f3361c6c4cd1cf4fcbf6d125b.jpeg?from=3782654143",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "followers": {
+              "status": "COLLECTED",
+              "value": {
+                "kind": "number",
+                "amount": "272811",
+                "bound": "exact",
+                "quantum": "1"
+              },
+              "raw_value": "272811",
+              "unit": "count",
+              "period_label": null,
+              "failure_reason": null
+            },
+            "gender": {
+              "status": "COLLECTED",
+              "value": "2",
+              "raw_value": "2",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "city": {
+              "status": "COLLECTED",
+              "value": "徐州",
+              "raw_value": "徐州",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "province": {
+              "status": "NO_DATA",
+              "value": null,
+              "raw_value": "",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "mcn_name": {
+              "status": "NO_DATA",
+              "value": null,
+              "raw_value": "",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "content_theme_labels": {
+              "status": "COLLECTED",
+              "value": [
+                "修容教程",
+                "淡妆教程",
+                "时尚妆容",
+                "通勤妆容",
+                "变装造型",
+                "创意妆容",
+                "卧蚕教程"
+              ],
+              "raw_value": "[\"\\u4fee\\u5bb9\\u6559\\u7a0b\",\"\\u6de1\\u5986\\u6559\\u7a0b\",\"\\u65f6\\u5c1a\\u5986\\u5bb9\",\"\\u901a\\u52e4\\u5986\\u5bb9\",\"\\u53d8\\u88c5\\u9020\\u578b\",\"\\u521b\\u610f\\u5986\\u5bb9\",\"\\u5367\\u8695\\u6559\\u7a0b\"]",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "platform_creator_id": "7477977163065458726",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6746134799183773710",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6596679705632440323",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6629659711782256654",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6870161729301512205",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6935067985597956133",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7081833135226224647",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7081121121050820621",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7092425757758062600",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7201505186169225277",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7107133922227519521",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7490878272001605670",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7569556794905722931",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7141746712210112542",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6870162600538144781",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7373980552484880435",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7504591435249745956",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6870163350949462030",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    }
+  ]
+}
+
+## 5. 持久化核对（xingtu status 与数据库）
+
+$ xingtu status a48d60c6-5e44-4b56-915d-474304fb4f17
+{"state": "PARTIAL_COMPLETED", "valid_count": "2", "failure_reason": "FEATURED_NOT_ATTEMPTED", "profile_complete_count": "2"}
+
+已发布快照（task_creators ⋈ creator_snapshots）：
+first_position=0 platform_creator_id=7646720304210771978 snapshot=5c6472b8-e9b1-40b2-822b-99bb815e007c profile_complete=true featured=NOT_ATTEMPTED created_at=2026-09-27 17:11:28.793619+08
+first_position=1 platform_creator_id=7352866656663633929 snapshot=c102adf5-3027-4f55-8d2d-bf737db2566e profile_complete=true featured=NOT_ATTEMPTED created_at=2026-09-27 17:11:28.793619+08
+
+字段级来源与状态（creator 7646720304210771978 / basic）：
+platform_creator_id status=COLLECTED value=7646720304210771978 source=response path=id observed_at=2026-09-27T09:11:27.144123Z session_version=4 contract=xingtu-ad-creator-square-v1
+nickname status=COLLECTED value=姜乘澜 source=response path=nick_name observed_at=2026-09-27T09:11:27.144184Z session_version=4 contract=xingtu-ad-creator-square-v1
+avatar_uri status=COLLECTED value=https://p11.douyinpic.com/aweme/1080x1080/aweme-avatar/tos-cn-avt-0015_50d947b21daafecf06424796b99de17d.jpeg?from=3782654143 source=response path=avatar_uri observed_at=2026-09-27T09:11:27.144203Z session_version=4 contract=xingtu-ad-creator-square-v1
+followers status=COLLECTED value={"kind": "number", "bound": "exact", "amount": "19380524", "quantum": "1"} source=response path=follower observed_at=2026-09-27T09:11:27.144215Z session_version=4 contract=xingtu-ad-creator-square-v1
+gender status=COLLECTED value=2 source=response path=gender observed_at=2026-09-27T09:11:27.144366Z session_version=4 contract=xingtu-ad-creator-square-v1
+city status=NO_DATA value=- source=response path=city observed_at=2026-09-27T09:11:27.144380Z session_version=4 contract=xingtu-ad-creator-square-v1
+province status=NO_DATA value=- source=response path=province observed_at=2026-09-27T09:11:27.144390Z session_version=4 contract=xingtu-ad-creator-square-v1
+mcn_name status=COLLECTED value=弄新妆 source=response path=mcn_name observed_at=2026-09-27T09:11:27.144399Z session_version=4 contract=xingtu-ad-creator-square-v1
+content_theme_labels status=COLLECTED value=["简约发型", "高颅顶发型", "时尚妆容"] source=response path=content_theme_labels observed_at=2026-09-27T09:11:27.144407Z session_version=4 contract=xingtu-ad-creator-square-v1
+
+## 6. 真实页面与持久结果对照
+
+真实主页（研究采集 .runtime/research/r20-full，账号二，未重新登录）：
+  URL: https://www.xingtu.cn/ad/creator/author-homepage/douyin-video/7646720304210771978
+  页面身份块文本: '姜乘澜  精选达人 星图ID: 7646720304210771978'
+持久结果（同一达人，first_position=0）：
+  platform_creator_id = 7646720304210771978  （与 URL 段一致）
+  nickname            = 姜乘澜                （与页面身份块一致）
+  followers           = 19380524 count       （来源 author_get_base_info.follower；页面展示为缩写形式，未逐位比对）
+  city/province       = NO_DATA              （平台返回空串，未伪造成 0 或文本）
+
+## 7. 失败与修复历史（保留，不删除）
+
+  - 93ab83b7-34d3-4546-96a2-84d108e50370: MODULE_COLLECTION_FAILED:MISSING_SOURCE（关键词回读读 input 的 value 属性为空；ready 定位多匹配）
+  - e8f5c8a8-ce78-4e99-bb84-ad2302d494de: ACCOUNT_LOGIN_REQUIRED:ACCOUNT_LOCATOR_UNREADABLE（账号定位读取未等待导航渲染）
+  - 5e7f8e1b-2ad0-4c93-a45d-46cb70698507: ACCOUNT_LOGIN_REQUIRED:ACCOUNT_LOCATOR_UNREADABLE（同上）
+  - aeb4cb69-bc8f-4810-904f-b752d96a79bc: PLATFORM_CONDITION_MISMATCH:keyword_mode（binding_values 映射早于 keyword_mode 绑定生成）
+  - caed6cf5-d8dd-47b4-9e5e-a01af10bf974: ACCOUNT_LOGIN_REQUIRED: unit needs verification（登录核验未通过时单元保持 NEEDS_LOGIN，采集被拒绝）
+
+修复：LocatorSpec.property=value 读取表单值；read_account 有界等待账号可见；binding_values 在全部绑定生成后应用；
+      ready 改用唯一的结果区表头 div.search-content--header；worker 将 network_mode 带入 ExecutionContext/证据。
+
+## 8. 本轮未执行 / 未核验
+
+- 多页推进（page 2+）：未观察到分页控件；契约声明 single_page_only 并记录覆盖缺口；目标数 ≤ 首页 20 条时不触发。
+- 商业与报价 / 传播与互动 / 粉丝画像等主页模块：未登记（本轮只登记 basic），F05 仍为部分核验。
+- 筛选条件（合作诉求/匹配度/性价比/主题推荐）填写与回读：未核验；只核验了内容关键词。
+- 访问节奏/限流阈值：未实测，action_interval_seconds=2.0 为保守值。
+- 生产线路、DNS、断线隔离、蜂窝、远程维护（U06/U07/U08）：本轮范围外，未执行。
+- make dev / make stop（Docker 守护进程不可用）、make setup、S3/MinIO 证据路径：未执行。
+
+
+## 9. 最终离线复测（在最后一次代码改动之后执行）
+
+== lint ==
+All checks passed!
+exit=0
+== format ==
+31 files already formatted
+exit=0
+== mypy ==
+Success: no issues found in 15 source files
+exit=0
+== unit ==
+........................................................................ [ 76%]
+......................                                                   [100%]
+94 passed in 0.11s
+== contract ==
+.............                                                            [100%]
+13 passed in 26.27s
+== integration ==
+..........................                                               [100%]
+26 passed in 106.24s (0:01:46)
+== e2e ==
+...                                                                      [100%]
+3 passed in 1.78s

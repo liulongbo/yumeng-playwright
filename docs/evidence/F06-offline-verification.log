@@ -1,0 +1,81 @@
+# F06 主页精选作品采集与封面存储：离线验证命令记录（脱敏）
+# 日期：2026-09-27 11:59:15 CST
+# 环境：macOS 26.5.2 / Python 3.13.5 / Playwright 1.63.0 / PostgreSQL 18.3 (127.0.0.1:55439, role xingtu_test) / Temporal SDK 本地测试服务器 v1.9.1
+# 代码：无 Git 仓库；关键落点见 docs/evidence/F06-offline-verification.md §2；本记录生成于全部代码与契约改动之后
+# 测试库：xingtu_test_f04f05；开发库（迁移/CLI）：xingtu_local_dev
+
+## 1. 静态检查
++ .venv/bin/ruff check backend conftest.py tests scripts
+All checks passed!
++ .venv/bin/ruff format --check backend conftest.py tests scripts
+30 files already formatted
++ .venv/bin/mypy backend/src
+Success: no issues found in 15 source files
++ echo '## 2. 四层测试（合成数据，无真实平台流量）'
+## 2. 四层测试（合成数据，无真实平台流量）
++ .venv/bin/pytest backend/tests/unit -q
+........................................................................ [ 82%]
+...............                                                          [100%]
+87 passed in 0.12s
++ .venv/bin/pytest backend/tests/contract -q
+.............                                                            [100%]
+13 passed in 26.59s
++ .venv/bin/pytest backend/tests/integration -q
+..........................                                               [100%]
+26 passed in 106.37s (0:01:46)
++ .venv/bin/pytest tests/e2e -q
+...                                                                      [100%]
+3 passed in 1.85s
++ echo '## 3. 迁移 003 在既有本地开发库上的应用（幂等）与新表'
+## 3. 迁移 003 在既有本地开发库上的应用（幂等）与新表
++ .venv/bin/xingtu migrate --environment development
+all pending migrations applied or already present
++ /opt/homebrew/opt/postgresql@18/bin/psql postgresql://xingtu_test@127.0.0.1:55439/xingtu_local_dev -c 'select version, applied_at from schema_migrations order by version'
+ version |          applied_at           
+---------+-------------------------------
+       1 | 2026-09-27 11:01:52.444247+08
+       2 | 2026-09-27 11:01:52.444247+08
+       3 | 2026-09-27 11:54:58.907422+08
+(3 rows)
+
++ /opt/homebrew/opt/postgresql@18/bin/psql postgresql://xingtu_test@127.0.0.1:55439/xingtu_local_dev -c 'select table_name from information_schema.tables where table_schema='\''public'\'' and table_name in ('\''contents'\'','\''featured_collections'\'','\''featured_cards'\'','\''snapshot_collections'\'','\''media_objects'\'') order by table_name'
+      table_name      
+----------------------
+ contents
+ featured_cards
+ featured_collections
+ media_objects
+ snapshot_collections
+(5 rows)
+
++ .venv/bin/xingtu migrate --environment development
+all pending migrations applied or already present
++ echo '## 4. 内部 CLI：doctor（未核验注册表不得启用 F06）与封面孤儿清理'
+## 4. 内部 CLI：doctor（未核验注册表不得启用 F06）与封面孤儿清理
++ .venv/bin/xingtu doctor
+{
+  "live_status": "UNVERIFIED",
+  "coverage_gaps": [
+    "U02: 筛选枚举、重置、填写、回读及组合未核验",
+    "U04: 搜索分页、终点、身份与主页全部字段来源未核验",
+    "U06: 账号识别、受保护页面及会话状态未核验",
+    "U07/U08: 硬件、DNS、断线隔离、旧进程隔离未核验"
+  ],
+  "database_configured": true,
+  "segment_budget": {
+    "active_seconds": 7200.0,
+    "candidate_scan_floor": 200,
+    "candidate_scan_multiplier": 5
+  },
+  "evidence_default": {
+    "kind": "local",
+    "endpoint": null,
+    "bucket": null,
+    "directory": null
+  },
+  "featured_collections": [],
+  "featured_status": "NOT_ATTEMPTED"
+}
++ .venv/bin/xingtu cover-gc --config .runtime/units/gate-check.json
+{"removed": [], "count": 0}
++ set +x

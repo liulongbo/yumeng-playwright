@@ -1,0 +1,435 @@
+# F04/F05 真实核心流程验证命令记录（2026-09-29，Asia/Shanghai）
+# 环境：macOS / Python 3.13.5(.venv) / PostgreSQL 18.3 @127.0.0.1:55439 / Playwright Chromium 1243 / Temporal 测试服务器 v1.9.1
+
+==================== 1. 静态检查（.runtime/verify-2026/static.log） ====================
+== ruff check ==
+All checks passed!
+ruff_check_exit=0
+== ruff format --check ==
+36 files already formatted
+ruff_format_exit=0
+== mypy ==
+Success: no issues found in 17 source files
+mypy_exit=0
+
+==================== 2. 离线分层回归（.runtime/verify-2026/full-suite.log） ====================
+........................................................................ [ 40%]
+........................................................................ [ 80%]
+..................................                                       [100%]
+178 passed in 169.10s (0:02:49)
+collect-only 计数：105 unit / 18 contract / 51 integration / 4 e2e
+
+==================== 3. 真实运行 A：target=2（.runtime/verify-2026/real-run-2.log） ====================
+.venv/bin/python scripts/local_smoke.py --config ".runtime/units/local-dev-mac-02.json" --root-task-id "1807a588-f7dc-46e3-83f4-ef50c7cf92b5" --timeout-seconds "1800"
+Temporal CLI 1.9.1 (Server 1.32.0, UI 2.54.1)
+
+Temporal Server:      localhost:58428
+Temporal Persistence: in-memory
+Temporal Metrics:     http://localhost:58429/metrics
+{
+  "root_task_id": "1807a588-f7dc-46e3-83f4-ef50c7cf92b5",
+  "workflow_state": "PARTIAL_COMPLETED",
+  "task_state": "PARTIAL_COMPLETED",
+  "failure_reason": "PROFILE_SCOPE_INCOMPLETE",
+  "valid_count": 2,
+  "profile_complete_count": 0,
+  "discovered_count": 20,
+  "scanned_count_segment": 20,
+  "search_exhausted": false,
+  "search_generation": 0,
+  "rescan_reasons": [],
+  "diagnostics": [],
+  "draft_results": [
+    {
+      "platform_creator_id": "6849131371793743886",
+      "state": "done",
+      "valid": true,
+      "failure_reason": "PROFILE_SCOPE_INCOMPLETE",
+      "modules": {
+        "basic": {
+          "status": "COLLECTED",
+          "complete": true,
+          "coverage_gaps": [],
+          "fields": {
+            "platform_creator_id": {
+              "status": "COLLECTED",
+              "value": "6849131371793743886",
+              "raw_value": "6849131371793743886",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "nickname": {
+              "status": "COLLECTED",
+              "value": "娱乐课代表孙小寒",
+              "raw_value": "娱乐课代表孙小寒",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "avatar_uri": {
+              "status": "COLLECTED",
+              "value": "https://p3.douyinpic.com/aweme/1080x1080/aweme-avatar/tos-cn-avt-0015_b77a515a033cadaaa30ab1e454f7e247.jpeg?from=3782654143",
+              "raw_value": "https://p3.douyinpic.com/aweme/1080x1080/aweme-avatar/tos-cn-avt-0015_b77a515a033cadaaa30ab1e454f7e247.jpeg?from=3782654143",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "followers": {
+              "status": "COLLECTED",
+              "value": {
+                "kind": "number",
+                "amount": "4271428",
+                "bound": "exact",
+                "quantum": "1"
+              },
+              "raw_value": "4271428",
+              "unit": "count",
+              "period_label": null,
+              "failure_reason": null
+            },
+            "gender": {
+              "status": "COLLECTED",
+              "value": "2",
+              "raw_value": "2",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "city": {
+              "status": "COLLECTED",
+              "value": "朝阳区",
+              "raw_value": "朝阳区",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "province": {
+              "status": "COLLECTED",
+              "value": "北京市",
+              "raw_value": "北京市",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "mcn_name": {
+              "status": "COLLECTED",
+              "value": "山西艺凡文化传媒有限公司",
+              "raw_value": "山西艺凡文化传媒有限公司",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "content_theme_labels": {
+              "status": "COLLECTED",
+              "value": [
+                "猫咪趣事",
+                "萌宠狗狗",
+                "搞笑剧情",
+                "动物趣事",
+                "宠物猫日常",
+                "有趣剧情创作",
+                "宠物与主人",
+                "可爱猫咪",
+                "亲子活动",
+                "动物萌态"
+              ],
+              "raw_value": "[\"\\u732b\\u54aa\\u8da3\\u4e8b\",\"\\u840c\\u5ba0\\u72d7\\u72d7\",\"\\u641e\\u7b11\\u5267\\u60c5\",\"\\u52a8\\u7269\\u8da3\\u4e8b\",\"\\u5ba0\\u7269\\u732b\\u65e5\\u5e38\",\"\\u6709\\u8da3\\u5267\\u60c5\\u521b\\u4f5c\",\"\\u5ba0\\u7269\\u4e0e\\u4e3b\\u4eba\",\"\\u53ef\\u7231\\u732b\\u54aa\",\"\\u4eb2\\u5b50\\u6d3b\\u52a8\",\"\\u52a8\\u7269\\u840c\\u6001\"]",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "platform_creator_id": "7360610271510921225",
+      "state": "done",
+      "valid": true,
+      "failure_reason": "PROFILE_SCOPE_INCOMPLETE",
+      "modules": {
+        "basic": {
+          "status": "COLLECTED",
+          "complete": true,
+          "coverage_gaps": [],
+          "fields": {
+            "platform_creator_id": {
+              "status": "COLLECTED",
+              "value": "7360610271510921225",
+              "raw_value": "7360610271510921225",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "nickname": {
+              "status": "COLLECTED",
+              "value": "C位小师妹",
+              "raw_value": "C位小师妹",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "avatar_uri": {
+              "status": "COLLECTED",
+              "value": "https://p26.douyinpic.com/aweme/1080x1080/aweme-avatar/tos-cn-i-0813_owyj4QwusI6A1mPiAPABogAPiaAmAi7DIxEQD.jpeg?from=3782654143",
+              "raw_value": "https://p26.douyinpic.com/aweme/1080x1080/aweme-avatar/tos-cn-i-0813_owyj4QwusI6A1mPiAPABogAPiaAmAi7DIxEQD.jpeg?from=3782654143",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "followers": {
+              "status": "COLLECTED",
+              "value": {
+                "kind": "number",
+                "amount": "5713574",
+                "bound": "exact",
+                "quantum": "1"
+              },
+              "raw_value": "5713574",
+              "unit": "count",
+              "period_label": null,
+              "failure_reason": null
+            },
+            "gender": {
+              "status": "COLLECTED",
+              "value": "2",
+              "raw_value": "2",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "city": {
+              "status": "COLLECTED",
+              "value": "朝阳区",
+              "raw_value": "朝阳区",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "province": {
+              "status": "COLLECTED",
+              "value": "北京市",
+              "raw_value": "北京市",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "mcn_name": {
+              "status": "COLLECTED",
+              "value": "C位互娱",
+              "raw_value": "C位互娱",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            },
+            "content_theme_labels": {
+              "status": "COLLECTED",
+              "value": [
+                "搞笑剧情",
+                "宠物与主人",
+                "有趣剧情创作",
+                "AI应用",
+                "足球名场面",
+                "足球赛事",
+                "猫咪趣事",
+                "萌宠乐趣",
+                "宠物猫日常",
+                "体育精神"
+              ],
+              "raw_value": "[\"\\u641e\\u7b11\\u5267\\u60c5\",\"\\u5ba0\\u7269\\u4e0e\\u4e3b\\u4eba\",\"\\u6709\\u8da3\\u5267\\u60c5\\u521b\\u4f5c\",\"AI\\u5e94\\u7528\",\"\\u8db3\\u7403\\u540d\\u573a\\u9762\",\"\\u8db3\\u7403\\u8d5b\\u4e8b\",\"\\u732b\\u54aa\\u8da3\\u4e8b\",\"\\u840c\\u5ba0\\u4e50\\u8da3\",\"\\u5ba0\\u7269\\u732b\\u65e5\\u5e38\",\"\\u4f53\\u80b2\\u7cbe\\u795e\"]",
+              "unit": null,
+              "period_label": null,
+              "failure_reason": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "platform_creator_id": "7201315409155342395",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6763236841366749188",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6989750547695796260",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7153794378790600712",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6779401118494490632",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7400222099362873356",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6983857505726103560",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6803164436262551560",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7146467537721491463",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7403639037103194138",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6796840786286608397",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7164111719164280864",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7257029441434435639",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6712236357290295304",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6954340939770888205",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "7294166266472824858",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6902091819576721422",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    },
+    {
+      "platform_creator_id": "6872198417259429903",
+      "state": "pending",
+      "valid": false,
+      "failure_reason": null,
+      "modules": {}
+    }
+  ]
+}
+
+==================== 4. 真实运行 B/C：会话核验失败日志尾部 ====================
+--- run B (target=25, 无登录窗口) run id 82506ea5-b11c-4d02-9ae4-a3396426294e
+
+Temporal Server:      localhost:59763
+Temporal Persistence: in-memory
+Temporal Metrics:     http://localhost:59764/metrics
+--- run C (target=25, 登录窗口) run id 1cdd495b-8ce6-4177-a007-79283db540f8
+
+Temporal Server:      localhost:61006
+Temporal Persistence: in-memory
+Temporal Metrics:     http://localhost:61010/metrics
+
+==================== 5. 数据库事实（只读查询） ====================
+--- 今日真实根任务
+             root_task_id             |       state       |                         reason                          |          created_at           |          updated_at           
+--------------------------------------+-------------------+---------------------------------------------------------+-------------------------------+-------------------------------
+ 6ea0296e-a086-4cd3-87d6-9190cffc8fa3 | CANCELLING        | SESSION_INDETERMINATE:PROTECTED_PAGE_ACCOUNT_UNREADABLE | 2026-09-29 14:00:27.256952+08 | 2026-09-29 14:18:09.193458+08
+ 1807a588-f7dc-46e3-83f4-ef50c7cf92b5 | PARTIAL_COMPLETED | PROFILE_SCOPE_INCOMPLETE                                | 2026-09-29 14:18:11.739587+08 | 2026-09-29 14:21:47.605854+08
+ 82506ea5-b11c-4d02-9ae4-a3396426294e | CANCELLING        |                                                         | 2026-09-29 14:23:37.58762+08  | 2026-09-29 14:29:03.601961+08
+ 1cdd495b-8ce6-4177-a007-79283db540f8 | CANCELLING        | SESSION_INDETERMINATE:PROTECTED_PAGE_ACCOUNT_UNREADABLE | 2026-09-29 14:32:46.909788+08 | 2026-09-29 14:55:56.527831+08
+(4 rows)
+
+--- 运行 C 检查点失败计数
+{"LEASE_LOST": 1, "SESSION_INDETERMINATE": 2, "PLATFORM_SECURITY_CHALLENGE": 2}|937.8955703760003
+--- 运行 C 落库达人（7 位、8 个 basic 快照）
+              creator_id              | platform_creator_id | m_status  | m_complete | n_fields 
+--------------------------------------+---------------------+-----------+------------+----------
+ 3a26bf74-9633-4466-b662-e4398c1b9837 | 6849131371793743886 | COLLECTED | true       |        9
+ fa7b1516-5f0a-4f33-87a1-d1540e712526 | 6763236841366749188 | COLLECTED | true       |        9
+ 6131300c-90cb-4126-8259-74e644e369f1 | 7360610271510921225 | COLLECTED | true       |        9
+ 3a26bf74-9633-4466-b662-e4398c1b9837 | 6849131371793743886 | COLLECTED | true       |        9
+ 942be110-7fa9-46b6-bf9e-bb174d38f11e | 6989750547695796260 | COLLECTED | true       |        9
+ a42553db-2140-4792-984f-bb8cd5d46e27 | 7153794378790600712 | COLLECTED | true       |        9
+ 5aff76a9-5a27-4634-9921-0efc86a1feac | 7201315409155342395 | COLLECTED | true       |        9
+ 2632d27a-e78c-4491-9a04-eabf14d32f48 | 6779401118494490632 | COLLECTED | true       |        9
+(8 rows)
+
+--- 运行 A 任务状态
+1807a588-f7dc-46e3-83f4-ef50c7cf92b5|PARTIAL_COMPLETED|PROFILE_SCOPE_INCOMPLETE|2
+--- 审计（14:33 之后）
+          created_at           |                       actor                       |                                     action                                      
+-------------------------------+---------------------------------------------------+---------------------------------------------------------------------------------
+ 2026-09-29 14:33:57.152991+08 | browser-host:36839ab4-dc76-4125-8d4d-16408491b4fe | promote_maintenance_to_collect:unit-local-mac-02
+ 2026-09-29 14:37:09.28837+08  | browser-host:36839ab4-dc76-4125-8d4d-16408491b4fe | transition_collect_to_maintenance:unit-local-mac-02:PLATFORM_SECURITY_CHALLENGE
+ 2026-09-29 14:37:10.728968+08 | browser-host:36839ab4-dc76-4125-8d4d-16408491b4fe | promote_maintenance_to_collect:unit-local-mac-02
+ 2026-09-29 14:40:32.233435+08 | browser-host:36839ab4-dc76-4125-8d4d-16408491b4fe | transition_collect_to_maintenance:unit-local-mac-02:PLATFORM_SECURITY_CHALLENGE
+ 2026-09-29 14:40:33.587655+08 | browser-host:36839ab4-dc76-4125-8d4d-16408491b4fe | promote_maintenance_to_collect:unit-local-mac-02
+ 2026-09-29 14:55:56.527831+08 | test-f04f05-cleanup                               | cancel
+(6 rows)
+
+
+==================== 6. 独立会话诊断（session-diagnostics.v1） ====================
+report: .runtime/verify-2026/session-diagnostics/unit-local-mac-02-20260929T063232Z.json
+status: INDETERMINATE | expected: ID: 1865332309937515 | observed: None
+protected_page_verified: True | login_page_verified: False | challenge_verified: False
+reason: PROTECTED_PAGE_ACCOUNT_UNREADABLE | checked_at: 2026-09-29T06:32:32.505867Z
+cookies recorded: 49
+browser: 154.0.8037.58 | normal_close_confirmed: True

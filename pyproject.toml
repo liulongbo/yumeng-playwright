@@ -1,0 +1,40 @@
+[project]
+name = "xingtu-collector"
+version = "0.1.0"
+description = "F04/F05 isolated collection worker; live contracts gated by verification"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "pydantic>=2.11,<3", "psycopg[binary]>=3.2,<4",
+  "temporalio>=1.12,<2", "playwright>=1.55,<2",
+  "boto3>=1.40,<2", "redis>=6,<7",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<9", "pytest-asyncio>=1,<2", "ruff>=0.12,<1", "mypy>=1.17,<2", "boto3-stubs[s3]>=1.40,<2"]
+
+[project.scripts]
+xingtu = "xingtu.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/src/xingtu"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests", "tests/e2e"]
+asyncio_mode = "auto"
+addopts = "--import-mode=importlib"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["backend/src"]
+strict = true
+

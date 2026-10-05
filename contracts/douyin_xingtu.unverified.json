@@ -1,0 +1,22 @@
+{
+  "schema_version": "platform_registry.v1",
+  "contract_version": "xingtu-unverified-v1",
+  "adapter_version": "browser-v1",
+  "status": "UNVERIFIED",
+  "sample_kind": "live",
+  "capabilities": {
+    "version": "xingtu-unverified-v1",
+    "status": "UNVERIFIED",
+    "sample_kind": "live"
+  },
+  "session": null,
+  "search": null,
+  "modules": [],
+  "featured": [],
+  "coverage_gaps": [
+    "U02: 筛选枚举、重置、填写、回读及组合未核验",
+    "U04: 搜索分页、终点、身份与主页全部字段来源未核验",
+    "U06: 账号识别、受保护页面及会话状态未核验",
+    "U07/U08: 硬件、DNS、断线隔离、旧进程隔离未核验"
+  ]
+}
