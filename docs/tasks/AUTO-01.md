@@ -1,7 +1,7 @@
 # AUTO-01：自动化采集优化与分阶段实证
 
 状态：进行中  
-更新时间：2026-09-29T14:56:37+08:00（Asia/Shanghai）  
+更新时间：2026-10-05T11:20:00+08:00（Asia/Shanghai）
 是否验收：否
 
 ## 目标与范围
@@ -42,6 +42,10 @@
 2026-09-28T18:43+08:00：真实 dispatch 续跑暴露两个组合缺陷。首次登录原子提升成功（同 owner/generation，`session_version 0→1`）并采到 1 位候选；随后触发 `PLATFORM_SECURITY_CHALLENGE`。实现在提升时为**已正在运行的 Activity**又登记了 wake，而 Workflow 对 `WAITING_FOR_LOGIN` 仍会 30 秒轮询；维护超时后因此可再开一个 Chrome。另外，交接后 Adapter 新建 Page，对用户表现为“又打开一个未登录页面”。已修复为：采集一次性接管刚通过账号/受保护页校验的**原 Page**；挑战回切时先从旧 Adapter 脱离该 Page，不再被 `finally` 关闭；同 Activity 内的 promote 不再自我登记 wake；`WAITING_FOR_LOGIN` 改为只等待新的显式 `xingtu login` wake，不再定时重启 Chrome。中断时关闭确认失败被保守置为 `QUARANTINED`；确认项目 Chrome 进程与 profile 锁均已消失后，通过内置 `recover-unit` 审计恢复，未直接改库绕过隔离。原 root `8120b16c-9289-4822-913a-542be3db6bc3` 与 `valid_count=1` 当时得以保留；后续已续跑完成，见下方验证记录。
 
 2026-09-29：用户批准 SESSION-01/AUTO-01 结构性修复。迁移 006 新增 capability scope 健康状态；Engine 将单达人 `IDENTITY_UNREADABLE` 改为最多三次新 Page 尝试，仍失败后保留证据并继续补位。三个不同主体连续失败只进入 `SUSPECTED`，新浏览器租约的第四个不同主体再次复现才禁用 `profile_identity`；旧全局开关保留兼容。目标 5 的历史失败 RCA 已确认首发是第六个候选身份 DOM 不可读，不是固定达人数量上限，Contract disabled 是后续放大结果。实现证据见 [SESSION-01 / AUTO-01 结构性修复实施证据](../evidence/SESSION-01-implementation-2026-09-29.md)。
+
+2026-10-05：账号漂移专项测量移交 SESSION-01，并由新增只读探针 [account_drift_probe.py](../../scripts/account_drift_probe.py) 承接。用户现场确认目标子账号 `ID: 1865332309937515` 在平台子账号列表中**可见且可选**，据此排除"父账号无权访问目标子账号"分支，问题指向**自动化缺少"选定目标子账号"步骤**；该缺口同时是文档缺口（`子账号` 在 `docs/`、`backend/` 全仓零命中）。
+
+**同日真实复现**（[证据](../evidence/account-drift-probe-2026-10-05.md)）：人工登录并选定目标子账号后，间隔约 3 分钟重启 Chrome，生效账号由 `1865332309937515` 变为 `1832740070238347`（与 run 4 一致），判定 `IDENTITY_CHANGED_WHILE_UNREADABLE`；同一进程内各页面/标签页均为目标账号。漂移后受保护壳不渲染 → 账号定位器匹配数 0 → 系统只得 `SESSION_INDETERMINATE`，**缺陷 D1 与账号漂移同源**（D1 是"错误账号"的误分类）。载体收敛到唯一变化的身份 Cookie `star_sessionid`。本卡依赖账号稳定的验收项（真实 5/20 位、完整字段、7 天观察）保持未勾选。
 
 ## 验证证据
 
@@ -144,3 +148,4 @@ F04/F05 真实核心流程测试（[证据](../evidence/F04-F05-real-core-flow-2
 - 2026-09-29T13:46:05+08:00：进行中 → 进行中。迁移 006 已应用并只读确认本地开发库版本 1—6；无真实 Profile 或平台流量。剩余真实容量、完整主页与长期观察项不变。
 - 2026-09-29T13:50:33+08:00：进行中 → 进行中。补齐 `XINGTU_SCOPED_CONTRACT_HEALTH=false` 紧急回滚开关并完成最终回归；真实验收项不变。
 - 2026-09-29T14:56:37+08:00：进行中 → 进行中。独立测试轮真实观测：同一进程内连续采集 7 位成功（8 个 basic 快照），两次安全挑战维护→promote 处理正确；但采集中途 `LEASE_LOST`（2 次）叠加新进程账号不可读（5 次）使中断后续跑完全失败，真实 20/200 位与恢复验收仍不可达。缺陷归属见本卡新增小节与 [SESSION-01](SESSION-01.md)。
+- 2026-10-05T16:05:03+08:00：进行中 → 进行中。SESSION-01 A/B 证实 macOS Playwright 默认 mock keychain 会清除自然 Chrome profile 的父账号认证，已用显式系统 Keychain 配置修复；但 Playwright 新进程仍按默认子账号重建业务会话，真实目标点击及选号 POST不生效，移除项目网络参数亦无改善。正式自动选号保持关闭，错误账号继续 fail-closed，真实恢复与容量验收仍不可达。

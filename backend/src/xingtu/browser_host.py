@@ -191,7 +191,10 @@ class BrowserHost:
             self.browser.pages[0] if self.browser.pages else await self.browser.new_page()
         )
         if page is None:
-            await maintenance_page.goto(session.entry_url, wait_until="domcontentloaded")
+            # The SSO entry always renders a login form and therefore cannot prove logout by
+            # itself.  A protected business page keeps a reusable session on the signed-in app;
+            # a genuinely logged-out session is redirected to login by the platform.
+            await maintenance_page.goto(search.entry_url, wait_until="domcontentloaded")
         account = await wait_for_manual_clearance(maintenance_page, session, timeout)
         if account != self.config.expected_account_id:
             self.observe_session(

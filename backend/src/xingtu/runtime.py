@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError
@@ -50,6 +51,10 @@ class UnitConfig(Model):
     # Local development binding: a real Chrome/Chromium executable is pinned by path and/or channel.
     browser_executable_path: Path | None = None
     browser_channel: Literal["chromium", "chrome", "chrome-beta", "msedge"] | None = None
+    # Natural Chrome profiles on macOS encrypt cookies with the system Keychain. Playwright's
+    # default --use-mock-keychain cannot decrypt those rows and Chromium removes the unusable
+    # authentication cookies. This opt-in ignores only that one Playwright default argument.
+    macos_system_keychain: bool = False
     # Research captures may only open hosts explicitly listed here (see `xingtu research`).
     research_allowed_hosts: list[str] = Field(default_factory=list)
     # §13.4 main path is "the browser runs the platform's own scripts". The platform session
@@ -220,6 +225,7 @@ class BrowserRuntime:
             else None,
             "channel": self.config.browser_channel,
             "service_workers": "block" if self.config.block_service_workers else "allow",
+            "keychain": "system" if self.config.macos_system_keychain else "playwright-default",
             "args": self.launch_args,
         }
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
@@ -239,6 +245,12 @@ class BrowserRuntime:
             options["executable_path"] = str(config.browser_executable_path)
         elif config.browser_channel:
             options["channel"] = config.browser_channel
+        if config.macos_system_keychain:
+            if sys.platform != "darwin" or not config.browser_executable_path:
+                raise CollectorError(
+                    "RESOURCE_UNAVAILABLE", "SYSTEM_KEYCHAIN_REQUIRES_MACOS_EXECUTABLE"
+                )
+            options["ignore_default_args"] = ["--use-mock-keychain"]
         return options
 
     @asynccontextmanager

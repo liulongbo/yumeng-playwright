@@ -527,9 +527,13 @@ F06 复用 13.4 的操作/响应关联器及 F05 字段解析器，但集合边�
 
 使用 Playwright `launch_persistent_context` 为每个执行单元创建本项目独立 `user_data_dir`，不使用日常 Chrome 默认用户目录，不让多个进程同时打开同一目录。浏览器与 Playwright 版本按经测试组合固定；维护与采集复用同一受控 profile 和绑定代理环境，维护期间停止采集观察器及页面操作。
 
+macOS 上以系统 Google Chrome 写入的持久 profile 使用系统 Keychain 加密认证 Cookie；执行单元必须显式忽略 Playwright 默认 `--use-mock-keychain`，且只允许在 macOS + 固定浏览器可执行文件组合中启用，否则 fail-closed。该兼容设置纳入浏览器环境哈希。它只解决父账号认证可读性，不代表 session 型星图子账号业务会话能跨新进程恢复。
+
 登录成功须有三项经验证证据：账号身份与绑定账号一致、受保护业务页面/响应可用、绑定线路及出口正常；不能只判断 URL 跳转或 Cookie 存在。通过后增加内部 `session_version`，销毁旧请求关联范围，重建必要请求上下文并从检查点继续。验证码与设备验证保留人工操作，远程浏览器承载方案仍见 U06。
 
 每次新 Chrome 进程都必须重新形成结构化 `SessionHealth`，数据库中的旧 `READY` 只能授权取得采集租约，不能直接证明当前会话有效。状态分为 `VALID`、`LOGIN_REQUIRED`、`ACCOUNT_MISMATCH`、`SECURITY_CHALLENGE`、`INDETERMINATE`：错误账号进入 `WAITING_FOR_ACCOUNT`，无登录页/挑战/受保护页正证据的冷启动进入 `WAITING_FOR_RESOURCE` 与 `SESSION_UNVERIFIED`，不能误导为重新登录。BrowserHost 释放使用显式 disposition；浏览器正常关闭、Worker 或服务重启本身都不是登录失效证据。
+
+当前真实 A/B 已证明：自然 Chrome 可稳定切换并保持目标子账号，但 Playwright 新进程会按默认子账号重建业务会话；即使目标条目收到可信点击并发出真实选号请求，账号与 `star_sessionid` 也不变化，移除项目网络参数无改善。因此正式 Adapter 不启用自动选号，不做自动化伪装、Cookie 注入或无限重试；目标不是平台默认账号时必须 `ACCOUNT_MISMATCH/WAITING_FOR_ACCOUNT` fail-closed。优先由平台设置默认账号或为目标账号使用独立登录身份。
 
 登录资料仅留在受保护且可加密备份的 profile/凭据存储，不生成参考文章中的明文 `xingtu_cookies.json`，不进入日志、模型或普通 API。`browser_context.request` 可共享该上下文 Cookie，但不执行页面签名 JavaScript，也不代表 localStorage 令牌自动成为请求头；可选直连须按 13.4 单独验证。
 

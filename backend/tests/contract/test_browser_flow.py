@@ -26,7 +26,7 @@ def registry(capabilities):
             "operation_timeout_seconds": 1,
             "response_body_max_bytes": 4096,
             "session": {
-                "entry_url": "https://synthetic.invalid/search",
+                "entry_url": "https://synthetic.invalid/login",
                 "account": {"selector": "#account"},
                 "protected_ready": {"selector": "#ready"},
                 "error_selectors": {},
@@ -256,9 +256,18 @@ async def test_search_profile_initial_response_and_default_module(capabilities, 
         browser = await p.chromium.launch()
         context = await browser.new_context()
         await context.route("**/*", route)
+        document_urls = []
+        context.on(
+            "request",
+            lambda request: (
+                document_urls.append(request.url) if request.resource_type == "document" else None
+            ),
+        )
         adapter = BrowserAdapter(context, config, "account", guard, live=False)
         ctx = context_of(plan)
         await adapter.prepare(plan, checkpoint(plan), ctx)
+        assert document_urls[0] == config.search.entry_url
+        assert config.session.entry_url not in document_urls
         page = await adapter.search(plan, checkpoint(plan), ctx)
         assert page.exhausted and len(page.candidates) == 1
         assert not page.unidentified

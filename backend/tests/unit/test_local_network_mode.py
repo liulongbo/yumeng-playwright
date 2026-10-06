@@ -107,6 +107,36 @@ async def test_local_profile_must_stay_inside_project_private_root(tmp_path):
             pass
 
 
+def test_macos_system_keychain_ignores_only_playwright_mock_keychain(tmp_path, monkeypatch):
+    executable = tmp_path / "Google Chrome"
+    executable.touch(mode=0o700)
+    config = UnitConfig.model_validate(
+        {
+            **LOCAL,
+            "browser_executable_path": str(executable),
+            "macos_system_keychain": True,
+        }
+    )
+    monkeypatch.setattr("xingtu.runtime.sys.platform", "darwin")
+    runtime = BrowserRuntime(config, tmp_path)
+
+    assert runtime._launch_options()["ignore_default_args"] == ["--use-mock-keychain"]
+    assert (
+        runtime.environment_hash
+        != BrowserRuntime(
+            config.model_copy(update={"macos_system_keychain": False}), tmp_path
+        ).environment_hash
+    )
+
+
+def test_system_keychain_fails_closed_outside_macos_executable(tmp_path, monkeypatch):
+    config = UnitConfig.model_validate({**LOCAL, "macos_system_keychain": True})
+    monkeypatch.setattr("xingtu.runtime.sys.platform", "linux")
+
+    with pytest.raises(CollectorError, match="SYSTEM_KEYCHAIN_REQUIRES_MACOS_EXECUTABLE"):
+        BrowserRuntime(config, tmp_path)._launch_options()
+
+
 async def test_browser_close_is_bounded_and_never_certifies_a_hung_context():
     class HangingContext:
         async def close(self):

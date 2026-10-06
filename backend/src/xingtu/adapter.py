@@ -451,25 +451,19 @@ class BrowserAdapter:
             self.search_page = await self.browser.new_page()
             self.search_page.set_default_timeout(self.timeout_seconds() * 1000)
         page = self.search_page
-        # A verified session entry can be a different host than the search entry (platform SSO);
-        # it is visited first so the application shell boots with the existing session, and the
-        # search deep link is only requested afterwards.
+        # Start from the protected business page.  The SSO entry always renders a login form even
+        # when the parent SSO session can still bootstrap Xingtu, so showing it first misrepresents
+        # a reusable session as logged out.  Only an indeterminate direct attempt gets one bounded
+        # SSO handshake before returning to the business page for the final verdict.
         session = self.registry.session
         assert session
-        await page.goto(session.entry_url, wait_until="domcontentloaded")
-        try:
-            await self.wait_ready(
-                page,
-                session.protected_ready,
-                [],
-                timeout=self.registry.session_boot_timeout_seconds,
-            )
-        except CollectorError as exc:
-            if exc.reason != "PAGE_READY_TIMEOUT":
-                raise
-            # check_session below reports the precise reason (challenge, wrong account, ...).
-            pass
         await page.goto(spec.entry_url, wait_until="domcontentloaded")
+        health = await self.inspect_session(
+            page, timeout=self.registry.session_boot_timeout_seconds
+        )
+        if health.status == SessionHealthStatus.INDETERMINATE:
+            await page.goto(session.entry_url, wait_until="domcontentloaded")
+            await page.goto(spec.entry_url, wait_until="domcontentloaded")
         await self.check_session(page)
         # Ignore intermediate reset responses; capture must surround final condition actions.
         await self.actions(page, spec.reset_actions)

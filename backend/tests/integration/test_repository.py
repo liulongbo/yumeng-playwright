@@ -695,6 +695,10 @@ async def test_browser_host_promotes_and_collects_with_the_exact_same_context(
             "browser": browser,
             "protected_page": browser.pages[0],
         }
+        # Maintenance opens the protected business surface first.  A reusable session stays on
+        # the signed-in application; only a genuinely logged-out profile is redirected by the
+        # platform to SSO.  Opening the SSO entry first would show a login form unconditionally.
+        assert browser.pages[0].urls == [registry(capabilities).search.entry_url]
         assert host.take_collection_page() is browser.pages[0]
         assert host.take_collection_page() is None
         assert len(browser.pages) == 1
