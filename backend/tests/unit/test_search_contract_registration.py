@@ -150,7 +150,7 @@ def test_single_page_contract_requires_a_coverage_gap():
     ).require_enabled(live=False)
 
 
-def test_page_fetch_contract_is_bounded_and_requires_post_cursor_request():
+def test_page_fetch_contract_requires_live_bounded_or_continuous_evidence():
     valid = search(
         next_actions=[],
         next_page_mode="page_fetch",
@@ -171,8 +171,18 @@ def test_page_fetch_contract_is_bounded_and_requires_post_cursor_request():
     registry(valid).require_enabled(live=False)
     with pytest.raises(CollectorError, match="INVALID_PAGE_FETCH_CONTRACT"):
         registry({**valid, "page_fetch_max_verified": None}).require_enabled(live=False)
+    continuous = {
+        **valid,
+        "page_fetch_max_verified": None,
+        "page_fetch_continuous_verified": True,
+    }
+    registry(continuous).require_enabled(live=False)
+    with pytest.raises(CollectorError, match="INVALID_PAGE_FETCH_CONTRACT"):
+        registry({**valid, "page_fetch_continuous_verified": True}).require_enabled(live=False)
     with pytest.raises(CollectorError, match="UNUSED_PAGE_FETCH_LIMIT"):
         registry(search(page_fetch_max_verified=2)).require_enabled(live=False)
+    with pytest.raises(CollectorError, match="UNUSED_PAGE_FETCH_LIMIT"):
+        registry(search(page_fetch_continuous_verified=True)).require_enabled(live=False)
 
 
 async def test_single_page_boundary_never_returns_exhaustion(plan):

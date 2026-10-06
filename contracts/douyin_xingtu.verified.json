@@ -1,14 +1,16 @@
 {
   "schema_version": "platform_registry.v1",
-  "contract_version": "xingtu-ad-creator-square-v1",
+  "contract_version": "xingtu-ad-creator-profile-v2",
   "adapter_version": "browser-v2",
   "status": "VERIFIED",
   "sample_kind": "live",
-  "verified_at": "2026-09-27T14:50:00+08:00",
+  "verified_at": "2026-10-06T15:42:08+08:00",
   "account_permission_type": "巨量星图广告主(客户)账号，具备达人广场找达人搜索权益；首个账号客户权益等级不足（search_for_author_square 返回 10003），本契约使用第二个已核验账号的真实观察",
   "evidence_refs": [
     "docs/evidence/UNIT-01-local-stage-2026-09-27.md",
-    "docs/evidence/UNIT-01-local-stage-2026-09-27.log"
+    "docs/evidence/UNIT-01-local-stage-2026-09-27.log",
+    "docs/evidence/AUTO-01-current-account-inventory-2026-09-28.md",
+    "docs/evidence/AUTO-01-profile-pagination-implementation-2026-10-06.md"
   ],
   "capabilities": {
     "version": "xingtu-ad-creator-square-v1",
@@ -61,7 +63,11 @@
     },
     "identity": {
       "selector": "div.author-info span.copy-text"
-    }
+    },
+    "business_urls": [
+      "https://www.xingtu.cn/ad/creator/index",
+      "https://www.xingtu.cn/ad/creator/market"
+    ]
   },
   "search": {
     "entry_url": "https://www.xingtu.cn/ad/creator/market",
@@ -284,16 +290,729 @@
             "request_key": "base",
             "path": "content_theme_labels"
           }
+        },
+        {
+          "key": "creator_type_raw",
+          "name": "达人类型（平台原值）",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "creator_type"
+          }
+        },
+        {
+          "key": "author_type_raw",
+          "name": "作者类型（平台原值）",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "author_type"
+          }
+        },
+        {
+          "key": "industry_labels_raw",
+          "name": "行业标签（平台结构）",
+          "kind": "structured",
+          "empty_values": [
+            "[]"
+          ],
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "industry_list"
+          }
+        },
+        {
+          "key": "content_style_labels_raw",
+          "name": "内容风格标签（平台原值）",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "tags_author_style"
+          }
+        },
+        {
+          "key": "douyin_sec_uid",
+          "name": "抖音 SecUID",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "sec_uid"
+          }
+        },
+        {
+          "key": "douyin_unique_id",
+          "name": "抖音号",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base",
+            "path": "unique_id"
+          }
         }
       ],
       "period_source": null,
       "absence": null,
       "checkpoint_version": 1,
-      "coverage_gaps": []
+      "coverage_gaps": [
+        "gender/creator_type/author_type 仍保留平台原值，页面枚举含义待当前账号复核",
+        "未发现可靠的达人个人介绍来源，不使用 MCN 介绍替代"
+      ]
+    },
+    {
+      "key": "commercial",
+      "capture_on_profile_load": true,
+      "ready": {
+        "selector": "div.author-info"
+      },
+      "timeout_seconds": 60,
+      "requests": [
+        {
+          "key": "marketing",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/author/get_author_marketing_info",
+          "request_match": {
+            "o_author_id": "$creator_id",
+            "platform_channel": "1"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        }
+      ],
+      "fields": [
+        {
+          "key": "cooperation_offers",
+          "name": "合作形式与报价明细",
+          "kind": "structured",
+          "empty_values": [
+            "[]"
+          ],
+          "source": {
+            "kind": "response",
+            "request_key": "marketing",
+            "path": "price_info"
+          }
+        },
+        {
+          "key": "marketing_industry_tags",
+          "name": "商业合作行业标签",
+          "kind": "structured",
+          "empty_values": [
+            "[]"
+          ],
+          "source": {
+            "kind": "response",
+            "request_key": "marketing",
+            "path": "industry_tags"
+          }
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "报价金额单位、video_type/task_category 枚举与页面名称待当前账号复核"
+      ]
+    },
+    {
+      "key": "spread",
+      "capture_on_profile_load": true,
+      "ready": {
+        "selector": "div.author-info"
+      },
+      "timeout_seconds": 60,
+      "requests": [
+        {
+          "key": "spread",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/data_sp/get_author_spread_info",
+          "request_match": {
+            "o_author_id": "$creator_id"
+          },
+          "response_match": {}
+        },
+        {
+          "key": "commerce_spread",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/aggregator/get_author_commerce_spread_info",
+          "request_match": {
+            "o_author_id": "$creator_id"
+          },
+          "response_match": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "play_median",
+          "name": "播放中位数",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "spread",
+            "path": "play_mid"
+          }
+        },
+        {
+          "key": "interaction_rate",
+          "name": "互动率及同行超越",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "spread",
+            "path": "interact_rate"
+          }
+        },
+        {
+          "key": "completion_rate",
+          "name": "完播率及同行超越",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "spread",
+            "path": "play_over_rate"
+          }
+        },
+        {
+          "key": "average_duration",
+          "name": "平均观看时长",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "spread",
+            "path": "avg_duration"
+          }
+        },
+        {
+          "key": "average_likes",
+          "name": "平均点赞",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "spread",
+            "path": "like_avg"
+          }
+        },
+        {
+          "key": "average_comments",
+          "name": "平均评论",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "spread",
+            "path": "comment_avg"
+          }
+        },
+        {
+          "key": "average_shares",
+          "name": "平均分享",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "spread",
+            "path": "share_avg"
+          }
+        },
+        {
+          "key": "expected_cpm",
+          "name": "预期 CPM",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "spread",
+            "path": "expect_cpm"
+          }
+        },
+        {
+          "key": "expected_cpe",
+          "name": "预期 CPE",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "spread",
+            "path": "expect_cpe"
+          }
+        },
+        {
+          "key": "sales_expected_cpm",
+          "name": "销售预期 CPM",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "spread",
+            "path": "sales_expect_cpm"
+          }
+        },
+        {
+          "key": "play_stability",
+          "name": "播放稳定性",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "spread",
+            "path": "play_stability"
+          }
+        },
+        {
+          "key": "item_rate_metrics",
+          "name": "作品传播比较指标",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "spread",
+            "path": "item_rate"
+          }
+        },
+        {
+          "key": "commercial_play_count",
+          "name": "商业播放量",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_spread",
+            "path": "vv"
+          }
+        },
+        {
+          "key": "commercial_natural_play_count",
+          "name": "商业自然播放量",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_spread",
+            "path": "sn_vv"
+          }
+        },
+        {
+          "key": "commercial_cpm_20_60",
+          "name": "20-60秒商业 CPM",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_spread",
+            "path": "cpm_20_60"
+          }
+        },
+        {
+          "key": "commercial_cpm_60",
+          "name": "60秒以上商业 CPM",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_spread",
+            "path": "cpm_60"
+          }
+        },
+        {
+          "key": "commercial_cpe_20_60",
+          "name": "20-60秒商业 CPE",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_spread",
+            "path": "cpe_20_60"
+          }
+        },
+        {
+          "key": "commercial_cpe_60",
+          "name": "60秒以上商业 CPE",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_spread",
+            "path": "cpe_60"
+          }
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "默认统计周期、比例缩放、观看时长与 CPM/CPE 单位待当前账号页面复核"
+      ]
+    },
+    {
+      "key": "seeding",
+      "capture_on_profile_load": true,
+      "ready": {
+        "selector": "div.author-info"
+      },
+      "timeout_seconds": 60,
+      "requests": [
+        {
+          "key": "seed_base",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/aggregator/get_author_commerce_seed_base_info",
+          "request_match": {
+            "o_author_id": "$creator_id"
+          },
+          "response_match": {}
+        },
+        {
+          "key": "link_structure",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/data_sp/author_link_struct",
+          "request_match": {
+            "o_author_id": "$creator_id"
+          },
+          "response_match": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "a3_increment",
+          "name": "A3 增量及同行排名",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "seed_base",
+            "path": "avg_a3_incr_cnt"
+          }
+        },
+        {
+          "key": "search_after_view",
+          "name": "看后搜人数",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "seed_base",
+            "path": "avg_search_after_view_cnt"
+          }
+        },
+        {
+          "key": "search_after_view_rate",
+          "name": "看后搜比例",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "seed_base",
+            "path": "avg_search_after_view_rate"
+          }
+        },
+        {
+          "key": "personal_search_after_view",
+          "name": "个人页看后搜人数",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "seed_base",
+            "path": "personal_avg_search_after_view_cnt"
+          }
+        },
+        {
+          "key": "personal_search_after_view_rate",
+          "name": "个人页看后搜比例",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "seed_base",
+            "path": "personal_avg_search_after_view_rate"
+          }
+        },
+        {
+          "key": "search_word_ctr",
+          "name": "搜索词点击率",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "seed_base",
+            "path": "search_word_ctr"
+          }
+        },
+        {
+          "key": "seeding_link_structure",
+          "name": "种草链路层级",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "link_structure",
+            "path": "link_struct"
+          }
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "种草指标默认周期、比例及链路层级枚举待当前账号页面复核"
+      ]
+    },
+    {
+      "key": "fulfillment",
+      "capture_on_profile_load": true,
+      "ready": {
+        "selector": "div.author-info"
+      },
+      "timeout_seconds": 60,
+      "requests": [
+        {
+          "key": "contract_base",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/aggregator/get_author_contract_base_info",
+          "request_match": {
+            "o_author_id": "$creator_id"
+          },
+          "response_match": {}
+        },
+        {
+          "key": "order_experience",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/aggregator/get_author_order_experience",
+          "request_match": {
+            "o_author_id": "$creator_id"
+          },
+          "response_match": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "credit_score",
+          "name": "信用分（旧口径）",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "contract_base",
+            "path": "credit_score"
+          }
+        },
+        {
+          "key": "new_credit_score",
+          "name": "信用分（新口径）",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "contract_base",
+            "path": "new_credit_score"
+          }
+        },
+        {
+          "key": "historical_order_count",
+          "name": "历史订单数",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "contract_base",
+            "path": "order_cnt"
+          }
+        },
+        {
+          "key": "processing_order_count",
+          "name": "进行中订单数",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "contract_base",
+            "path": "process_order_cnt"
+          }
+        },
+        {
+          "key": "max_processing_order_count",
+          "name": "最大承接订单数",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "contract_base",
+            "path": "max_process_order_cnt"
+          }
+        },
+        {
+          "key": "message_reply_rate",
+          "name": "消息回复率",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "contract_base",
+            "path": "message_reply_rate"
+          }
+        },
+        {
+          "key": "industry_order_distribution",
+          "name": "行业订单分布",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "contract_base",
+            "path": "industry_order_distribution"
+          }
+        },
+        {
+          "key": "industry_play_distribution",
+          "name": "行业播放分布",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "contract_base",
+            "path": "industry_vv_distribution"
+          }
+        },
+        {
+          "key": "cooperation_industry_distribution",
+          "name": "合作行业分布",
+          "kind": "structured",
+          "empty_values": [
+            "[]"
+          ],
+          "source": {
+            "kind": "response",
+            "request_key": "order_experience",
+            "path": "order_experience_industries"
+          }
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "信用分新旧口径、回复率缩放与订单周期待当前账号页面复核"
+      ]
+    },
+    {
+      "key": "conversion",
+      "capture_on_profile_load": true,
+      "ready": {
+        "selector": "div.author-info"
+      },
+      "timeout_seconds": 60,
+      "requests": [
+        {
+          "key": "conversion",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/data_sp/get_author_convert_ability",
+          "request_match": {
+            "o_author_id": "$creator_id"
+          },
+          "response_match": {}
+        },
+        {
+          "key": "local_sales",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/data_sp/author_local_sales_performance",
+          "request_match": {
+            "o_author_id": "$creator_id"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        }
+      ],
+      "fields": [
+        {
+          "key": "gpm_range",
+          "name": "GPM 区间",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "conversion",
+            "path": "gpm_range"
+          }
+        },
+        {
+          "key": "sales_amount_range",
+          "name": "销售额区间",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "conversion",
+            "path": "avg_sales_amount_range"
+          }
+        },
+        {
+          "key": "component_click_count_range",
+          "name": "组件点击数区间",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "conversion",
+            "path": "component_click_cnt_range"
+          }
+        },
+        {
+          "key": "component_click_rate_range",
+          "name": "组件点击率区间",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "conversion",
+            "path": "component_click_rate_range"
+          }
+        },
+        {
+          "key": "related_cpc_range",
+          "name": "相关 CPC 区间",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "conversion",
+            "path": "related_cpc_range"
+          }
+        },
+        {
+          "key": "recommended_product_count",
+          "name": "推荐商品数",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "conversion",
+            "path": "rec_product_cnt"
+          }
+        },
+        {
+          "key": "product_price_range",
+          "name": "商品价格区间",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "conversion",
+            "path": "rec_product_price_range"
+          }
+        },
+        {
+          "key": "related_video_count",
+          "name": "相关视频数",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "conversion",
+            "path": "related_video_cnt"
+          }
+        },
+        {
+          "key": "related_video_play_median",
+          "name": "相关视频播放中位数",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "conversion",
+            "path": "video_vv_median"
+          }
+        },
+        {
+          "key": "local_sales_overview",
+          "name": "本地销售订单与销量",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "local_sales",
+            "path": "overview"
+          }
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "GPM/销售额/点击指标区间枚举、币种与默认周期待当前账号页面复核"
+      ]
     }
   ],
   "featured": [],
   "direct_api_enabled": false,
   "raw_har_trace_enabled": false,
-  "coverage_gaps": []
+  "coverage_gaps": [
+    "粉丝性别/年龄/地域画像数据源待确认",
+    "创作能力标签页数据源待确认"
+  ]
 }

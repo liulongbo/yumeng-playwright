@@ -30,14 +30,24 @@ class RequestSpec(Model):
     path: str
     request_match: dict[str, str]  # dotted JSON body or query keys -> literal / $binding
     response_match: dict[str, str]
-    success_path: str
-    success_value: str
+    # Some live Xingtu endpoints use HTTP 200 plus a stable response schema and expose no
+    # business-code field.  The pair must therefore be both present or both absent.
+    success_path: str | None = None
+    success_value: str | None = None
     required: bool = True
     # Registered module-internal incremental loading: the same request may fire several times and
     # every matched response contributes to this key. Default false keeps ambiguity rejection.
     repeats: bool = False
     cursor_invalid_codes: list[str] = Field(default_factory=list)
     error_codes: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def success_contract_is_paired(self) -> RequestSpec:
+        if bool(self.success_path) != bool(self.success_value):
+            raise ValueError("success_path and success_value must be paired")
+        if (self.cursor_invalid_codes or self.error_codes) and not self.success_path:
+            raise ValueError("business error mapping requires success_path")
+        return self
 
 
 class SourceSpec(Model):
@@ -50,7 +60,7 @@ class SourceSpec(Model):
 class FieldSpec(Model):
     key: str
     name: str
-    kind: Literal["text", "number", "ratio", "quote", "tags", "distribution"]
+    kind: Literal["text", "number", "ratio", "quote", "tags", "distribution", "structured"]
     source: SourceSpec
     fallback: SourceSpec | None = None
     fallback_on: list[Literal["MISSING_SOURCE", "MODULE_TIMEOUT"]] = Field(default_factory=list)
@@ -80,6 +90,9 @@ class ModuleAbsenceSpec(Model):
 class ProfileModuleSpec(Model):
     key: str
     basic: bool = False
+    # The module's endpoint is emitted automatically while the creator homepage loads.  Such
+    # requests must be observed before navigation; registering a listener afterwards loses data.
+    capture_on_profile_load: bool = False
     # Entry page, tab/expand actions, readiness and per-module versions stay null/1 until verified.
     entry: str | None = None
     default_bindings: dict[str, str] = Field(default_factory=dict)
@@ -163,6 +176,9 @@ class SearchSpec(Model):
     next_page_mode: Literal["actions", "page_fetch"] = "actions"
     # A page-fetch contract is enabled only through the largest page proven with real evidence.
     page_fetch_max_verified: int | None = Field(default=None, ge=2)
+    # Once continuous advancement has live evidence, business collection follows has_more and
+    # target/budget guards instead of replacing one fixed page limit with another.
+    page_fetch_continuous_verified: bool = False
     resume_supported: bool = False
     initial_cursor: str = ""
     # The platform sort is fixed by the contract; the plan may only use that one value.
@@ -181,11 +197,20 @@ class SessionSpec(Model):
     protected_ready: LocatorSpec
     error_selectors: dict[str, LocatorSpec]
     identity: LocatorSpec
+    # Registered protected business pages used to bootstrap a reusable session on cold start.
+    # Observed 2026-10-06: the platform intermittently redirects the first hop of any single
+    # business URL to `/?redirect_uri=...`, while rotating the registered business pages (as the
+    # verified diagnostic flow does) recovers the session.  Only URLs registered here are tried;
+    # no selector or endpoint is guessed.
+    business_urls: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def known_errors(self) -> SessionSpec:
         if not set(self.error_selectors) <= ERROR_CODES:
             raise ValueError("unknown session error classification")
+        for url in self.business_urls:
+            if not url.startswith("https://"):
+                raise ValueError("business_urls must be absolute https URLs")
         return self
 
 
@@ -300,13 +325,19 @@ class PlatformRegistry(Model):
                 search.pagination != "page"
                 or search.single_page_only
                 or search.next_actions
-                or not search.page_fetch_max_verified
+                or (
+                    not search.page_fetch_continuous_verified and not search.page_fetch_max_verified
+                )
+                or (
+                    search.page_fetch_continuous_verified
+                    and search.page_fetch_max_verified is not None
+                )
                 or result_request.method != "POST"
                 or "$cursor" not in result_request.request_match.values()
                 or result_request.host != urlsplit(search.entry_url).hostname
             ):
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "INVALID_PAGE_FETCH_CONTRACT")
-        elif search.page_fetch_max_verified is not None:
+        elif search.page_fetch_max_verified is not None or search.page_fetch_continuous_verified:
             raise CollectorError("PLATFORM_PAGE_CHANGED", "UNUSED_PAGE_FETCH_LIMIT")
         if search.single_page_only and not search.coverage_gaps:
             # A page-1-only contract must keep its pagination gap visible.
@@ -315,6 +346,24 @@ class PlatformRegistry(Model):
             self._check_locator(locator)
         for module in self.modules:
             self._check_module(module)
+        initial_request_keys = [
+            request.key
+            for module in self.modules
+            if module.basic or module.capture_on_profile_load
+            for request in module.requests
+        ]
+        if len(initial_request_keys) != len(set(initial_request_keys)):
+            raise CollectorError("PLATFORM_PAGE_CHANGED", "DUPLICATE_PROFILE_LOAD_REQUEST_KEY")
+        initial_bindings: dict[str, str] = {}
+        for module in self.modules:
+            if not (module.basic or module.capture_on_profile_load):
+                continue
+            for key, value in module.default_bindings.items():
+                if key in initial_bindings and initial_bindings[key] != value:
+                    raise CollectorError(
+                        "PLATFORM_PAGE_CHANGED", "CONFLICTING_PROFILE_LOAD_BINDING"
+                    )
+                initial_bindings[key] = value
         if self.featured:
             self._check_featured()
 
@@ -407,6 +456,8 @@ class PlatformRegistry(Model):
         if module.basic and module.entry:
             # The basic module is entered through the verified homepage, never a separate path.
             raise CollectorError("PLATFORM_PAGE_CHANGED", "BASIC_MODULE_ENTRY_UNSUPPORTED")
+        if module.capture_on_profile_load and (module.entry or module.actions):
+            raise CollectorError("PLATFORM_PAGE_CHANGED", "PROFILE_LOAD_MODULE_HAS_ACTIONS")
         self._check_locator(module.ready)
         for locator in module.ready_hidden:
             self._check_locator(locator)
@@ -470,7 +521,6 @@ class PlatformRegistry(Model):
                 not request.method
                 or not request.host
                 or not request.path
-                or not request.success_path
                 or request.host not in self.allowed_hosts
             ):
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "INVALID_REQUEST_CONTRACT")

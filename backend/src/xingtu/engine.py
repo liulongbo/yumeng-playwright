@@ -230,6 +230,7 @@ class Engine:
                 return self.finish()
             if len(task.checkpoint.scanned_ids) >= self.scan_budget:
                 raise CollectorError("BUDGET_EXHAUSTED", "CANDIDATE_SCAN")
+            no_progress_limit_reached = False
             with self.repo.edit(self.root, self.ctx) as (current, _):
                 current.state = TaskStatus.SEARCHING
             start = time.monotonic()
@@ -272,6 +273,11 @@ class Engine:
                 # Repeated cursors are rejected as CURSOR_LOOP above; otherwise the scan and
                 # active budgets bound progress and non-exhaustion is never claimed from it.
                 cp.no_progress_pages = 0 if has_new else cp.no_progress_pages + 1
+                # A cursor-expiry rescan is expected to replay the already-known prefix. Give it
+                # enough room to reach the old frontier; normal forward paging still stops after
+                # two consecutive pages without a new creator identity.
+                no_progress_limit = max(2, len(cp.candidates) + 1) if cp.search_generation else 2
+                no_progress_limit_reached = cp.no_progress_pages >= no_progress_limit
                 cp.visited_cursors.append(cp.cursor)
                 cp.cursor = page.next_checkpoint
                 cp.exhausted = page.exhausted
@@ -280,6 +286,10 @@ class Engine:
                 cp.processed_operations.append(page.operation_id)
                 cp.pending_page = page
             self.ingest_pending_page()
+            if no_progress_limit_reached:
+                # Preserve the observed pages/checkpoint, but do not misreport a changing or
+                # repeated result set as platform exhaustion.
+                raise CollectorError("PLATFORM_PAGE_CHANGED", "SEARCH_NO_PROGRESS")
 
     async def collect(self, identity: str) -> None:
         """Collect one creator with bounded identity retries and candidate-scoped failure."""

@@ -77,6 +77,16 @@ def main() -> None:
     enable.add_argument("--reason")
     register = commands.add_parser("register-unit")
     register.add_argument("--config", type=Path, required=True)
+    rebind = commands.add_parser("rebind-account")
+    rebind.add_argument("--config", type=Path, required=True)
+    rebind.add_argument("--account-id", required=True)
+    rebind.add_argument("--actor", required=True)
+    rebind.add_argument("--reason", required=True)
+    rebind.add_argument("--evidence-ref")
+    rebind.add_argument(
+        "--previous-account-id",
+        help="被取代的旧绑定（仅当旧绑定只存在于单元配置文件、未落库时使用）",
+    )
     login_command = commands.add_parser("login")
     login_command.add_argument("--config", type=Path, required=True)
     login_command.add_argument("--wait-seconds", type=float, default=login_timeout_default())
@@ -186,6 +196,31 @@ def main() -> None:
                         "state": "NEEDS_LOGIN",
                         "network_mode": config.network_mode.value,
                     }
+                )
+            )
+        elif args.command == "rebind-account":
+            # Explicit, audited account rebinding: never automatic, never while a browser owns
+            # the unit.  The config file must already carry the same identity.
+            config = load_unit(args.config)
+            if config.expected_account_id != args.account_id:
+                raise CollectorError("INVALID_FORM", "UNIT_CONFIG_ACCOUNT_MUST_MATCH_REBIND_TARGET")
+            previous = repository().rebind_unit_account(
+                config.unit_id,
+                args.account_id,
+                args.actor,
+                args.reason,
+                args.evidence_ref,
+                args.previous_account_id,
+            )
+            print(
+                json.dumps(
+                    {
+                        "unit_id": config.unit_id,
+                        "previous_account_id": previous,
+                        "expected_account_id": args.account_id,
+                        "state": "SESSION_UNVERIFIED",
+                    },
+                    ensure_ascii=False,
                 )
             )
         elif args.command == "login":

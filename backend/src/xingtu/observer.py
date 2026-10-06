@@ -185,12 +185,16 @@ class ResponseCollector:
             if len(body) > self.max_bytes:
                 raise CollectorError("MODULE_COLLECTION_FAILED", "RESPONSE_TOO_LARGE")
             data = json.loads(body)
-            business_code = text_value(lookup(data, spec.success_path))
-            if business_code in spec.cursor_invalid_codes:
+            business_code = (
+                text_value(lookup(data, spec.success_path)) if spec.success_path else None
+            )
+            if business_code is not None and business_code in spec.cursor_invalid_codes:
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "SEARCH_CURSOR_INVALID")
-            if business_code in spec.error_codes:
+            if business_code is not None and business_code in spec.error_codes:
                 raise CollectorError(spec.error_codes[business_code], "REGISTERED_BUSINESS_ERROR")
-            if response.status != 200 or business_code != spec.success_value:
+            if response.status != 200 or (
+                spec.success_path and business_code != spec.success_value
+            ):
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "RESPONSE_SCHEMA_MISMATCH")
             if not all(
                 text_value(lookup(data, k)) == resolve(v, self.bindings)

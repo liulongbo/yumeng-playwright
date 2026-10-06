@@ -249,6 +249,37 @@ async def test_identity_unreadable_retries_then_skips_and_continues(repo, starte
     repo.require_contract("synthetic-v1", {"profile_identity"})
 
 
+async def test_creator_failure_on_page_two_continues_through_page_three(repo, plan):
+    class PageTwoFailure(SyntheticAdapter):
+        @asynccontextmanager
+        async def profile(self, creator, ctx):
+            self.visits.append(creator.platform_creator_id)
+            if creator.platform_creator_id == "failed-on-page-2":
+                raise CollectorError("CREATOR_INVALID", "synthetic unavailable creator")
+            yield
+
+    ctx = start(repo, plan, 4)
+    adapter = PageTwoFailure(
+        ["page-1-a", "page-1-b", "failed-on-page-2", "page-2-b", "page-3-a"],
+        page_size=2,
+    )
+    assert await Engine(repo, adapter, ctx).run() == TaskStatus.PARTIAL_COMPLETED
+    task = repo.get(ctx.root_task_id)
+    assert task.valid_count == 4
+    assert adapter.visits == [
+        "page-1-a",
+        "page-1-b",
+        "failed-on-page-2",
+        "page-2-b",
+        "page-3-a",
+    ]
+    assert task.checkpoint.visited_cursors == [None, "2", "4"]
+    rows = repo.results(ctx.root_task_id)
+    assert len(rows) == 4
+    assert [row["first_position"] for row in rows] == [0, 1, 3, 4]
+    assert all(row["snapshot_id"] for row in rows)
+
+
 async def test_identity_unreadable_rechecks_session_before_retry(repo, started):
     class LoggedOutAfterIdentityFailure(SyntheticAdapter):
         @asynccontextmanager
@@ -351,6 +382,28 @@ async def test_looping_cursor_fails_not_exhausted(repo, started):
     with pytest.raises(CollectorError, match="CURSOR_LOOP"):
         await Engine(repo, Loop(page_size=1, invalid=["1", "2", "3"]), started).run()
     assert not repo.get(started.root_task_id).checkpoint.exhausted
+
+
+async def test_two_pages_without_new_creator_ids_stop_as_pagination_error(repo, started):
+    class RepeatedResults(SyntheticAdapter):
+        async def search(self, plan, cp, ctx):
+            page = await super().search(plan, cp, ctx)
+            page.candidates = [
+                page.candidates[0].model_copy(update={"platform_creator_id": "same"})
+            ]
+            offset = int(cp.cursor or "0")
+            page.exhausted = False
+            page.next_checkpoint = str(offset + 1)
+            return page
+
+    adapter = RepeatedResults(["same", "same", "same", "same"], page_size=1)
+    with pytest.raises(CollectorError, match="SEARCH_NO_PROGRESS"):
+        await Engine(repo, adapter, started).run()
+    task = repo.get(started.root_task_id)
+    assert task.valid_count == 1
+    assert task.checkpoint.no_progress_pages == 2
+    assert task.checkpoint.cursor == "3"
+    assert not task.checkpoint.exhausted
 
 
 async def test_invalid_cursor_rescans_and_preserves_first_positions(repo, started):

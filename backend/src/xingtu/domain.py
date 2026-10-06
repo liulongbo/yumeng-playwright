@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Literal, Self
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 
 def uid() -> str:
@@ -359,9 +359,22 @@ class DistributionValue(Model):
     groups: list[DistributionGroup]
 
 
+class StructuredValue(Model):
+    """Lossless JSON data whose business semantics are defined by the field contract.
+
+    Platform-native lists/objects such as multiple cooperation offers and interval payloads
+    must stay queryable structures rather than being flattened into an unusable text blob.
+    """
+
+    kind: Literal["structured"] = "structured"
+    data: JsonValue
+
+
 class FieldObservation(Model):
     field_key: str
-    value: str | list[str] | NumericValue | QuoteValue | DistributionValue | None = None
+    value: (
+        str | list[str] | NumericValue | QuoteValue | DistributionValue | StructuredValue | None
+    ) = None
     raw_value: str | None = None
     unit: str | None = None
     period_label: str | None = None

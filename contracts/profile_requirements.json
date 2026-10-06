@@ -1,12 +1,15 @@
 {
-  "version": "full-homepage-inventory-v1",
+  "version": "full-homepage-inventory-v2-draft",
   "inventory_verified": false,
   "modules": {
-    "basic": ["platform_creator_id", "nickname", "avatar_uri", "followers", "gender", "city", "province", "mcn_name", "content_theme_labels"],
-    "commercial": [],
-    "spread": [],
+    "basic": ["platform_creator_id", "nickname", "avatar_uri", "followers", "gender", "city", "province", "mcn_name", "content_theme_labels", "creator_type_raw", "author_type_raw", "industry_labels_raw", "content_style_labels_raw", "douyin_sec_uid", "douyin_unique_id"],
+    "commercial": ["cooperation_offers", "marketing_industry_tags"],
+    "spread": ["play_median", "interaction_rate", "completion_rate", "average_duration", "average_likes", "average_comments", "average_shares", "expected_cpm", "expected_cpe", "sales_expected_cpm", "play_stability", "item_rate_metrics", "commercial_play_count", "commercial_natural_play_count", "commercial_cpm_20_60", "commercial_cpm_60", "commercial_cpe_20_60", "commercial_cpe_60"],
+    "seeding": ["a3_increment", "search_after_view", "search_after_view_rate", "personal_search_after_view", "personal_search_after_view_rate", "search_word_ctr", "seeding_link_structure"],
+    "fulfillment": ["credit_score", "new_credit_score", "historical_order_count", "processing_order_count", "max_processing_order_count", "message_reply_rate", "industry_order_distribution", "industry_play_distribution", "cooperation_industry_distribution"],
+    "conversion": ["gpm_range", "sales_amount_range", "component_click_count_range", "component_click_rate_range", "related_cpc_range", "recommended_product_count", "product_price_range", "related_video_count", "related_video_play_median", "local_sales_overview"],
     "fans": [],
-    "creation_and_fulfillment": []
+    "creation": []
   },
-  "evidence_refs": []
+  "evidence_refs": ["docs/evidence/AUTO-01-current-account-inventory-2026-09-28.md"]
 }

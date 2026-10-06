@@ -34,6 +34,7 @@ from playwright.async_api import BrowserContext, Page, Response
 from playwright.async_api import Error as BrowserError
 from pydantic import Field
 
+from .contracts import PlatformRegistry
 from .domain import CollectorError, Model
 from .runtime import BrowserRuntime, UnitConfig
 
@@ -85,15 +86,22 @@ def _safe_scalar(key: str, value: Any) -> Any:
     return _shape(value)
 
 
-def next_search_payload(observed: dict[str, Any] | None) -> dict[str, Any]:
-    """Build the one allowed page-2 research request without mutating the observed request."""
+def search_page_payload(observed: dict[str, Any] | None, page_number: int) -> dict[str, Any]:
+    """Build a bounded page 2-5 research request without mutating the observed page 1."""
     payload = copy.deepcopy(observed)
     if not payload or not isinstance(payload.get("page_param"), dict):
         raise CollectorError("PLATFORM_PAGE_CHANGED", "SEARCH_REQUEST_NOT_OBSERVED")
     if str(payload["page_param"].get("page")) != "1":
         raise CollectorError("PLATFORM_PAGE_CHANGED", "SEARCH_PAGE_ONE_REQUIRED")
-    payload["page_param"]["page"] = 2
+    if page_number < 2 or page_number > 5:
+        raise CollectorError("PLATFORM_PAGE_CHANGED", "RESEARCH_PAGE_OUT_OF_RANGE")
+    payload["page_param"]["page"] = page_number
     return payload
+
+
+def next_search_payload(observed: dict[str, Any] | None) -> dict[str, Any]:
+    """Backward-compatible page-2 helper retained for existing research tests."""
+    return search_page_payload(observed, 2)
 
 
 def identity_digest(data: Any) -> dict[str, Any] | None:
@@ -226,6 +234,7 @@ class ResearchStep(Model):
         "scroll",
         "capture",
         "screenshot",
+        "verify_account",
         "fetch_next_search_page",
     ]
     url: str | None = None
@@ -307,6 +316,7 @@ class ResearchRecorder:
                     and parsed.hostname == "www.xingtu.cn"
                     and parsed.path == "/gw/api/gsearch/search_for_author_square"
                     and isinstance(body, dict)
+                    and str((body.get("page_param") or {}).get("page")) == "1"
                 ):
                     self.search_request_payload = copy.deepcopy(body)
                     all_headers = await request.all_headers()
@@ -411,13 +421,14 @@ class ResearchRecorder:
     def finalize(self) -> None:
         self.closed = True
 
-    async def fetch_next_search_page(self, page: Page) -> None:
-        """Repeat the observed page-1 search once inside the authenticated page context.
+    async def fetch_search_page(self, page: Page, page_number: int) -> None:
+        """Repeat the observed page-1 search for one bounded page in the authenticated context.
 
         This is research-only: it does not persist raw request data or enable the production
-        direct-request path.  Page 2 is fixed so a malformed step cannot expand the experiment.
+        direct-request path.  Pages are restricted to 2-5 so a malformed step cannot turn a
+        verification run into an unbounded collection.
         """
-        payload = next_search_payload(self.search_request_payload)
+        payload = search_page_payload(self.search_request_payload, page_number)
         await page.evaluate(
             """
             async ({body, headers}) => {
@@ -482,6 +493,7 @@ async def run_research(
         "snapshots": [],
         "timeline": [],
     }
+    registry = PlatformRegistry.model_validate_json(config.registry_path.read_text())
     async with runtime.open() as context:
         report["browser_version"] = runtime.browser_version
         report["proxy_configured"] = runtime.proxied
@@ -578,8 +590,34 @@ async def run_research(
                         await page.mouse.wheel(0, 1200)
                 elif step.action == "screenshot":
                     await page.screenshot(path=str(out_dir / f"{label}.png"))
+                elif step.action == "verify_account":
+                    if not registry.session:
+                        raise CollectorError("PLATFORM_PAGE_CHANGED", "SESSION_CONTRACT_MISSING")
+                    account_spec = registry.session.account
+                    account_locator = (
+                        page.frame_locator(account_spec.frame).locator(account_spec.selector)
+                        if account_spec.frame
+                        else page.locator(account_spec.selector)
+                    )
+                    try:
+                        observed = (
+                            await account_locator.first.text_content(
+                                timeout=(step.timeout_seconds or 30) * 1000
+                            )
+                            or ""
+                        ).strip()
+                    except BrowserError as exc:
+                        raise CollectorError(
+                            "ACCOUNT_LOGIN_REQUIRED", "ACCOUNT_LOCATOR_UNREADABLE"
+                        ) from exc
+                    if not observed:
+                        raise CollectorError("ACCOUNT_LOGIN_REQUIRED", "ACCOUNT_LOCATOR_UNREADABLE")
+                    if observed != config.expected_account_id:
+                        raise CollectorError("ACCOUNT_MISMATCH", "WRONG_ACCOUNT")
+                    report["account_verified"] = True
                 elif step.action == "fetch_next_search_page":
-                    await recorder.fetch_next_search_page(page)
+                    page_number = int(step.value or "2")
+                    await recorder.fetch_search_page(page, page_number)
             except Exception as exc:
                 # A failed probe must not discard the observations already collected.
                 report.setdefault("step_errors", []).append(
@@ -591,6 +629,11 @@ async def run_research(
                     }
                 )
                 print(f"   step failed: {type(exc).__name__}", flush=True)
+                if isinstance(exc, CollectorError) and exc.code in {
+                    "ACCOUNT_LOGIN_REQUIRED",
+                    "ACCOUNT_MISMATCH",
+                }:
+                    raise
                 continue
             if step.action in {"capture", "screenshot"} or step.action in {"goto", "click"}:
                 try:

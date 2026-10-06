@@ -105,12 +105,12 @@ def registry(capabilities):
                     ],
                 },
                 {
-                    # Registered tab entry, module default conditions and hidden loading hint.
+                    # This endpoint auto-fires during homepage navigation and must be observed
+                    # before the page load begins, alongside the basic response.
                     "key": "commercial",
-                    "entry": "/creator/A?tab=commercial",
+                    "capture_on_profile_load": True,
                     "default_bindings": {"scope": "default"},
                     "ready": {"selector": "#commercial"},
-                    "ready_hidden": [{"selector": "#loading"}],
                     "timeout_seconds": 0.5,
                     "checkpoint_version": 2,
                     "requests": [
@@ -343,7 +343,8 @@ async def test_verified_page_fetch_reuses_in_memory_headers_and_advances_checkpo
             "initial_cursor": "1",
             "next_actions": [],
             "next_page_mode": "page_fetch",
-            "page_fetch_max_verified": 2,
+            "page_fetch_max_verified": None,
+            "page_fetch_continuous_verified": True,
             "requests": [
                 {
                     "key": "list",
@@ -392,7 +393,7 @@ async def test_verified_page_fetch_reuses_in_memory_headers_and_advances_checkpo
                                 }
                             ],
                             "next": page_number,
-                            "done": page_number == 2,
+                            "done": page_number == 3,
                         }
                     ),
                 )
@@ -419,6 +420,11 @@ async def test_verified_page_fetch_reuses_in_memory_headers_and_advances_checkpo
         second_cp.cursor = first.next_checkpoint
         second = await adapter.search(plan, second_cp, ctx)
         assert [row.platform_creator_id for row in second.candidates] == ["P2"]
-        assert second.exhausted and second.next_checkpoint is None
+        assert not second.exhausted and second.next_checkpoint == "3"
+        third_cp = checkpoint(plan)
+        third_cp.cursor = second.next_checkpoint
+        third = await adapter.search(plan, third_cp, ctx)
+        assert [row.platform_creator_id for row in third.candidates] == ["P3"]
+        assert third.exhausted and third.next_checkpoint is None
         await adapter.close()
         await browser.close()

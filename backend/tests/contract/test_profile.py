@@ -23,6 +23,7 @@ async def test_parse_sources_periods_and_conflicts(plan, monkeypatch):
             "period": "synthetic 7 days",
             "fallback": "42",
             "no_permission": "private",
+            "structured": [{"price": 0, "open": False}, {"price": 1200, "open": True}],
         }[spec.path]
 
     adapter.source = source
@@ -68,6 +69,12 @@ async def test_parse_sources_periods_and_conflicts(plan, monkeypatch):
             permission_values=["private"],
             source=SourceSpec(kind="response", request_key="r", path="no_permission"),
         ),
+        FieldSpec(
+            key="structured",
+            name="offers",
+            kind="structured",
+            source=SourceSpec(kind="response", request_key="r", path="structured"),
+        ),
     ]
     spec = ProfileModuleSpec(
         key="fans",
@@ -92,5 +99,6 @@ async def test_parse_sources_periods_and_conflicts(plan, monkeypatch):
     assert observations["fallback"].source_kind == "dom"
     assert observations["fallback"].fallback_reason == "MODULE_TIMEOUT"
     assert observations["private"].status == FieldStatus.NO_PERMISSION
+    assert observations["structured"].value.data[0] == {"price": 0, "open": False}
     assert result.source_period_label == "synthetic 7 days"
     assert not result.complete

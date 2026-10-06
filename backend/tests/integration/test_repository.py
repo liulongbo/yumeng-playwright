@@ -151,7 +151,70 @@ def test_network_mode_is_persisted_and_immutable(repo):
         repo.register_unit("local-unit", "acct", "local-dev", "/tmp/local-profile")
     with repo.connect() as conn:
         versions = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
-    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6]
+    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6, 7]
+
+
+def test_account_rebinding_is_explicit_audited_and_requires_released_browser(repo, started):
+    import pytest
+    from xingtu.domain import CollectorError
+
+    # While a browser host owns the unit the binding must not move, even for an audited rebind.
+    with pytest.raises(CollectorError, match="already has a browser host"):
+        repo.rebind_unit_account("unit", "ID: 9000000000000001", "operator", "test rebind")
+    with repo.connect() as conn:
+        assert (
+            conn.execute("SELECT expected_account_id FROM execution_units").fetchone()[
+                "expected_account_id"
+            ]
+            is None
+        )
+
+    repo.release(
+        "unit",
+        started.attempt_id,
+        started.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.SESSION_UNVERIFIED,
+    )
+    repo.rebind_unit_account(
+        "unit",
+        "ID: 9000000000000001",
+        "operator",
+        "bound account no longer usable",
+        "docs/evidence/example.json",
+        "ID: 9000000000000000",
+    )
+    row = repo.unit("unit")
+    assert row["expected_account_id"] == "ID: 9000000000000001"
+    assert row["verified_account_id"] is None
+    assert row["state"] == "SESSION_UNVERIFIED"
+    assert row["failure_reason"] == "ACCOUNT_BINDING_CHANGED"
+    with repo.connect() as conn:
+        rebinding = conn.execute("SELECT * FROM unit_account_rebindings").fetchone()
+        audit = conn.execute(
+            "SELECT action FROM audit_logs WHERE action LIKE 'rebind_unit_account:%'"
+        ).fetchone()
+    assert rebinding["previous_account_id"] is None
+    assert rebinding["previous_config_account_id"] == "ID: 9000000000000000"
+    assert rebinding["account_id"] == "ID: 9000000000000001"
+    assert rebinding["actor"] == "operator"
+    assert rebinding["evidence_ref"] == "docs/evidence/example.json"
+    assert audit is not None
+
+    # Rebinding to the identity that is already bound is a no-op error, not a silent write.
+    with pytest.raises(CollectorError, match="ACCOUNT_ALREADY_BOUND"):
+        repo.rebind_unit_account("unit", "ID: 9000000000000001", "operator", "same account")
+    with pytest.raises(CollectorError, match="ACCOUNT_ACTOR_AND_REASON_REQUIRED"):
+        repo.rebind_unit_account("unit", "", "operator", "empty target")
+    # Automated re-registration still refuses to change the identity.
+    with pytest.raises(CollectorError, match="immutable"):
+        repo.register_unit(
+            "unit",
+            "synthetic-account",
+            "synthetic-line",
+            "synthetic-profile",
+            expected_account_id="ID: 9000000000000002",
+        )
 
 
 def test_login_resume_is_durable_idempotent_and_requires_released_browser(repo, started):

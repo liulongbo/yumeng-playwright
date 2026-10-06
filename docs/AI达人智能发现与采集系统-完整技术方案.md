@@ -1038,7 +1038,7 @@ API 通过 root_task_id 面向用户；管道 task_id 在阶段明细和诊断�
 | PLATFORM_PAGE_CHANGED | 按 `search`/`profile_identity`/`profile_module:<key>`/`featured:<key>` 记录能力范围；单样本不禁用整版本，多主体连续失败进入 `SUSPECTED`，新租约独立复现才禁用对应 scope |
 | PLATFORM_RATE_LIMITED | 按限流信号退避，超过预算进入可恢复状态 |
 | ACCOUNT_LOGIN_REQUIRED | 等待人工登录，成功验证后自动续跑 |
-| ACCOUNT_MISMATCH | 会话有效但账号与单元绑定不一致；进入 `WAITING_FOR_ACCOUNT`，要求切换账号或经审计改绑，不自动改绑 |
+| ACCOUNT_MISMATCH | 会话有效但账号与单元绑定不一致；进入 `WAITING_FOR_ACCOUNT`，要求切换账号或**经审计改绑**（`xingtu rebind-account`，带操作者/原因/证据并重置为 `SESSION_UNVERIFIED`），不自动改绑 |
 | SESSION_INDETERMINATE | 当前探针没有足够正反证据；单元为 `SESSION_UNVERIFIED`，等待资源复查，不提示用户重新登录 |
 | PLATFORM_SECURITY_CHALLENGE | 等待人工验证，不自动绕过 |
 | RESOURCE_UNAVAILABLE | 等待执行单元或绑定线路恢复 |

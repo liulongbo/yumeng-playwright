@@ -7,8 +7,8 @@ import json
 import os
 import subprocess
 import sys
-from contextlib import asynccontextmanager
-from datetime import datetime
+from contextlib import asynccontextmanager, suppress
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
 from pathlib import Path
@@ -55,6 +55,11 @@ class UnitConfig(Model):
     # default --use-mock-keychain cannot decrypt those rows and Chromium removes the unusable
     # authentication cookies. This opt-in ignores only that one Playwright default argument.
     macos_system_keychain: bool = False
+    # Hybrid persistence, part two: on top of the persistent profile directory, keep an explicit
+    # storage-state snapshot of the last verified session inside the private runtime root and
+    # re-inject it before the next launch's first navigation. This makes session-scoped business
+    # cookies (e.g. `.xingtu.cn/star_sessionid`) survive a close whose disk flush is uncertain.
+    capture_session_snapshot: bool = True
     # Research captures may only open hosts explicitly listed here (see `xingtu research`).
     research_allowed_hosts: list[str] = Field(default_factory=list)
     # §13.4 main path is "the browser runs the platform's own scripts". The platform session
@@ -201,6 +206,14 @@ class BrowserRuntime:
         self.browser_ua: str | None = None
         self.proxied = False
         self.network_mode = config.network_mode
+        # Hybrid persistence bookkeeping (see the snapshot section below).
+        self._context: BrowserContext | None = None
+        self._snapshot_task: asyncio.Task[None] | None = None
+        self.session_snapshot_restored = False
+        self.session_snapshot_captured_at: str | None = None
+        self.snapshot_debounce_seconds = 4.0
+        self.protected_ready_selector: str | None = None
+        self.account_selector: str | None = None
 
     @property
     def launch_args(self) -> list[str]:
@@ -252,6 +265,125 @@ class BrowserRuntime:
                 )
             options["ignore_default_args"] = ["--use-mock-keychain"]
         return options
+
+    # --- Hybrid persistence: persistent profile directory + explicit storage-state snapshot -----
+    #
+    # Why both halves are needed:
+    # * The persistent directory keeps non-session cookies, localStorage and IndexedDB across
+    #   launches, and macOS Keychain decrypts those rows (``macos_system_keychain``).
+    # * The platform's *business* session lives in session-scoped cookies such as
+    #   `.xingtu.cn/star_sessionid` (observed 2026-10-06: ``is_persistent=0``,
+    #   ``has_expires=0``).  Whether Chromium's crash-restore writes those rows back to disk is
+    #   timing dependent, which matches the observed "sometimes still logged in, sometimes
+    #   redirected to the login page" behaviour in the same profile.  A storage-state snapshot
+    #   taken while the session is verified makes that state explicit and re-injectable.
+    #
+    # Both the snapshot and its directory hold live credentials, so they stay inside the private
+    # runtime root with ``0600``/``0700`` permissions and never leave the execution unit.
+
+    @property
+    def session_snapshot_path(self) -> Path:
+        return self.private_root / "storage-state" / f"{self.config.unit_id}.json"
+
+    def session_snapshot_available(self) -> bool:
+        path = self.session_snapshot_path
+        return path.is_file() and path.stat().st_size > 0
+
+    async def export_session_snapshot(self, context: BrowserContext) -> bool:
+        """Persist the full cookie jar + local storage of a verified session. Never raises."""
+        if not self.config.capture_session_snapshot:
+            return False
+        try:
+            state = await context.storage_state()
+        except Exception:  # noqa: BLE001 - persistence must not break a verified session
+            return False
+        path = self.session_snapshot_path
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            os.chmod(path.parent, 0o700)
+            temporary = path.with_suffix(".tmp")
+            captured_at = datetime.now(UTC).isoformat()
+            payload: dict[str, Any] = {
+                "schema_version": "session_snapshot.v1",
+                "unit_id": self.config.unit_id,
+                "captured_at": captured_at,
+                "storage_state": state,
+            }
+            temporary.write_text(json.dumps(payload, ensure_ascii=False))
+            os.chmod(temporary, 0o600)
+            temporary.replace(path)
+        except OSError:
+            return False
+        self.session_snapshot_captured_at = captured_at
+        return True
+
+    async def _restore_session_snapshot(self, context: BrowserContext) -> bool:
+        if not self.config.capture_session_snapshot or not self.session_snapshot_available():
+            return False
+        try:
+            payload = json.loads(self.session_snapshot_path.read_text())
+            state = payload["storage_state"]
+            await context.add_cookies(state.get("cookies") or [])
+            for origin in state.get("origins") or []:
+                entries = origin.get("localStorage") or []
+                if not entries:
+                    continue
+                restored = json.dumps({item["name"]: item["value"] for item in entries})
+                await context.add_init_script(
+                    "(() => { const data = "
+                    + restored
+                    + "; for (const [k, v] of Object.entries(data)) "
+                    "window.localStorage.setItem(k, v); })()"
+                )
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
+        self.session_snapshot_restored = True
+        return True
+
+    def _on_frame_navigated(self, frame: Any) -> None:
+        """Schedule a snapshot capture after a successful navigation on a top-level frame."""
+        if not self.config.capture_session_snapshot or frame.parent_frame is not None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        if self._snapshot_task and not self._snapshot_task.done():
+            return
+        self._snapshot_task = loop.create_task(self._capture_after_navigation(frame))
+
+    async def _capture_after_navigation(self, frame: Any) -> None:
+        await asyncio.sleep(self.snapshot_debounce_seconds)
+        context = self._context
+        if context is None:
+            return
+        page = getattr(frame, "page", None)
+        if page is not None and not await self._session_looks_verified(page):
+            # Redirected to a public/login surface: this is not a verified session and capturing it
+            # would persist a broken state over a good snapshot.  A creator detail page carries no
+            # navigation menu, so the account locator is accepted as the second registered signal;
+            # matched to the bound identity it cannot be a public page.
+            return
+        await self.export_session_snapshot(context)
+
+    async def _session_looks_verified(self, page: Any) -> bool:
+        """True only when a registry-registered signal proves the bound session is live."""
+        if self.protected_ready_selector:
+            try:
+                if await page.locator(self.protected_ready_selector).count():
+                    return True
+            except Exception:  # noqa: BLE001
+                return False
+        if not self.account_selector or not self.config.expected_account_id:
+            return False
+        try:
+            locator = page.locator(self.account_selector)
+            if await locator.count() != 1:
+                return False
+            raw = (await locator.first.text_content(timeout=2000) or "").strip()
+        except Exception:  # noqa: BLE001
+            return False
+        return bool(raw) and raw == self.config.expected_account_id
 
     @asynccontextmanager
     async def open(self) -> Any:
@@ -305,6 +437,16 @@ class BrowserRuntime:
                         )
                         if browser.browser:
                             self.browser_version = browser.browser.version
+                        self._context = browser
+                        self.protected_ready_selector = _protected_ready_selector(config)
+                        self.account_selector = _account_selector(config)
+                        # Hybrid persistence: the persistent directory keeps non-session cookies,
+                        # localStorage and IndexedDB, while an explicit storage-state snapshot
+                        # re-injects the whole cookie jar (including session-scoped cookies the
+                        # platform issues, e.g. `.xingtu.cn/star_sessionid`) on the next launch.
+                        # The snapshot is applied before the first navigation, so the very first
+                        # request the platform sees already carries the verified session.
+                        await self._restore_session_snapshot(browser)
                         try:
                             probe_page = (
                                 browser.pages[0] if browser.pages else await browser.new_page()
@@ -312,11 +454,19 @@ class BrowserRuntime:
                             self.browser_ua = await probe_page.evaluate("navigator.userAgent")
                         except BrowserError:
                             self.browser_ua = None
+                        browser.on("framenavigated", self._on_frame_navigated)
                         yield browser
                     finally:
                         if browser:
+                            # Let a pending snapshot write finish: the session is still verified
+                            # at this point, and it is the state the next launch must restore.
+                            pending = self._snapshot_task
+                            if pending and not pending.done():
+                                with suppress(asyncio.TimeoutError, Exception):
+                                    await asyncio.wait_for(pending, timeout=10.0)
                             await close_browser_context(browser)
                             self.stopped = True
+                            self._context = None
             finally:
                 fcntl.flock(lock, fcntl.LOCK_UN)
 
@@ -337,6 +487,30 @@ async def close_browser_context(browser: BrowserContext, timeout_seconds: float 
 def load_unit(path: Path) -> UnitConfig:
     check_private(path)
     return UnitConfig.model_validate(json.loads(path.read_text()))
+
+
+def _account_selector(config: UnitConfig) -> str | None:
+    """Registry-provided account locator; ``None`` when the registry is unreadable."""
+    return _registry_selector(config, "account")
+
+
+def _protected_ready_selector(config: UnitConfig) -> str | None:
+    """Registry-provided marker of a signed-in business surface; ``None`` if unavailable.
+
+    Only used to decide whether the current page is worth snapshotting.  A missing or unreadable
+    registry never blocks the browser: snapshot capture is then skipped rather than guessed.
+    """
+    return _registry_selector(config, "protected_ready")
+
+
+def _registry_selector(config: UnitConfig, key: str) -> str | None:
+    try:
+        registry = json.loads(config.registry_path.read_text())
+        session = registry.get("session") or {}
+        selector = (session.get(key) or {}).get("selector")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return selector if isinstance(selector, str) and selector else None
 
 
 def confirm_local_browser_stopped(config: UnitConfig, private_root: Path) -> None:

@@ -43,6 +43,7 @@ from .domain import (
     SearchPage,
     SessionHealth,
     SessionHealthStatus,
+    StructuredValue,
     uid,
 )
 from .normalize import consistent, number, quote
@@ -200,10 +201,14 @@ class BrowserAdapter:
         }
         self.search_page: Page | None = None
         self.detail_page: Page | None = None
+        # Short poll window per cold-start bootstrap attempt. The registry's full
+        # `session_boot_timeout_seconds` stays the timeout for a session already on the protected
+        # surface; using it per attempt lets a single redirected hop consume the whole window.
+        self.bootstrap_probe_seconds = 15.0
         self.bindings: dict[str, str] = {}
         self.prepared_result: SearchPage | None = None
         self.search_replay: ReplayRequest | None = None
-        self.initial_observation: ModuleObservation | None = None
+        self.initial_observations: dict[str, ModuleObservation] = {}
         self.operation_metrics: dict[str, int] = {}
 
     def locator(self, page: Page, spec: LocatorSpec) -> Locator:
@@ -453,22 +458,61 @@ class BrowserAdapter:
         page = self.search_page
         # Start from the protected business page.  The SSO entry always renders a login form even
         # when the parent SSO session can still bootstrap Xingtu, so showing it first misrepresents
-        # a reusable session as logged out.  Only an indeterminate direct attempt gets one bounded
-        # SSO handshake before returning to the business page for the final verdict.
+        # a reusable session as logged out.
+        #
+        # Cold start is not a single navigation.  Observed 2026-10-06: the first hop to a
+        # registered business page is regularly redirected to `/?redirect_uri=...`, and the
+        # account/protected markers only become readable after the platform's own bootstrap runs
+        # on a later attempt.  A single attempt therefore reported a reusable session as
+        # indeterminate and the segment spun in WAITING_FOR_RESOURCE with zero candidates, while a
+        # probe that alternated business pages recovered within seconds.  Keep the same bounded,
+        # registered-URL recovery here: the first attempt gets the full boot timeout, later
+        # attempts get short ones, and the decisive verdict stays with `check_session`.
         session = self.registry.session
         assert session
-        await page.goto(spec.entry_url, wait_until="domcontentloaded")
-        health = await self.inspect_session(
-            page, timeout=self.registry.session_boot_timeout_seconds
-        )
-        if health.status == SessionHealthStatus.INDETERMINATE:
-            await page.goto(session.entry_url, wait_until="domcontentloaded")
-            await page.goto(spec.entry_url, wait_until="domcontentloaded")
+        await self._bootstrap_session(page, spec.entry_url, session.entry_url)
         await self.check_session(page)
         # Ignore intermediate reset responses; capture must surround final condition actions.
         await self.actions(page, spec.reset_actions)
         self.prepared_result = await self._search_operation(page, spec.apply_actions, plan, cp, ctx)
         return True
+
+    async def _bootstrap_session(
+        self,
+        page: Page,
+        business_url: str,
+        sso_url: str,
+        attempts: int = 4,
+    ) -> SessionHealth:
+        """Bounded cold-start bootstrap over the two registered session URLs only.
+
+        No selector is invented here: the probe is the registry's own account/protected locators,
+        and the recovery alternates the registered business entry with the registered SSO entry so
+        the platform can re-issue its business session.  A genuine logout still ends in
+        ``check_session`` raising ``ACCOUNT_LOGIN_REQUIRED``.
+        """
+        health: SessionHealth | None = None
+        session_spec = self.registry.session
+        registered = list(session_spec.business_urls) if session_spec else []
+        targets = [business_url] + [url for url in registered if url != business_url]
+        for attempt in range(1, attempts + 1):
+            if attempt > 1 and attempt % 2 == 0:
+                # Bounce through the registered SSO entry so the parent session can hand off a
+                # fresh business session, mirroring the verified manual recovery flow.
+                await page.goto(sso_url, wait_until="domcontentloaded")
+            target = targets[(attempt - 1) % len(targets)]
+            await page.goto(target, wait_until="domcontentloaded")
+            # Every bootstrap probe uses the short poll window.  The full session boot timeout is
+            # for a session already sitting on the protected surface; a first hop that the platform
+            # redirects away never becomes readable, and waiting the full timeout only burns the
+            # window in which a retry could still succeed (observed: 180s spent on an already
+            # redirected page, then WAITING_FOR_RESOURCE with zero candidates).
+            health = await self.inspect_session(page, timeout=self.bootstrap_probe_seconds)
+            if health.status != SessionHealthStatus.INDETERMINATE:
+                return health
+            await asyncio.sleep(2.0)
+        assert health
+        return health
 
     async def readback(self, page: Page) -> None:
         spec = self.registry.search
@@ -640,8 +684,14 @@ class BrowserAdapter:
             if (
                 not cp.cursor
                 or not cp.cursor.isdigit()
-                or not spec.page_fetch_max_verified
-                or int(cp.cursor) > spec.page_fetch_max_verified
+                or int(cp.cursor) < 2
+                or (
+                    not spec.page_fetch_continuous_verified
+                    and (
+                        not spec.page_fetch_max_verified
+                        or int(cp.cursor) > spec.page_fetch_max_verified
+                    )
+                )
             ):
                 raise CollectorError("SEARCH_CAPABILITY_LIMIT", "PAGE_FETCH_LIMIT_NOT_VERIFIED")
             if not self.search_replay:
@@ -660,16 +710,27 @@ class BrowserAdapter:
         try:
             await self.guard()
             spec = self.registry.modules[0]
+            initial_specs = [
+                module
+                for module in self.registry.modules
+                if module.basic or module.capture_on_profile_load
+            ]
+            initial_requests = [request for module in initial_specs for request in module.requests]
             operation = uid()
+            initial_defaults = {
+                key: value
+                for module in initial_specs
+                for key, value in module.default_bindings.items()
+            }
             bindings = {
                 **self.bindings,
-                **spec.default_bindings,
+                **initial_defaults,
                 "creator_id": creator.platform_creator_id,
                 "module": spec.key,
             }
             async with ResponseCollector(
                 page,
-                spec.requests,
+                initial_requests,
                 bindings,
                 self.timeout_seconds(spec.timeout_seconds),
                 self.registry.response_body_max_bytes or 1,
@@ -683,13 +744,16 @@ class BrowserAdapter:
                 await self.actions(page, spec.actions)
                 await self.wait_ready(page, spec.ready, spec.ready_hidden)
                 data, failures = await capture.read()
-                self.initial_observation = await self.parse_module(
-                    page, spec, creator, ctx, operation, data, failures
-                )
+                self.initial_observations = {
+                    module.key: await self.parse_module(
+                        page, module, creator, ctx, operation, data, failures
+                    )
+                    for module in initial_specs
+                }
             yield
         finally:
             self.detail_page = None
-            self.initial_observation = None
+            self.initial_observations = {}
             await page.close()
 
     async def verify_identity(self, page: Page, creator: CreatorRef) -> None:
@@ -724,9 +788,8 @@ class BrowserAdapter:
         page = self.detail_page
         await self.check_session(page)
         await self.verify_identity(page, creator)
-        if key == self.module_keys[0] and self.initial_observation:
-            result, self.initial_observation = self.initial_observation, None
-            return result
+        if key in self.initial_observations:
+            return self.initial_observations.pop(key)
         spec = next(m for m in self.registry.modules if m.key == key)
         operation = uid()
         bindings = {
@@ -1362,6 +1425,10 @@ class BrowserAdapter:
                         if not isinstance(raw, list) or not all(isinstance(v, str) for v in raw):
                             raise CollectorError("MODULE_COLLECTION_FAILED", "TAGS_SCHEMA")
                         value = raw
+                    elif field.kind == "structured":
+                        # Keep platform-native arrays/objects intact. Unit and enum semantics are
+                        # supplied by the verified field contract and are never inferred here.
+                        value = StructuredValue(data=raw)
                     else:
                         if not isinstance(raw, (str, int)) or not str(raw).strip():
                             raise CollectorError("MODULE_COLLECTION_FAILED", "TEXT_SCHEMA")

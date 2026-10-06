@@ -167,12 +167,16 @@ def test_browser_recovery_uses_project_lock_and_singleton_pid_without_ps(tmp_pat
 
 
 def test_research_next_page_request_is_fixed_and_does_not_mutate_page_one():
-    from xingtu.research import identity_digest, next_search_payload
+    from xingtu.research import identity_digest, next_search_payload, search_page_payload
 
     original = {"page_param": {"page": 1, "limit": 20}, "search_param": {"keyword": "x"}}
     page_two = next_search_payload(original)
     assert page_two["page_param"] == {"page": 2, "limit": 20}
     assert original["page_param"]["page"] == 1
+    assert search_page_payload(original, 3)["page_param"]["page"] == 3
+    assert search_page_payload(original, 5)["page_param"]["page"] == 5
+    with pytest.raises(CollectorError, match="RESEARCH_PAGE_OUT_OF_RANGE"):
+        search_page_payload(original, 6)
     with pytest.raises(CollectorError, match="SEARCH_PAGE_ONE_REQUIRED"):
         next_search_payload(page_two)
     first = identity_digest({"authors": [{"star_id": "one"}, {"star_id": "two"}]})

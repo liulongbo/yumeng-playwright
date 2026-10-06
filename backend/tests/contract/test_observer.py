@@ -145,3 +145,26 @@ async def test_response_size_limit(page):
         await page.evaluate("fetch('/search?condition=new')")
         results, failures = await capture.read()
         assert not results and failures["search"] == "RESPONSE_TOO_LARGE"
+
+
+async def test_http_success_contract_without_business_code(page):
+    request = RequestSpec.model_validate(
+        {
+            **spec().model_dump(),
+            "success_path": None,
+            "success_value": None,
+            "error_codes": {},
+        }
+    )
+    await page.route(
+        "**/search?*",
+        lambda route: route.fulfill(
+            content_type="application/json", body='{"creator":"A","value":0}'
+        ),
+    )
+    async with ResponseCollector(
+        page, [request], {"condition": "new", "creator": "A"}, 1, 4096
+    ) as capture:
+        await page.evaluate("fetch('/search?condition=new')")
+        results, failures = await capture.read()
+    assert results["search"]["value"] == 0 and not failures

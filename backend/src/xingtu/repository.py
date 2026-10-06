@@ -273,6 +273,81 @@ class Repository:
             if expected_account_id and row["expected_account_id"] != expected_account_id:
                 raise CollectorError("RESOURCE_UNAVAILABLE", "unit account identity is immutable")
 
+    def rebind_unit_account(
+        self,
+        unit: str,
+        account_id: str,
+        actor: str,
+        reason: str,
+        evidence_ref: str | None = None,
+        previous_config_account_id: str | None = None,
+    ) -> str | None:
+        """Change the bound platform account through an explicit, audited rebinding.
+
+        The binding stays immutable on every automated path (``register_unit`` still rejects a
+        changed identity).  A legitimate change of login identity — for example the bound account
+        is no longer usable and the operator logs in a different one — must go through this
+        method, which refuses to run while a browser host owns the unit and resets the session to
+        unverified so the new identity is observed from scratch.  No account is ever rebound
+        automatically on ``ACCOUNT_MISMATCH``.
+
+        ``previous_config_account_id`` records the superseded binding when it only ever existed in
+        the unit config file, so the audit row documents the real before/after in that case too.
+        """
+        if not account_id or not actor.strip() or not reason.strip():
+            raise CollectorError("INVALID_FORM", "ACCOUNT_ACTOR_AND_REASON_REQUIRED")
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM execution_units WHERE unit_id=%s FOR UPDATE", (unit,)
+            ).fetchone()
+            if not row:
+                raise CollectorError("RESOURCE_UNAVAILABLE", "unit not registered")
+            if row["owner"] or not row["browser_stopped"]:
+                raise CollectorError("RESOURCE_UNAVAILABLE", "unit already has a browser host")
+            previous = row["expected_account_id"] or previous_config_account_id
+            if previous == account_id:
+                raise CollectorError("INVALID_FORM", "ACCOUNT_ALREADY_BOUND")
+            conn.execute(
+                """UPDATE execution_units SET expected_account_id=%s,verified_account_id=NULL,
+                state='SESSION_UNVERIFIED',owner=NULL,mode=NULL,lease_until=NULL,
+                current_root_task_id=NULL,maintenance_deadline=NULL,idle_deadline=NULL,
+                last_session_status='INDETERMINATE',last_session_checked_at=now(),
+                last_session_reason='ACCOUNT_BINDING_CHANGED',
+                failure_reason='ACCOUNT_BINDING_CHANGED'
+                WHERE unit_id=%s""",
+                (account_id, unit),
+            )
+            conn.execute(
+                """INSERT INTO unit_account_rebindings(
+                unit_id,previous_account_id,account_id,actor,reason,evidence_ref,
+                previous_config_account_id)
+                VALUES(%s,%s,%s,%s,%s,%s,%s)""",
+                (
+                    unit,
+                    row["expected_account_id"],
+                    account_id,
+                    actor.strip(),
+                    reason.strip(),
+                    evidence_ref,
+                    previous_config_account_id,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO audit_logs(actor,action) VALUES(%s,%s)",
+                (
+                    actor.strip(),
+                    "rebind_unit_account:"
+                    + unit
+                    + ":"
+                    + str(previous)
+                    + "->"
+                    + account_id
+                    + ":"
+                    + reason.strip(),
+                ),
+            )
+            return previous
+
     def recover_stopped_unit(self, unit: str, actor: str) -> None:
         # Caller must perform local profile lock + process isolation verification first.
         with self.connect() as conn:

@@ -11,6 +11,7 @@ from xingtu.domain import (
     FilterPlan,
     NumberRange,
     SearchPage,
+    StructuredValue,
 )
 from xingtu.normalize import consistent, number, quote
 
@@ -71,6 +72,31 @@ def test_field_and_exhaustion_require_evidence():
         FieldObservation(
             field_key="f", status=FieldStatus.NO_DATA, operation_id="op", session_version=1
         )
+
+
+def test_structured_field_preserves_json_types_and_real_zero():
+    field = FieldObservation(
+        field_key="offers",
+        value=StructuredValue(
+            data=[
+                {"price": 0, "open": False, "labels": [], "discount": None},
+                {"price": 1200, "open": True},
+            ]
+        ),
+        raw_value='[{"price":0}]',
+        status=FieldStatus.COLLECTED,
+        source_kind="response",
+        source_contract="synthetic-v1",
+        operation_id="op",
+        session_version=1,
+    )
+    dumped = field.model_dump(mode="json")
+    assert dumped["value"]["data"][0] == {
+        "price": 0,
+        "open": False,
+        "labels": [],
+        "discount": None,
+    }
     with pytest.raises(ValidationError):
         SearchPage(
             candidates=[],
