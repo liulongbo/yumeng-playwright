@@ -389,13 +389,38 @@ class Engine:
                     module_started = time.monotonic()
                     try:
                         observation = await self.adapter.collect_module(key, ref, self.ctx)
+                        self.repo.record_capability_success(
+                            self.ctx.contract_version, f"profile_module:{key}"
+                        )
                     except CollectorError as exc:
-                        if exc.code != "MODULE_COLLECTION_FAILED":
+                        optional_schema_failure = (
+                            key != self.adapter.module_keys[0]
+                            and exc.code == "PLATFORM_PAGE_CHANGED"
+                            and exc.reason == "RESPONSE_SCHEMA_MISMATCH"
+                        )
+                        if exc.code != "MODULE_COLLECTION_FAILED" and not optional_schema_failure:
                             raise
                         operation = uid()
                         evidence_ref = self.record_evidence(
-                            "failure", operation_id=operation, failure_reason=exc.reason
+                            "failure",
+                            operation_id=operation,
+                            failure_reason=(
+                                f"{exc.code}:{exc.reason}"
+                                if optional_schema_failure
+                                else exc.reason
+                            ),
                         )
+                        if optional_schema_failure:
+                            # The creator identity and basic threshold remain strict. A malformed
+                            # optional module is isolated to its registered capability scope so
+                            # successful modules and the creator draft survive this observation.
+                            self.repo.record_capability_failure(
+                                self.ctx.contract_version,
+                                f"profile_module:{key}",
+                                identity,
+                                self.ctx.lease_generation,
+                                exc.reason,
+                            )
                         observation = ModuleObservation(
                             creator_ref=ref,
                             module_key=key,
@@ -403,7 +428,11 @@ class Engine:
                                 FieldObservation(
                                     field_key="__module_failure__",
                                     status=FieldStatus.FAILED,
-                                    failure_reason=exc.reason,
+                                    failure_reason=(
+                                        f"{exc.code}:{exc.reason}"
+                                        if optional_schema_failure
+                                        else exc.reason
+                                    ),
                                     operation_id=operation,
                                     session_version=self.ctx.session_version,
                                     evidence_refs=[evidence_ref] if evidence_ref else [],

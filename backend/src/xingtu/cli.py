@@ -13,7 +13,7 @@ from temporalio.client import Client
 
 from .browser_host import wait_for_manual_clearance
 from .contracts import PlatformRegistry
-from .covers import CoverPipeline, build_cover_store
+from .covers import CoverPipeline, S3CoverStore, build_cover_store
 from .diagnostics import run_session_diagnostics
 from .domain import CollectorError, FilterPlan, NetworkMode, ProfileRequirement, SegmentBudget
 from .evidence import EvidenceConfig
@@ -103,6 +103,8 @@ def main() -> None:
     preflight.add_argument("--config", type=Path, required=True)
     cover_gc = commands.add_parser("cover-gc")
     cover_gc.add_argument("--config", type=Path, required=True)
+    cover_init = commands.add_parser("cover-init")
+    cover_init.add_argument("--config", type=Path, required=True)
     research = commands.add_parser("research")
     research.add_argument("--config", type=Path, required=True)
     research.add_argument("--url", required=True)
@@ -268,6 +270,18 @@ def main() -> None:
             )
             removed = pipeline.cleanup_unreferenced()
             print(json.dumps({"removed": removed, "count": len(removed)}, ensure_ascii=False))
+        elif args.command == "cover-init":
+            config = load_unit(args.config)
+            store = build_cover_store(config.covers, repository(), ROOT / ".runtime")
+            if not isinstance(store, S3CoverStore):
+                raise CollectorError("INVALID_FORM", "COVER_INIT_REQUIRES_S3")
+            created = store.ensure_bucket()
+            print(
+                json.dumps(
+                    {"bucket": store.bucket, "created": created, "private": True},
+                    ensure_ascii=False,
+                )
+            )
         elif args.command == "research":
             config = load_unit(args.config)
             steps = (
@@ -384,7 +398,7 @@ def main() -> None:
                             "status": o.status,
                             "complete": o.complete,
                             "card_count": len(o.cards),
-                            "observed_at": o.observed_at,
+                            "observed_at": o.observed_at.isoformat(),
                             "coverage_gaps": o.coverage_gaps,
                             "coverage_notes": o.coverage_notes,
                             "covers": {

@@ -4,17 +4,34 @@ from decimal import Decimal
 from .domain import CollectorError, NumberRange, NumericValue, QuoteValue
 
 _NUMBER = re.compile(r"^(\d+(?:\.\d+)?)(万|[wW])?(\+)?$")
+_SIGNED_DECIMAL = re.compile(r"^[+-]?\d+(?:\.\d+)?$")
 
 
-def number(raw: str, *, unit: str) -> NumericValue:
+def number(raw: str, *, unit: str, ratio_input: str = "percent") -> NumericValue:
     text = raw.strip().replace(",", "")
     if unit == "ratio":
-        if not text.endswith("%"):
+        mode = ratio_input
+        if mode == "auto":
+            mode = "percent" if text.endswith("%") else "decimal"
+        if mode not in {"percent", "decimal"}:
             raise CollectorError("MODULE_COLLECTION_FAILED", "UNCONFIRMED_RATIO_UNIT")
-        parsed = number(text[:-1], unit="count")
-        if parsed.bound != "exact" or parsed.amount > 100:
+        if mode == "percent":
+            if not text.endswith("%"):
+                raise CollectorError("MODULE_COLLECTION_FAILED", "UNCONFIRMED_RATIO_UNIT")
+            digits = text[:-1].strip()
+            scale = Decimal(100)
+        else:
+            if text.endswith("%"):
+                raise CollectorError("MODULE_COLLECTION_FAILED", "UNCONFIRMED_RATIO_UNIT")
+            digits = text
+            scale = Decimal(1)
+        if not _SIGNED_DECIMAL.fullmatch(digits):
+            raise CollectorError("MODULE_COLLECTION_FAILED", "UNCONFIRMED_RATIO_UNIT")
+        amount = Decimal(digits) / scale
+        if abs(amount) > 1:
             raise CollectorError("MODULE_COLLECTION_FAILED", "INVALID_RATIO")
-        return NumericValue(amount=parsed.amount / 100, quantum=parsed.quantum / 100)
+        precision = len(digits.split(".")[1]) if "." in digits else 0
+        return NumericValue(amount=amount, quantum=(Decimal(10) ** -precision) / scale)
     match = _NUMBER.fullmatch(text)
     if not match:
         raise CollectorError("MODULE_COLLECTION_FAILED", "INVALID_NUMBER")

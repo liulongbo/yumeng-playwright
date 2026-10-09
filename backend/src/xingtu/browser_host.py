@@ -208,8 +208,9 @@ class BrowserHost:
             )
             raise CollectorError("ACCOUNT_MISMATCH", "WRONG_ACCOUNT")
 
-        # Verify the protected business capability, not merely an app shell or a Cookie.
-        await maintenance_page.goto(search.entry_url, wait_until="domcontentloaded")
+        # Manual clearance returned only after this exact page proved the protected surface and
+        # account. Reuse it for the capability check; a second navigation can duplicate business
+        # requests and needlessly invalidate an otherwise current observation.
         verifier = BrowserAdapter(
             self.browser,
             self.registry,

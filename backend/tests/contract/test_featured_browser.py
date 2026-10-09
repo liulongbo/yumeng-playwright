@@ -69,6 +69,7 @@ def registry(capabilities):
                     "success_path": "code",
                     "success_value": "0",
                     "repeats": True,
+                    "repeat_result_mode": "all",
                 }
             ],
             "result_request_key": "cards",

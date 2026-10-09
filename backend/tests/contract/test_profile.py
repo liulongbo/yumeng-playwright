@@ -1,6 +1,52 @@
+import pytest
 from xingtu.adapter import BrowserAdapter
 from xingtu.contracts import FieldSpec, LocatorSpec, ProfileModuleSpec, SourceSpec
 from xingtu.domain import CreatorRef, FieldStatus
+
+
+async def test_multiple_dom_locator_trims_deduplicates_and_preserves_order():
+    class MultipleLocator:
+        async def all_inner_texts(self):
+            return [" 3C及电器 ", "美妆", "3C及电器", "  "]
+
+    adapter = object.__new__(BrowserAdapter)
+    adapter.locator = lambda page, spec: MultipleLocator()
+    value = await adapter.read_locator(
+        None,
+        LocatorSpec(selector=".industry .xt-tag__content", multiple=True),
+    )
+    assert value == ["3C及电器", "美妆"]
+
+
+async def test_multiple_dom_locator_needs_explicit_container_to_prove_empty():
+    from xingtu.domain import CollectorError
+
+    class EmptyLocator:
+        def __init__(self, count):
+            self._count = count
+
+        async def all_inner_texts(self):
+            return []
+
+        async def count(self):
+            return self._count
+
+    adapter = object.__new__(BrowserAdapter)
+    adapter.locator = lambda page, spec: EmptyLocator(1 if spec.selector == ".industry" else 0)
+    value = await adapter.read_locator(
+        None,
+        LocatorSpec(
+            selector=".industry .tag",
+            multiple=True,
+            empty_container_selector=".industry",
+        ),
+    )
+    assert value == []
+    with pytest.raises(CollectorError, match="MISSING_SOURCE"):
+        await adapter.read_locator(
+            None,
+            LocatorSpec(selector=".missing .tag", multiple=True),
+        )
 
 
 async def test_parse_sources_periods_and_conflicts(plan, monkeypatch):
@@ -13,8 +59,9 @@ async def test_parse_sources_periods_and_conflicts(plan, monkeypatch):
     async def source(page, spec, responses, failures):
         from xingtu.domain import CollectorError
 
-        if spec.path == "timeout":
-            raise CollectorError("MODULE_COLLECTION_FAILED", "MODULE_TIMEOUT")
+        if spec.path in {"timeout", "missing"}:
+            reason = "MODULE_TIMEOUT" if spec.path == "timeout" else "MISSING_SOURCE"
+            raise CollectorError("MODULE_COLLECTION_FAILED", reason)
         return {
             "primary": "1.2万",
             "other": "15000",
@@ -24,6 +71,8 @@ async def test_parse_sources_periods_and_conflicts(plan, monkeypatch):
             "fallback": "42",
             "no_permission": "private",
             "structured": [{"price": 0, "open": False}, {"price": 1200, "open": True}],
+            "negative_decimal_ratio": "-0.002416911820995418",
+            "tags": [" 3C及电器 ", "美妆", "3C及电器", ""],
         }[spec.path]
 
     adapter.source = source
@@ -75,6 +124,29 @@ async def test_parse_sources_periods_and_conflicts(plan, monkeypatch):
             kind="structured",
             source=SourceSpec(kind="response", request_key="r", path="structured"),
         ),
+        FieldSpec(
+            key="registered_missing",
+            name="registered absent value",
+            kind="structured",
+            source=SourceSpec(kind="response", request_key="r", path="missing"),
+            missing_source_status="NO_DATA",
+            missing_source_evidence="live:synthetic:successful-response-field-absent",
+        ),
+        FieldSpec(
+            key="monthly_rate",
+            name="monthly follower growth rate",
+            kind="ratio",
+            unit="ratio",
+            ratio_input="auto",
+            period_label="月",
+            source=SourceSpec(kind="response", request_key="r", path="negative_decimal_ratio"),
+        ),
+        FieldSpec(
+            key="industry_labels",
+            name="industry labels",
+            kind="tags",
+            source=SourceSpec(kind="response", request_key="r", path="tags"),
+        ),
     ]
     spec = ProfileModuleSpec(
         key="fans",
@@ -100,5 +172,11 @@ async def test_parse_sources_periods_and_conflicts(plan, monkeypatch):
     assert observations["fallback"].fallback_reason == "MODULE_TIMEOUT"
     assert observations["private"].status == FieldStatus.NO_PERMISSION
     assert observations["structured"].value.data[0] == {"price": 0, "open": False}
+    assert observations["registered_missing"].status == FieldStatus.NO_DATA
+    assert observations["registered_missing"].failure_reason is None
+    assert observations["registered_missing"].evidence_refs[-1].startswith("live:synthetic:")
+    assert str(observations["monthly_rate"].value.amount) == "-0.002416911820995418"
+    assert observations["monthly_rate"].period_label == "月"
+    assert observations["industry_labels"].value == ["3C及电器", "美妆"]
     assert result.source_period_label == "synthetic 7 days"
     assert not result.complete

@@ -154,7 +154,7 @@ class ResponseCollector:
                 if request not in self.requests:
                     self.metrics["requests"] = self.metrics.get("requests", 0) + 1
                 self.requests[request] = spec
-                if request.post_data and isinstance(params, dict):
+                if isinstance(params, dict):
                     self.replays[spec.key] = ReplayRequest(
                         url=request.url,
                         method=request.method,
@@ -171,7 +171,12 @@ class ResponseCollector:
         self.metrics["responses"] = self.metrics.get("responses", 0) + 1
         task = asyncio.create_task(self.read_response(response, self.requests[response.request]))
         self.pending.add(task)
-        task.add_done_callback(self.pending.discard)
+        task.add_done_callback(self._response_task_done)
+
+    def _response_task_done(self, task: asyncio.Task[None]) -> None:
+        """Wake readers after the pending set transitions, avoiding a lost-notify race."""
+        self.pending.discard(task)
+        self.changed.set()
 
     async def read_response(self, response: Response, spec: RequestSpec) -> None:
         try:
@@ -201,9 +206,13 @@ class ResponseCollector:
                 for k, v in spec.response_match.items()
             ):
                 self.failures[spec.key] = "RESPONSE_UNCORRELATED"
-            elif spec.repeats:
+            elif spec.repeats and spec.repeat_result_mode == "all":
                 # Module-internal incremental loading: keep every correlated response body.
                 self.results.setdefault(spec.key, []).append(data)
+            elif spec.repeats and spec.repeat_result_mode == "latest":
+                # The registry may opt into latest only after proving that each occurrence is a
+                # complete snapshot for the same bound creator/module operation.
+                self.results[spec.key] = data
             else:
                 self.results[spec.key] = data
         except CollectorError as exc:
@@ -225,7 +234,9 @@ class ResponseCollector:
             if self.global_error:
                 raise self.global_error
             settled = set(self.results) | set(self.failures)
-            if all(s.key in settled for s in self.specs) and not self.pending:
+            # Optional responses enrich a result but do not hold an operation open after the
+            # caller's bounded settle window. Any response already in flight is still drained.
+            if all(s.key in settled for s in self.specs if s.required) and not self.pending:
                 break
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:

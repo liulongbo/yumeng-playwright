@@ -1,16 +1,17 @@
 {
   "schema_version": "platform_registry.v1",
-  "contract_version": "xingtu-ad-creator-profile-v2",
-  "adapter_version": "browser-v2",
+  "contract_version": "xingtu-ad-creator-featured-v9",
+  "adapter_version": "browser-v8",
   "status": "VERIFIED",
   "sample_kind": "live",
-  "verified_at": "2026-10-06T15:42:08+08:00",
+  "verified_at": "2026-10-08T22:18:00+08:00",
   "account_permission_type": "巨量星图广告主(客户)账号，具备达人广场找达人搜索权益；首个账号客户权益等级不足（search_for_author_square 返回 10003），本契约使用第二个已核验账号的真实观察",
   "evidence_refs": [
     "docs/evidence/UNIT-01-local-stage-2026-09-27.md",
     "docs/evidence/UNIT-01-local-stage-2026-09-27.log",
     "docs/evidence/AUTO-01-current-account-inventory-2026-09-28.md",
-    "docs/evidence/AUTO-01-profile-pagination-implementation-2026-10-06.md"
+    "docs/evidence/AUTO-01-profile-pagination-implementation-2026-10-06.md",
+    "docs/evidence/F05-six-fields-2026-10-08.md"
   ],
   "capabilities": {
     "version": "xingtu-ad-creator-square-v1",
@@ -185,6 +186,32 @@
           "response_match": {},
           "success_path": "base_resp.status_code",
           "success_value": "0"
+        },
+        {
+          "key": "platform_channel",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/author/get_author_platform_channel_info_v2",
+          "request_match": {
+            "o_author_id": "$creator_id",
+            "platform_source": "1",
+            "platform_channel": "1"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        },
+        {
+          "key": "side_base",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/aggregator/get_author_side_base_info",
+          "request_match": {
+            "o_author_id": "$creator_id"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
         }
       ],
       "fields": [
@@ -353,15 +380,114 @@
             "request_key": "base",
             "path": "unique_id"
           }
+        },
+        {
+          "key": "introduction",
+          "name": "介绍",
+          "kind": "text",
+          "empty_values": [
+            "",
+            "--",
+            "—"
+          ],
+          "source": {
+            "kind": "response",
+            "request_key": "platform_channel",
+            "path": "self_intro"
+          },
+          "fallback": {
+            "kind": "dom",
+            "locator": {
+              "selector": "span.info-item:has(> span.label:text-is('介绍')) span.value .collapse-text > span"
+            }
+          },
+          "fallback_on": [
+            "MISSING_SOURCE",
+            "MODULE_TIMEOUT"
+          ]
+        },
+        {
+          "key": "monthly_deep_users",
+          "name": "月深度用户数",
+          "kind": "number",
+          "unit": "count",
+          "period_label": "月",
+          "empty_values": [
+            "",
+            "--",
+            "—"
+          ],
+          "source": {
+            "kind": "dom",
+            "locator": {
+              "selector": ".data:has(.label .text:text-is('月深度用户数')) > .value"
+            }
+          }
+        },
+        {
+          "key": "monthly_follower_growth_rate",
+          "name": "月涨粉率",
+          "kind": "ratio",
+          "unit": "ratio",
+          "ratio_input": "auto",
+          "period_label": "月",
+          "empty_values": [
+            "",
+            "--",
+            "—"
+          ],
+          "source": {
+            "kind": "response",
+            "request_key": "side_base",
+            "path": "fans_growth_rate_30d"
+          },
+          "fallback": {
+            "kind": "dom",
+            "locator": {
+              "selector": ".data:has(.label .text:text-is('月涨粉率')) > .value"
+            }
+          },
+          "fallback_on": [
+            "MISSING_SOURCE",
+            "MODULE_TIMEOUT"
+          ]
+        },
+        {
+          "key": "creator_type_label",
+          "name": "达人类型",
+          "kind": "text",
+          "empty_values": [
+            "",
+            "--",
+            "—"
+          ],
+          "source": {
+            "kind": "dom",
+            "locator": {
+              "selector": ".info-item:has(> .title .text:text-is('达人类型')) > .content .xt-tag__content"
+            }
+          }
+        },
+        {
+          "key": "industry_labels",
+          "name": "行业标签",
+          "kind": "tags",
+          "empty_values": [
+            "[]"
+          ],
+          "source": {
+            "kind": "dom",
+            "locator": {
+              "selector": ".info-item:has(> .title .text:text-is('行业标签')) > .content .xt-tag__content",
+              "multiple": true,
+              "empty_container_selector": ".info-item:has(> .title .text:text-is('行业标签')) > .content"
+            }
+          }
         }
       ],
       "period_source": null,
       "absence": null,
-      "checkpoint_version": 1,
-      "coverage_gaps": [
-        "gender/creator_type/author_type 仍保留平台原值，页面枚举含义待当前账号复核",
-        "未发现可靠的达人个人介绍来源，不使用 MCN 介绍替代"
-      ]
+      "checkpoint_version": 2
     },
     {
       "key": "commercial",
@@ -382,7 +508,9 @@
           },
           "response_match": {},
           "success_path": "base_resp.status_code",
-          "success_value": "0"
+          "success_value": "0",
+          "repeats": true,
+          "repeat_result_mode": "latest"
         }
       ],
       "fields": [
@@ -413,10 +541,7 @@
           }
         }
       ],
-      "checkpoint_version": 1,
-      "coverage_gaps": [
-        "报价金额单位、video_type/task_category 枚举与页面名称待当前账号复核"
-      ]
+      "checkpoint_version": 1
     },
     {
       "key": "spread",
@@ -434,7 +559,9 @@
           "request_match": {
             "o_author_id": "$creator_id"
           },
-          "response_match": {}
+          "response_match": {},
+          "repeats": true,
+          "repeat_result_mode": "latest"
         },
         {
           "key": "commerce_spread",
@@ -444,7 +571,9 @@
           "request_match": {
             "o_author_id": "$creator_id"
           },
-          "response_match": {}
+          "response_match": {},
+          "repeats": true,
+          "repeat_result_mode": "latest"
         }
       ],
       "fields": [
@@ -456,7 +585,9 @@
             "kind": "response",
             "request_key": "spread",
             "path": "play_mid"
-          }
+          },
+          "missing_source_status": "NO_DATA",
+          "missing_source_evidence": "live:2026-10-07:spread-success-response-field-absent"
         },
         {
           "key": "interaction_rate",
@@ -486,7 +617,9 @@
             "kind": "response",
             "request_key": "spread",
             "path": "avg_duration"
-          }
+          },
+          "missing_source_status": "NO_DATA",
+          "missing_source_evidence": "live:2026-10-07:spread-success-response-field-absent"
         },
         {
           "key": "average_likes",
@@ -496,7 +629,9 @@
             "kind": "response",
             "request_key": "spread",
             "path": "like_avg"
-          }
+          },
+          "missing_source_status": "NO_DATA",
+          "missing_source_evidence": "live:2026-10-07:spread-success-response-field-absent"
         },
         {
           "key": "average_comments",
@@ -506,7 +641,9 @@
             "kind": "response",
             "request_key": "spread",
             "path": "comment_avg"
-          }
+          },
+          "missing_source_status": "NO_DATA",
+          "missing_source_evidence": "live:2026-10-07:spread-success-response-field-absent"
         },
         {
           "key": "average_shares",
@@ -516,7 +653,9 @@
             "kind": "response",
             "request_key": "spread",
             "path": "share_avg"
-          }
+          },
+          "missing_source_status": "NO_DATA",
+          "missing_source_evidence": "live:2026-10-07:spread-success-response-field-absent"
         },
         {
           "key": "expected_cpm",
@@ -629,10 +768,7 @@
           }
         }
       ],
-      "checkpoint_version": 1,
-      "coverage_gaps": [
-        "默认统计周期、比例缩放、观看时长与 CPM/CPE 单位待当前账号页面复核"
-      ]
+      "checkpoint_version": 1
     },
     {
       "key": "seeding",
@@ -650,7 +786,9 @@
           "request_match": {
             "o_author_id": "$creator_id"
           },
-          "response_match": {}
+          "response_match": {},
+          "repeats": true,
+          "repeat_result_mode": "latest"
         },
         {
           "key": "link_structure",
@@ -698,6 +836,8 @@
           "key": "personal_search_after_view",
           "name": "个人页看后搜人数",
           "kind": "structured",
+          "missing_source_status": "NO_DATA",
+          "missing_source_evidence": "live:2026-10-08:seed-base-success-response-optional-personal-field-absent",
           "source": {
             "kind": "response",
             "request_key": "seed_base",
@@ -708,6 +848,8 @@
           "key": "personal_search_after_view_rate",
           "name": "个人页看后搜比例",
           "kind": "structured",
+          "missing_source_status": "NO_DATA",
+          "missing_source_evidence": "live:2026-10-08:seed-base-success-response-optional-personal-field-absent",
           "source": {
             "kind": "response",
             "request_key": "seed_base",
@@ -735,10 +877,7 @@
           }
         }
       ],
-      "checkpoint_version": 1,
-      "coverage_gaps": [
-        "种草指标默认周期、比例及链路层级枚举待当前账号页面复核"
-      ]
+      "checkpoint_version": 2
     },
     {
       "key": "fulfillment",
@@ -864,10 +1003,7 @@
           }
         }
       ],
-      "checkpoint_version": 1,
-      "coverage_gaps": [
-        "信用分新旧口径、回复率缩放与订单周期待当前账号页面复核"
-      ]
+      "checkpoint_version": 1
     },
     {
       "key": "conversion",
@@ -885,7 +1021,9 @@
           "request_match": {
             "o_author_id": "$creator_id"
           },
-          "response_match": {}
+          "response_match": {},
+          "repeats": true,
+          "repeat_result_mode": "latest"
         },
         {
           "key": "local_sales",
@@ -1002,17 +1140,720 @@
           }
         }
       ],
-      "checkpoint_version": 1,
-      "coverage_gaps": [
-        "GPM/销售额/点击指标区间枚举、币种与默认周期待当前账号页面复核"
-      ]
+      "checkpoint_version": 1
+    },
+    {
+      "key": "fans",
+      "actions": [
+        {
+          "kind": "click",
+          "locator": {
+            "selector": ".el-tabs__item:has-text('连接用户')"
+          }
+        }
+      ],
+      "ready": {
+        "selector": "h2:has-text('连接用户分布')"
+      },
+      "timeout_seconds": 60,
+      "requests": [
+        {
+          "key": "daily_fans",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/data_sp/get_author_daily_fans",
+          "request_match": {
+            "author_id": "$creator_id",
+            "platform_source": "1"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        },
+        {
+          "key": "link_card",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/data_sp/author_link_card",
+          "request_match": {
+            "o_author_id": "$creator_id",
+            "platform_source": "1",
+            "platform_channel": "1"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        },
+        {
+          "key": "daily_link",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/data_sp/author_daily_link",
+          "request_match": {
+            "o_author_id": "$creator_id",
+            "platform_source": "1",
+            "platform_channel": "1"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        },
+        {
+          "key": "audience_distribution",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/data_sp/author_audience_distribution",
+          "request_match": {
+            "o_author_id": "$creator_id",
+            "platform_source": "1",
+            "platform_channel": "1"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        }
+      ],
+      "fields": [
+        {
+          "key": "monthly_connected_users",
+          "name": "月连接用户数",
+          "kind": "number",
+          "unit": "count",
+          "period_label": "月",
+          "empty_values": [
+            "",
+            "--",
+            "—"
+          ],
+          "source": {
+            "kind": "response",
+            "request_key": "link_card",
+            "path": "link_struct.5.value"
+          },
+          "fallback": {
+            "kind": "dom",
+            "locator": {
+              "selector": ".data:has(.label .text:text-is('月连接用户数')) > .value"
+            }
+          },
+          "fallback_on": [
+            "MISSING_SOURCE",
+            "MODULE_TIMEOUT"
+          ],
+          "compare_rounding": "nearest"
+        },
+        {
+          "key": "fans_daily_trend",
+          "name": "近30日连接用户总量趋势",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "daily_fans",
+            "path": "daily"
+          }
+        },
+        {
+          "key": "fans_daily_delta",
+          "name": "近30日连接用户增量趋势",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "daily_fans",
+            "path": "delta"
+          }
+        },
+        {
+          "key": "fans_growth",
+          "name": "连接用户增长量",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "daily_fans",
+            "path": "fans_growth_v2"
+          }
+        },
+        {
+          "key": "fans_growth_rate",
+          "name": "连接用户增长率",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "daily_fans",
+            "path": "fans_growth_rate_v2"
+          }
+        },
+        {
+          "key": "connection_funnel",
+          "name": "连接用户漏斗",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "link_card",
+            "path": "link_struct"
+          }
+        },
+        {
+          "key": "connection_daily_trend",
+          "name": "近30日连接用户趋势",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "daily_link",
+            "path": "link_daily_cnt"
+          }
+        },
+        {
+          "key": "audience_distributions",
+          "name": "连接用户画像分布",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "audience_distribution",
+            "path": "distributions"
+          }
+        },
+        {
+          "key": "audience_last_updated_at",
+          "name": "连接用户画像更新时间",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "audience_distribution",
+            "path": "last_update_time"
+          }
+        }
+      ],
+      "checkpoint_version": 2
+    },
+    {
+      "key": "creation",
+      "actions": [
+        {
+          "kind": "click",
+          "locator": {
+            "selector": ".el-tabs__item:has-text('创作能力')"
+          }
+        }
+      ],
+      "ready": {
+        "selector": "h3:has-text('最新15个视频表现柱状图')"
+      },
+      "timeout_seconds": 60,
+      "requests": [
+        {
+          "key": "video_distribution",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/data_sp/author_video_distribution",
+          "request_match": {
+            "o_author_id": "$creator_id",
+            "platform_source": "1",
+            "platform_channel": "1"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        },
+        {
+          "key": "hot_comments",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/data/get_author_hot_comment_tokens",
+          "request_match": {
+            "author_id": "$creator_id"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        },
+        {
+          "key": "content_density",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/aggregator/get_author_content_label_density",
+          "request_match": {
+            "o_author_id": "$creator_id"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        },
+        {
+          "key": "show_items",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/author/get_author_show_items_v2",
+          "request_match": {
+            "o_author_id": "$creator_id",
+            "platform_source": "1",
+            "platform_channel": "1"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0",
+          "repeats": true,
+          "repeat_result_mode": "latest"
+        }
+      ],
+      "fields": [
+        {
+          "key": "video_content_distribution",
+          "name": "视频内容类型分布",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "video_distribution",
+            "path": "video_content_distribution"
+          }
+        },
+        {
+          "key": "hot_comment_tokens",
+          "name": "评论热词",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "hot_comments",
+            "path": "hot_comment_tokens"
+          }
+        },
+        {
+          "key": "content_theme_density",
+          "name": "内容主题集中度",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "content_density",
+            "path": "content_theme_label_map"
+          }
+        },
+        {
+          "key": "recent_video_performance",
+          "name": "最新15个视频表现",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "show_items",
+            "path": "latest_item_info"
+          }
+        },
+        {
+          "key": "recent_xingtu_video_performance",
+          "name": "最新星图视频表现",
+          "kind": "structured",
+          "empty_values": [
+            "[]"
+          ],
+          "source": {
+            "kind": "response",
+            "request_key": "show_items",
+            "path": "latest_star_item_info"
+          }
+        },
+        {
+          "key": "performance_descriptions",
+          "name": "视频表现口径说明",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "show_items",
+            "path": "data_description"
+          }
+        }
+      ],
+      "checkpoint_version": 1
     }
   ],
-  "featured": [],
+  "featured": [
+    {
+      "key": "excellent_reach",
+      "module_label": "优秀传播视频",
+      "reload_homepage": true,
+      "actions": [
+        {
+          "kind": "click",
+          "locator": {
+            "selector": ".el-tabs__item:has-text('达人概览')"
+          }
+        },
+        {
+          "kind": "click",
+          "locator": {
+            "selector": ".el-tabs__item:has-text('商业能力')"
+          }
+        },
+        {
+          "kind": "scroll",
+          "locator": {
+            "selector": "#star-layout-content-wrapper"
+          }
+        },
+        {
+          "kind": "scroll",
+          "locator": {
+            "selector": "#star-layout-content-wrapper"
+          }
+        },
+        {
+          "kind": "scroll",
+          "locator": {
+            "selector": "#star-layout-content-wrapper"
+          }
+        }
+      ],
+      "ready": {
+        "selector": "label.xt-title:has-text('优秀传播视频')"
+      },
+      "timeout_seconds": 60,
+      "response_settle_seconds": 5,
+      "requests": [
+        {
+          "key": "cards",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/data_sp/author_spread_videos",
+          "request_match": {
+            "o_author_id": "$creator_id",
+            "platform_source": "1",
+            "platform_channel": "1"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        },
+        {
+          "key": "cover_signs",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/fe_common_service/tools/get_sign_image",
+          "request_match": {},
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0",
+          "required": false,
+          "repeats": true,
+          "repeat_result_mode": "all"
+        }
+      ],
+      "result_request_key": "cards",
+      "cards_path": "spread_videos",
+      "link_hosts": [
+        "www.iesdouyin.com"
+      ],
+      "default_period_label": "达人近30天播放量TOP视频",
+      "load_complete_path": "base_resp.status_code",
+      "load_complete_value": "0",
+      "card_fields": [
+        {
+          "key": "platform_content_id",
+          "name": "作品 ID",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "id"
+          }
+        },
+        {
+          "key": "local_key",
+          "name": "模块局部作品键",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "video_id"
+          }
+        },
+        {
+          "key": "link",
+          "name": "作品链接",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "url"
+          }
+        },
+        {
+          "key": "title",
+          "name": "标题",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "title"
+          }
+        },
+        {
+          "key": "subtitle",
+          "name": "副标题",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "subtitle"
+          },
+          "missing_source_status": "NOT_PROVIDED",
+          "missing_source_evidence": "docs/evidence/F06-live-contract-minio-2026-10-07.md#u05"
+        },
+        {
+          "key": "play",
+          "name": "播放量",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "stats.watch_cnt"
+          }
+        },
+        {
+          "key": "like",
+          "name": "点赞量",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "stats.like_cnt"
+          }
+        },
+        {
+          "key": "comment",
+          "name": "评论量",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "stats.comment_cnt"
+          }
+        },
+        {
+          "key": "cover",
+          "name": "封面",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "cover_signs",
+            "path": "mainURL",
+            "join_row_path": "cover_uri",
+            "join_response_path": "img.uri",
+            "join_request_path": "uri"
+          }
+        }
+      ],
+      "cover": {
+        "field_key": "cover",
+        "allowed_hosts": [
+          "p3-star-fe-sign.byteimg.com",
+          "p9-star-fe-sign.byteimg.com",
+          "p26-star-fe-sign.byteimg.com"
+        ],
+        "allowed_content_types": [
+          "image/webp"
+        ],
+        "max_bytes": 5242880,
+        "timeout_seconds": 20,
+        "max_redirects": 0
+      },
+      "checkpoint_version": 4
+    },
+    {
+      "key": "excellent_seeding",
+      "module_label": "优秀种草视频",
+      "reload_homepage": true,
+      "actions": [
+        {
+          "kind": "click",
+          "locator": {
+            "selector": ".el-tabs__item:has-text('达人概览')"
+          }
+        },
+        {
+          "kind": "click",
+          "locator": {
+            "selector": ".el-tabs__item:has-text('商业能力')"
+          }
+        },
+        {
+          "kind": "scroll",
+          "locator": {
+            "selector": "#star-layout-content-wrapper"
+          }
+        },
+        {
+          "kind": "scroll",
+          "locator": {
+            "selector": "#star-layout-content-wrapper"
+          }
+        },
+        {
+          "kind": "scroll",
+          "locator": {
+            "selector": "#star-layout-content-wrapper"
+          }
+        }
+      ],
+      "ready": {
+        "selector": "label.xt-title:has-text('优秀种草视频'), .xt-empty__desc:has-text('该达人近30天内暂无商单数据')"
+      },
+      "timeout_seconds": 60,
+      "response_settle_seconds": 5,
+      "requests": [
+        {
+          "key": "cards",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/data_sp/author_shopping_videos",
+          "request_match": {
+            "o_author_id": "$creator_id",
+            "platform_source": "1",
+            "platform_channel": "1"
+          },
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0"
+        },
+        {
+          "key": "cover_signs",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/fe_common_service/tools/get_sign_image",
+          "request_match": {},
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0",
+          "required": false,
+          "repeats": true,
+          "repeat_result_mode": "all"
+        }
+      ],
+      "result_request_key": "cards",
+      "cards_path": "shopping_videos",
+      "link_hosts": [
+        "www.iesdouyin.com"
+      ],
+      "default_period_label": "达人近30天用户互动/转化量TOP视频",
+      "load_complete_path": "base_resp.status_code",
+      "load_complete_value": "0",
+      "card_fields": [
+        {
+          "key": "platform_content_id",
+          "name": "作品 ID",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "id"
+          }
+        },
+        {
+          "key": "local_key",
+          "name": "模块局部作品键",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "video_id"
+          }
+        },
+        {
+          "key": "link",
+          "name": "作品链接",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "url"
+          }
+        },
+        {
+          "key": "title",
+          "name": "标题",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "title"
+          }
+        },
+        {
+          "key": "subtitle",
+          "name": "副标题",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "subtitle"
+          },
+          "missing_source_status": "NOT_PROVIDED",
+          "missing_source_evidence": "docs/evidence/F06-live-contract-minio-2026-10-07.md#u05"
+        },
+        {
+          "key": "play",
+          "name": "播放量",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "stats.watch_cnt"
+          }
+        },
+        {
+          "key": "like",
+          "name": "点赞量",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "stats.like_cnt"
+          }
+        },
+        {
+          "key": "comment",
+          "name": "评论量",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "cards",
+            "path": "stats.comment_cnt"
+          }
+        },
+        {
+          "key": "cover",
+          "name": "封面",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "cover_signs",
+            "path": "mainURL",
+            "join_row_path": "cover_uri",
+            "join_response_path": "img.uri",
+            "join_request_path": "uri"
+          }
+        }
+      ],
+      "cover": {
+        "field_key": "cover",
+        "allowed_hosts": [
+          "p3-star-fe-sign.byteimg.com",
+          "p9-star-fe-sign.byteimg.com",
+          "p26-star-fe-sign.byteimg.com"
+        ],
+        "allowed_content_types": [
+          "image/webp"
+        ],
+        "max_bytes": 5242880,
+        "timeout_seconds": 20,
+        "max_redirects": 0
+      },
+      "checkpoint_version": 4
+    }
+  ],
   "direct_api_enabled": false,
   "raw_har_trace_enabled": false,
-  "coverage_gaps": [
-    "粉丝性别/年龄/地域画像数据源待确认",
-    "创作能力标签页数据源待确认"
-  ]
+  "coverage_gaps": []
 }

@@ -50,6 +50,7 @@ SCALAR_ALLOWLIST = re.compile(
 )
 # ASCII lower-label tokens (platform enum values) are retained; anything else is described by shape.
 ENUM_TOKEN = re.compile(r"^[a-z][a-z0-9_.\-]{0,47}$")
+URL_FIELD = re.compile(r"(^|_)(url|uri|link)($|_)|(url|uri|link)$", re.IGNORECASE)
 
 
 def _shape(value: Any) -> str:
@@ -66,8 +67,6 @@ def _shape(value: Any) -> str:
         return "empty"
     if text.isdigit():
         return f"digits:{len(text)}"
-    if ENUM_TOKEN.match(text):
-        return text
     return f"str:len={len(text)}"
 
 
@@ -83,6 +82,12 @@ def _safe_scalar(key: str, value: Any) -> Any:
             if ENUM_TOKEN.match(value) or value.isdigit() or len(value) <= 12
             else _shape(value)
         )
+    if isinstance(value, str) and URL_FIELD.search(key):
+        parsed = urlsplit(value)
+        if parsed.scheme in {"http", "https"} and parsed.hostname:
+            # Contract research needs only the allowlisted origin, never a signed path/query or
+            # the original value. Ports are intentionally omitted.
+            return f"url_origin:{parsed.scheme}://{parsed.hostname}"
     return _shape(value)
 
 
@@ -212,6 +217,10 @@ DOM_OUTLINE_JS = """
         ? { client_height: el.clientHeight, scroll_height: el.scrollHeight,
             scroll_top: el.scrollTop }
         : null,
+      scroll_x: el.scrollWidth > el.clientWidth + 2
+        ? { client_width: el.clientWidth, scroll_width: el.scrollWidth,
+            scroll_left: el.scrollLeft }
+        : null,
       text_len: rawText.length,
       text: leaf ? rawText.slice(0, 60) : null,
       data
@@ -287,7 +296,7 @@ class ResearchRecorder:
         try:
             request = response.request
             resource_type = request.resource_type
-            if resource_type not in {"xhr", "fetch", "document"}:
+            if resource_type not in {"xhr", "fetch", "document", "image"}:
                 return
             parsed = urlsplit(request.url)
             entry: dict[str, Any] = {
@@ -296,12 +305,19 @@ class ResearchRecorder:
                 "resource_type": resource_type,
                 "method": request.method,
                 "host": parsed.hostname,
-                "path": parsed.path,
+                "path": "<redacted-image-path>" if resource_type == "image" else parsed.path,
                 "query": {key: _shape(values[0]) for key, values in parse_qs(parsed.query).items()},
                 "status": response.status,
                 "content_type": (response.headers or {}).get("content-type", ""),
             }
             self.seq += 1
+            if resource_type == "image":
+                # Cover contract research needs origin, media type and a bounded size shape only.
+                # Signed object paths, queries and bytes never enter the report.
+                length = (response.headers or {}).get("content-length")
+                entry["content_length"] = _shape(length) if length else "unknown"
+                self.responses.append(entry)
+                return
             if resource_type == "document":
                 entry["body"] = "document (not read)"
                 self.responses.append(entry)

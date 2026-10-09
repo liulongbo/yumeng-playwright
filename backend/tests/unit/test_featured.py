@@ -2,11 +2,16 @@
 
 import copy
 import hashlib
+import io
+import json
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from botocore.exceptions import ClientError
 from pydantic import ValidationError
-from xingtu.contracts import PlatformRegistry
-from xingtu.covers import CoverPipeline, FetchedCover
+from xingtu.adapter import BrowserAdapter
+from xingtu.contracts import FieldSpec, PlatformRegistry, SourceSpec
+from xingtu.covers import CoverPipeline, FetchedCover, S3CoverStore
 from xingtu.domain import (
     CollectionStatus,
     CollectorError,
@@ -18,6 +23,7 @@ from xingtu.domain import (
     FieldObservation,
     FieldStatus,
 )
+from xingtu.observer import ReplayRequest
 
 
 def creator():
@@ -56,6 +62,37 @@ def failed(key="title"):
         operation_id="op",
         session_version=1,
     )
+
+
+def test_joined_response_source_requires_all_join_paths():
+    with pytest.raises(ValidationError, match="join_row_path, join_response_path"):
+        SourceSpec(
+            kind="response",
+            request_key="cover_signs",
+            path="mainURL",
+            join_row_path="cover_uri",
+        )
+
+    source = SourceSpec(
+        kind="response",
+        request_key="cover_signs",
+        path="mainURL",
+        join_row_path="cover_uri",
+        join_response_path="img.uri",
+        join_request_path="uri",
+    )
+    assert source.join_response_path == "img.uri" and source.join_request_path == "uri"
+
+
+def test_missing_source_status_requires_a_live_evidence_reference():
+    with pytest.raises(ValidationError, match="missing_source_status and missing_source_evidence"):
+        FieldSpec(
+            key="subtitle",
+            name="subtitle",
+            kind="text",
+            source=SourceSpec(kind="response", request_key="cards", path="subtitle"),
+            missing_source_status="NOT_PROVIDED",
+        )
 
 
 def card(position=0, fields=None, *, cover=None, truncated=(), **extra):
@@ -118,7 +155,7 @@ def test_incomplete_status_needs_a_stated_gap_and_absence_needs_evidence():
     with pytest.raises(ValidationError, match="needs a reason"):
         observation(CollectionStatus.FAILED)
     empty = observation(CollectionStatus.EMPTY, load_complete=True, evidence_refs=["op:done"])
-    assert not empty.complete and empty.status == CollectionStatus.EMPTY
+    assert empty.complete and empty.status == CollectionStatus.EMPTY
     assert (
         observation(CollectionStatus.NO_PERMISSION, evidence_refs=["op:probe"]).status
         == CollectionStatus.NO_PERMISSION
@@ -378,6 +415,7 @@ def registry_dict(capabilities):
                     "success_path": "code",
                     "success_value": "0",
                     "repeats": True,
+                    "repeat_result_mode": "all",
                 }
             ],
             "result_request_key": "cards",
@@ -464,6 +502,143 @@ def registry_dict(capabilities):
 
 def test_featured_registry_is_publishable(capabilities):
     PlatformRegistry.model_validate(registry_dict(capabilities)).require_enabled(live=False)
+
+
+class FakeS3:
+    def __init__(self):
+        self.bucket_exists = False
+        self.created = 0
+        self.objects = {}
+
+    def head_bucket(self, *, Bucket):
+        if not self.bucket_exists:
+            raise ClientError(
+                {"Error": {"Code": "404"}, "ResponseMetadata": {"HTTPStatusCode": 404}},
+                "HeadBucket",
+            )
+        return {}
+
+    def create_bucket(self, *, Bucket):
+        self.bucket_exists = True
+        self.created += 1
+
+    def head_object(self, *, Bucket, Key):
+        body, metadata = self.objects[Key]
+        return {"ContentLength": len(body), "Metadata": metadata}
+
+    def get_object(self, *, Bucket, Key):
+        return {"Body": io.BytesIO(self.objects[Key][0])}
+
+    def delete_object(self, *, Bucket, Key):
+        self.objects.pop(Key, None)
+
+
+class FailingPutS3:
+    def put_object(self, **kwargs):
+        raise ClientError(
+            {"Error": {"Code": "BadGateway"}, "ResponseMetadata": {"HTTPStatusCode": 502}},
+            "PutObject",
+        )
+
+
+def test_s3_bucket_initialization_is_idempotent_and_readback_hash_is_verified():
+    client = FakeS3()
+    store = S3CoverStore(None, "http://synthetic.invalid", "covers", client=client)
+    assert store.ensure_bucket() is True
+    assert store.ensure_bucket() is False
+    assert client.created == 1
+
+    body = b"synthetic cover"
+    checksum = hashlib.sha256(body).hexdigest()
+    object_id = f"cover/root/{checksum}"
+    client.objects[object_id] = (body, {"sha256": checksum})
+    store.verify(object_id)
+    client.objects[object_id] = (b"tampered", {"sha256": checksum})
+    with pytest.raises(CollectorError, match="COVER_OBJECT_VERIFICATION_FAILED"):
+        store.verify(object_id)
+
+
+async def test_s3_write_failure_is_contained_as_a_failed_cover():
+    store = S3CoverStore(None, "http://synthetic.invalid", "covers", client=FailingPutS3())
+    ref = await CoverPipeline(None, store).store(
+        root_task_id="root",
+        source_url="https://cdn.synthetic.invalid/a.png",
+        spec=cover_spec(),
+        fetch=fetch_of(),
+    )
+
+    assert ref.status == CoverStatus.FAILED
+    assert ref.object_id is None
+    assert ref.failure_reason == "STORAGE_UNAVAILABLE:COVER_OBJECT_WRITE_FAILED"
+
+
+async def test_missing_joined_card_lookup_replays_only_the_registered_get_parameter(capabilities):
+    data = registry_dict(capabilities)
+    featured = data["featured"][0]
+    featured["card_fields"] = copy.deepcopy(featured["card_fields"])
+    featured["requests"].append(
+        {
+            "key": "cover_signs",
+            "method": "GET",
+            "host": "synthetic.invalid",
+            "path": "/api/sign",
+            "request_match": {},
+            "response_match": {},
+            "success_path": "code",
+            "success_value": "0",
+            "repeats": True,
+            "repeat_result_mode": "all",
+        }
+    )
+    cover = next(field for field in featured["card_fields"] if field["key"] == "cover")
+    cover["source"] = {
+        "kind": "response",
+        "request_key": "cover_signs",
+        "path": "img.mainURL",
+        "join_row_path": "cover",
+        "join_response_path": "img.uri",
+        "join_request_path": "uri",
+    }
+    registry = PlatformRegistry.model_validate(data)
+
+    async def guard():
+        pass
+
+    class Page:
+        def __init__(self):
+            self.urls = []
+
+        async def evaluate(self, script, args):
+            self.urls.append(args["url"])
+            uri = parse_qs(urlsplit(args["url"]).query)["uri"][0]
+            return {
+                "status": 200,
+                "contentType": "application/json",
+                "text": json.dumps(
+                    {"code": 0, "img": {"uri": uri, "mainURL": f"https://cdn/{uri}"}}
+                ),
+            }
+
+    page = Page()
+    adapter = BrowserAdapter(None, registry, "account", guard, live=False)
+    responses = {"cover_signs": [{"code": 0, "img": {"uri": "a", "mainURL": "https://cdn/a"}}]}
+    await adapter.complete_joined_card_sources(
+        page,
+        registry.featured[0],
+        [{"cover": "a"}, {"cover": "b"}],
+        responses,
+        {
+            "cover_signs": ReplayRequest(
+                url="https://synthetic.invalid/api/sign?uri=a&durationTS=1",
+                method="GET",
+                body={"uri": "a", "durationTS": "1"},
+                headers={},
+            )
+        },
+    )
+
+    assert page.urls == ["https://synthetic.invalid/api/sign?uri=b&durationTS=1"]
+    assert [body["img"]["uri"] for body in responses["cover_signs"]] == ["a", "b"]
 
 
 def _reject_featured(data, mutate):
