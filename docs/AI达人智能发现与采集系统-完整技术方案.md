@@ -283,6 +283,19 @@ MCN 的媒介人员根据商单需要填写达人筛选表单，系统将表单�
 
 数量使用整数或 Decimal 解析；`1.2万` 保存原文、换算值 12000 和近似标记，不声称精确到个位。`1万+` 保存下界语义，`—`、空字符串和占位符不能变为 0。百分数如 `5.2%` 可标准化为比例 0.052，同时保留 `%` 原文和原精度；未经契约确认不能把无单位的 `5.2` 自动除以 100。
 
+2026-10-08 已按当前绑定账号实证补齐以下基础字段字典；契约版本为 `xingtu-ad-creator-featured-v9`，完整主页清单为 8 模块 / 81 字段：
+
+| 页面字段 | 内部字段 | 已验证主来源 | 类型与口径 |
+|---|---|---|---|
+| 介绍 | `basic.introduction` | `get_author_platform_channel_info_v2.self_intro` | Unicode 文本；保留换行、Emoji 和特殊字符；DOM 完整文本仅作登记的缺源/超时回退 |
+| 月连接用户数 | `fans.monthly_connected_users` | `author_link_card.link_struct.5.value` | `NumericValue(count)`；API 精确计数，页面 `w/万` 缩写用于显示精度对照 |
+| 月深度用户数 | `basic.monthly_deep_users` | 首页同名 DOM | `NumericValue(count)`；`w/万` 换算并保留近似边界与显示量子，周期为“月” |
+| 月涨粉率 | `basic.monthly_follower_growth_rate` | `get_author_side_base_info.fans_growth_rate_30d` | `NumericValue(ratio)`；API 十进制比例原值保存，负数合法，页面 `%` 仅作显示对照 |
+| 达人类型 | `basic.creator_type_label` | 首页“达人类型”DOM | 业务展示字符串；与 `creator_type_raw`、`author_type_raw` 并存，不推测技术枚举 |
+| 行业标签 | `basic.industry_labels` | 首页“行业标签”DOM 多节点 | `list[str]`；trim、去空、按首次出现去重；不与内容主题或商业行业标签混用 |
+
+同一字段的 API 十进制比例与 DOM 百分比回退只有在字段契约显式声明 `ratio_input=auto` 时才允许；默认仍要求带 `%`。DOM 多节点读取也必须由定位器显式声明，既有单值定位的唯一节点约束不变。完整来源、目标达人对照及持久化结果见 [F05 六字段验收证据](evidence/F05-six-fields-2026-10-08.md)。
+
 报价使用 Decimal，保存单值或上下限、币种及合作形式；“面议”、不可见与零元分别处理，不把不同视频时长或合作方式的金额合成一项。粉丝画像按性别、年龄、地域等真实维度分别保存原分组与比例，不强行凑足 100%、补造未知地区或在维度间混算。标签、MCN、地区等只做字典明确允许的归一化，原文保留。
 
 各字段实际采用的来源随观测保存。主来源缺失或超时，仅在注册表允许、页面身份及模块契约仍成立时读取备用来源；会话、权限或安全挑战不触发回退。备用来源成功时字段可为 `COLLECTED`，但保留回退原因。两来源同时存在时按已验证的显示精度和单位规则对照，不直接比较格式化字符串；无法解释的数值/语义冲突记为 `FAILED`，`failure_reason=SOURCE_CONFLICT`，保留两侧必要证据，不选择一个值覆盖。
