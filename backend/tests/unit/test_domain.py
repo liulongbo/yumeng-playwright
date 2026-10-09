@@ -43,6 +43,7 @@ def test_plan_zero_bounds_and_capability_gates(plan, capabilities):
         ("1万+", "10000", "lower"),
         ("2.5w", "25000", "approximate"),
         ("5.2%", "0.052", "exact"),
+        ("-0.24%", "-0.0024", "exact"),
     ],
 )
 def test_numeric_semantics(raw, amount, bound):
@@ -65,6 +66,18 @@ def test_quote_and_precision():
     assert not consistent(number("1.2万", unit="count"), number("14000", unit="count"))
     with pytest.raises(CollectorError):
         number("5.2", unit="ratio")
+
+
+def test_explicit_decimal_and_auto_ratio_inputs_preserve_precision():
+    api = number("-0.002416911820995418", unit="ratio", ratio_input="decimal")
+    display = number("-0.24%", unit="ratio", ratio_input="auto")
+    assert api.amount == Decimal("-0.002416911820995418")
+    assert api.quantum == Decimal("0.000000000000000001")
+    assert display.amount == Decimal("-0.0024")
+    with pytest.raises(CollectorError, match="UNCONFIRMED_RATIO_UNIT"):
+        number("-0.24%", unit="ratio", ratio_input="decimal")
+    with pytest.raises(CollectorError, match="INVALID_RATIO"):
+        number("-101%", unit="ratio")
 
 
 def test_field_and_exhaustion_require_evidence():

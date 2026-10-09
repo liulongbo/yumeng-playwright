@@ -160,6 +160,37 @@ async def test_optional_failure_keeps_basic_and_retry_new_observation(repo, star
     assert previous == first_snapshots[0]["payload"]
 
 
+async def test_optional_schema_mismatch_is_scoped_to_the_module(repo, started):
+    class OptionalSchemaMismatch(SyntheticAdapter):
+        async def collect_module(self, key, creator, ctx):
+            if key == "fans":
+                raise CollectorError("PLATFORM_PAGE_CHANGED", "RESPONSE_SCHEMA_MISMATCH")
+            return await super().collect_module(key, creator, ctx)
+
+    state = await Engine(repo, OptionalSchemaMismatch(), started).run()
+    assert state == TaskStatus.PARTIAL_COMPLETED
+    task = repo.get(started.root_task_id)
+    assert task.valid_count == 2
+    for candidate in (item for item in task.checkpoint.candidates if item.valid):
+        failure = candidate.modules["fans"].fields[0]
+        assert failure.field_key == "__module_failure__"
+        assert failure.failure_reason == "PLATFORM_PAGE_CHANGED:RESPONSE_SCHEMA_MISMATCH"
+        assert candidate.modules["basic"].complete
+
+
+async def test_basic_schema_mismatch_remains_a_strict_task_error(repo, started):
+    class BasicSchemaMismatch(SyntheticAdapter):
+        async def collect_module(self, key, creator, ctx):
+            if key == "basic":
+                raise CollectorError("PLATFORM_PAGE_CHANGED", "RESPONSE_SCHEMA_MISMATCH")
+            return await super().collect_module(key, creator, ctx)
+
+    with pytest.raises(CollectorError) as error:
+        await Engine(repo, BasicSchemaMismatch(), started).run()
+    assert error.value.code == "PLATFORM_PAGE_CHANGED"
+    assert error.value.reason == "RESPONSE_SCHEMA_MISMATCH"
+
+
 async def test_budget_preserves_entire_batch_and_resume(repo, started):
     engine = Engine(
         repo, SyntheticAdapter(["bad", "1", "2", "3"], invalid=["bad"]), started, scan_budget=1

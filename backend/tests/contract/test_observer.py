@@ -97,6 +97,70 @@ async def test_duplicate_matching_requests_are_ambiguous(page):
 
 
 @pytest.mark.parametrize(
+    "mode,expected",
+    [
+        ("all", [1, 2]),
+        ("latest", 2),
+    ],
+)
+async def test_registered_repeated_responses_have_an_explicit_result_mode(page, mode, expected):
+    calls = 0
+
+    async def repeated(route):
+        nonlocal calls
+        calls += 1
+        await route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"code": 0, "creator": "A", "value": calls}),
+        )
+
+    request = spec().model_copy(update={"repeats": True, "repeat_result_mode": mode})
+    await page.route("**/search?*", repeated)
+    async with ResponseCollector(
+        page, [request], {"condition": "new", "creator": "A"}, 1, 4096
+    ) as capture:
+        await page.evaluate(
+            "async () => { await fetch('/search?condition=new');"
+            " await fetch('/search?condition=new'); }"
+        )
+        results, failures = await capture.read()
+    assert not failures
+    if mode == "all":
+        assert [item["value"] for item in results["search"]] == expected
+    else:
+        assert results["search"]["value"] == expected
+
+
+async def test_missing_optional_response_does_not_hold_a_settled_operation_open(page):
+    await page.route("**/search?*", route_json)
+    optional = RequestSpec.model_validate(
+        {
+            **spec("cover").model_dump(),
+            "path": "/cover",
+            "required": False,
+        }
+    )
+    started = asyncio.get_running_loop().time()
+    async with ResponseCollector(
+        page, [spec(), optional], {"condition": "new", "creator": "A"}, 1, 4096
+    ) as capture:
+        await page.evaluate("fetch('/search?condition=new')")
+        results, failures = await capture.read()
+    assert results["search"]["creator"] == "A"
+    assert failures == {"cover": "MODULE_TIMEOUT"}
+    assert asyncio.get_running_loop().time() - started < 0.5
+
+
+def test_repeated_response_mode_must_be_explicit():
+    with pytest.raises(ValueError, match="repeat_result_mode"):
+        spec().model_copy(update={"repeats": True}).__class__.model_validate(
+            {**spec().model_dump(), "repeats": True}
+        )
+    with pytest.raises(ValueError, match="repeat_result_mode"):
+        RequestSpec.model_validate({**spec().model_dump(), "repeat_result_mode": "latest"})
+
+
+@pytest.mark.parametrize(
     "body,content_type,code",
     [
         ("<html>login</html>", "text/html", "PLATFORM_PAGE_CHANGED"),

@@ -15,6 +15,18 @@ class LocatorSpec(Model):
     # Form controls expose their content as a DOM property; the attribute is often absent.
     property: Literal["value"] | None = None
     value_map: dict[str, str] = Field(default_factory=dict)
+    # Read every matching text node as one ordered, de-duplicated string list.  This is opt-in so
+    # existing single-value locators keep their strict exactly-one-node contract.
+    multiple: bool = False
+    # For a multiple locator only: an exactly-one-match container proves a legitimate empty list.
+    # Without this explicit evidence, zero value nodes remain MISSING_SOURCE rather than NO_DATA.
+    empty_container_selector: str | None = None
+
+    @model_validator(mode="after")
+    def multiple_empty_evidence_is_scoped(self) -> LocatorSpec:
+        if self.empty_container_selector and not self.multiple:
+            raise ValueError("empty_container_selector requires multiple=true")
+        return self
 
 
 class Action(Model):
@@ -38,6 +50,10 @@ class RequestSpec(Model):
     # Registered module-internal incremental loading: the same request may fire several times and
     # every matched response contributes to this key. Default false keeps ambiguity rejection.
     repeats: bool = False
+    # Repeated card pages must all be retained, while a verified profile endpoint may emit several
+    # complete snapshots during one homepage load and use only the latest correlated response.
+    # The choice is contract data, never an observer heuristic.
+    repeat_result_mode: Literal["all", "latest"] | None = None
     cursor_invalid_codes: list[str] = Field(default_factory=list)
     error_codes: dict[str, str] = Field(default_factory=dict)
 
@@ -47,6 +63,8 @@ class RequestSpec(Model):
             raise ValueError("success_path and success_value must be paired")
         if (self.cursor_invalid_codes or self.error_codes) and not self.success_path:
             raise ValueError("business error mapping requires success_path")
+        if self.repeats != (self.repeat_result_mode is not None):
+            raise ValueError("repeats and repeat_result_mode must be configured together")
         return self
 
 
@@ -55,6 +73,25 @@ class SourceSpec(Model):
     request_key: str | None = None
     path: str | None = None
     locator: LocatorSpec | None = None
+    # A card may carry an opaque image URI while a second registered response returns its signed
+    # URL. The join is explicit and equality-only; it never constructs a URL or scans outside the
+    # declared auxiliary request.
+    join_row_path: str | None = None
+    join_response_path: str | None = None
+    # Optional, verified request parameter used to replay an observed same-origin lookup when a
+    # lazy UI did not request every row. It is valid only with the two response-join paths.
+    join_request_path: str | None = None
+
+    @model_validator(mode="after")
+    def join_contract_is_paired(self) -> SourceSpec:
+        join_parts = (self.join_row_path, self.join_response_path, self.join_request_path)
+        if any(join_parts) and not all(join_parts):
+            raise ValueError(
+                "join_row_path, join_response_path and join_request_path must be paired"
+            )
+        if self.kind == "dom" and self.join_row_path:
+            raise ValueError("DOM sources cannot declare a response join")
+        return self
 
 
 class FieldSpec(Model):
@@ -66,16 +103,34 @@ class FieldSpec(Model):
     fallback_on: list[Literal["MISSING_SOURCE", "MODULE_TIMEOUT"]] = Field(default_factory=list)
     compare_rounding: Literal["nearest"] | None = None
     unit: str | None = None
+    # Percent is the historical default. ``decimal`` is for an API ratio such as -0.0024, while
+    # ``auto`` is explicitly selected when an API decimal has a percent-formatted DOM fallback.
+    ratio_input: Literal["percent", "decimal", "auto"] = "percent"
     currency: str | None = None
     cooperation_form: str | None = None
     dimension: str | None = None
     period_source: SourceSpec | None = None
+    period_label: str | None = None
     # A registered platform truncation marker; a value ending with it is kept and flagged.
     truncate_marker: str | None = None
     # Exact registered values, not missing selectors, establish absence.
     empty_values: list[str] = Field(default_factory=list)
     permission_values: list[str] = Field(default_factory=list)
     not_provided_values: list[str] = Field(default_factory=list)
+    # Only a live-verified schema may state that an absent path itself means a known platform
+    # outcome. This is explicit contract data, never inferred by the parser.
+    missing_source_status: Literal["NO_DATA", "NO_PERMISSION", "NOT_PROVIDED"] | None = None
+    missing_source_evidence: str | None = None
+
+    @model_validator(mode="after")
+    def missing_source_contract_is_paired(self) -> FieldSpec:
+        if bool(self.missing_source_status) != bool(self.missing_source_evidence):
+            raise ValueError("missing_source_status and missing_source_evidence must be paired")
+        if self.kind != "ratio" and self.ratio_input != "percent":
+            raise ValueError("ratio_input is valid only for ratio fields")
+        if self.period_source and self.period_label:
+            raise ValueError("period_source and period_label are mutually exclusive")
+        return self
 
 
 class ModuleAbsenceSpec(Model):
@@ -129,12 +184,18 @@ class FeaturedCollectionSpec(Model):
 
     key: CollectionType
     module_label: str
+    # Re-enter the already verified creator homepage after observers are installed. This gives
+    # each default module an independent request window when the SPA caches an active tab.
+    reload_homepage: bool = False
     entry: str | None = None
     default_bindings: dict[str, str] = Field(default_factory=dict)
     actions: list[Action] = Field(default_factory=list)
     ready: LocatorSpec
     ready_hidden: list[LocatorSpec] = Field(default_factory=list)
     timeout_seconds: float | None = Field(default=None, gt=0)
+    # Bounded grace window for registered repeated auxiliary responses (for example per-card
+    # signed cover URLs) after the visible module is ready.
+    response_settle_seconds: float = Field(default=0, ge=0, le=10)
     requests: list[RequestSpec] = Field(default_factory=list)
     result_request_key: str
     cards_path: str
@@ -142,6 +203,7 @@ class FeaturedCollectionSpec(Model):
     # registered; identity is never inferred from titles or cover similarity.
     link_hosts: list[str] = Field(default_factory=list)
     default_period_path: str | None = None
+    default_period_label: str | None = None
     set_key_path: str | None = None
     load_complete_path: str
     load_complete_value: str
@@ -384,6 +446,8 @@ class PlatformRegistry(Model):
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "MISSING_FEATURED_RESULT_REQUEST")
             if not spec.cards_path or not spec.load_complete_path or not spec.load_complete_value:
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "INCOMPLETE_FEATURED_CONTRACT")
+            if spec.default_period_path and spec.default_period_label:
+                raise CollectorError("PLATFORM_PAGE_CHANGED", "AMBIGUOUS_FEATURED_PERIOD")
             field_keys = [f.key for f in spec.card_fields]
             if len(set(field_keys)) != len(field_keys):
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "DUPLICATE_CARD_FIELD")

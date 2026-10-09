@@ -185,6 +185,29 @@ def test_research_next_page_request_is_fixed_and_does_not_mutate_page_one():
     assert first["sha256"] != second["sha256"]
 
 
+def test_research_key_paths_keep_only_url_origin():
+    from xingtu.research import key_paths
+
+    paths = key_paths(
+        {
+            "cover_url": "https://cdn.example.invalid/private/image.jpg?token=secret",
+            "share_link": "https://www.example.invalid/work/123?auth=secret",
+            "mainURL": "https://img.example.invalid/signed/path?token=secret",
+            "cover_uri": "tos-cn-i-0000/private-object-id",
+            "video_id": "v2700fgi0000daju427og65hfnh0f0kg",
+            "status": "completed",
+        }
+    )
+
+    assert "cover_url=url_origin:https://cdn.example.invalid" in paths
+    assert "share_link=url_origin:https://www.example.invalid" in paths
+    assert "mainURL=url_origin:https://img.example.invalid" in paths
+    assert "cover_uri=str:len=31" in paths
+    assert "video_id=str:len=32" in paths
+    assert "status=completed" in paths
+    assert all("secret" not in path and "private/image" not in path for path in paths)
+
+
 def test_unit_config_file_permissions_are_enforced(tmp_path):
     path = tmp_path / "unit.json"
     path.write_text(json.dumps(LOCAL))

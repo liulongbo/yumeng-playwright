@@ -20,10 +20,11 @@ import hashlib
 import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 from urllib.parse import urlsplit
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 from .contracts import CoverSpec
 from .domain import CollectorError, CoverRef, CoverStatus, Model
@@ -149,9 +150,34 @@ class LocalCoverStore:
 
 
 class S3CoverStore:
-    def __init__(self, repository: Repository, endpoint: str, bucket: str):
-        self.client = boto3.client("s3", endpoint_url=endpoint)
+    def __init__(
+        self,
+        repository: Repository,
+        endpoint: str,
+        bucket: str,
+        *,
+        client: Any | None = None,
+    ):
+        self.client = client or boto3.client("s3", endpoint_url=endpoint)
         self.bucket, self.repo = bucket, repository
+
+    def ensure_bucket(self) -> bool:
+        """Create the private bucket once; return True only when this call created it."""
+        try:
+            self.client.head_bucket(Bucket=self.bucket)
+            return False
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", ""))
+            status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+            if code not in {"404", "NoSuchBucket", "NotFound"} and status != 404:
+                raise CollectorError("STORAGE_UNAVAILABLE", "COVER_BUCKET_CHECK_FAILED") from exc
+        except (BotoCoreError, OSError) as exc:
+            raise CollectorError("STORAGE_UNAVAILABLE", "COVER_BUCKET_CHECK_FAILED") from exc
+        try:
+            self.client.create_bucket(Bucket=self.bucket)
+        except (BotoCoreError, ClientError, OSError) as exc:
+            raise CollectorError("STORAGE_UNAVAILABLE", "COVER_BUCKET_CREATE_FAILED") from exc
+        return True
 
     def put(
         self,
@@ -163,14 +189,33 @@ class S3CoverStore:
         source_url: str,
     ) -> str:
         object_id = cover_object_key(root_task_id, checksum)
-        self.client.put_object(
-            Bucket=self.bucket,
-            Key=object_id,
-            Body=body,
-            ContentType=content_type,
-            Metadata={"sha256": checksum},
-        )
-        self.verify(object_id)
+        try:
+            self.client.put_object(
+                Bucket=self.bucket,
+                Key=object_id,
+                Body=body,
+                ContentType=content_type,
+                Metadata={"sha256": checksum},
+            )
+        except (BotoCoreError, ClientError, OSError) as exc:
+            # A storage outage is a per-cover failure.  Converting the SDK exception here keeps
+            # the card text/metrics publishable and lets the collection become incomplete instead
+            # of crashing the whole Temporal activity.
+            raise CollectorError("STORAGE_UNAVAILABLE", "COVER_OBJECT_WRITE_FAILED") from exc
+        try:
+            self._verify_object(
+                object_id,
+                expected_content_type=content_type,
+                expected_size=len(body),
+            )
+        except CollectorError:
+            try:
+                self.delete(object_id)
+            except CollectorError:
+                # Preserve the readback failure as the primary error.  The unregistered object is
+                # still eligible for the explicit orphan cleanup path after storage recovers.
+                pass
+            raise
         _register(
             self.repo,
             object_id=object_id,
@@ -183,17 +228,45 @@ class S3CoverStore:
         return object_id
 
     def verify(self, object_id: str) -> None:
+        self._verify_object(object_id)
+
+    def _verify_object(
+        self,
+        object_id: str,
+        *,
+        expected_content_type: str | None = None,
+        expected_size: int | None = None,
+    ) -> None:
         checksum = object_id.rsplit("/", 1)[-1]
-        head = self.client.head_object(Bucket=self.bucket, Key=object_id)
+        try:
+            head = self.client.head_object(Bucket=self.bucket, Key=object_id)
+            response = self.client.get_object(Bucket=self.bucket, Key=object_id)
+            body = response["Body"].read()
+        except (BotoCoreError, ClientError, KeyError, OSError) as exc:
+            raise CollectorError("STORAGE_UNAVAILABLE", "COVER_OBJECT_READBACK_FAILED") from exc
+        # Botocore preserves the header spelling returned by a server. AWS commonly returns
+        # lower-case metadata keys while MinIO may return title case, so compare them
+        # case-insensitively without weakening the value check.
+        metadata = {str(key).lower(): value for key, value in head.get("Metadata", {}).items()}
         if (
-            head.get("Metadata", {}).get("sha256") != checksum
+            metadata.get("sha256") != checksum
             or not isinstance(head.get("ContentLength"), int)
-            or head["ContentLength"] <= 0
+            or head["ContentLength"] != len(body)
+            or not body
+            or hashlib.sha256(body).hexdigest() != checksum
+            or (expected_size is not None and head["ContentLength"] != expected_size)
+            or (
+                expected_content_type is not None
+                and head.get("ContentType") != expected_content_type
+            )
         ):
             raise CollectorError("STORAGE_UNAVAILABLE", "COVER_OBJECT_VERIFICATION_FAILED")
 
     def delete(self, object_id: str) -> None:
-        self.client.delete_object(Bucket=self.bucket, Key=object_id)
+        try:
+            self.client.delete_object(Bucket=self.bucket, Key=object_id)
+        except (BotoCoreError, ClientError, OSError) as exc:
+            raise CollectorError("STORAGE_UNAVAILABLE", "COVER_OBJECT_DELETE_FAILED") from exc
 
 
 def build_cover_store(

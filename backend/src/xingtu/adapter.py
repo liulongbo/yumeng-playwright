@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import copy
+import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any, Protocol
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlencode, urljoin, urlsplit, urlunsplit
 
 from playwright.async_api import BrowserContext, Locator, Page
 from playwright.async_api import Error as BrowserError
@@ -110,6 +111,19 @@ async (args) => {
     body: JSON.stringify(args.body),
   });
   await response.arrayBuffer();
+}
+"""
+
+JOIN_LOOKUP_FETCH_JS = """
+async (args) => {
+  const response = await fetch(args.url, {
+    method: "GET",
+    credentials: "include",
+    headers: args.headers,
+  });
+  const contentType = response.headers.get("content-type") || "";
+  const text = await response.text();
+  return {status: response.status, contentType, text};
 }
 """
 
@@ -246,8 +260,21 @@ class BrowserAdapter:
             if await self.locator(page, locator).is_visible():
                 raise CollectorError(code, "REGISTERED_PAGE_STATE")
 
-    async def read_locator(self, page: Page, spec: LocatorSpec) -> str:
+    async def read_locator(self, page: Page, spec: LocatorSpec) -> str | list[str]:
         locator = self.locator(page, spec)
+        if spec.multiple:
+            values = [value.strip() for value in await locator.all_inner_texts() if value.strip()]
+            values = list(dict.fromkeys(values))
+            if not values:
+                if spec.empty_container_selector:
+                    container = self.locator(
+                        page,
+                        LocatorSpec(selector=spec.empty_container_selector, frame=spec.frame),
+                    )
+                    if await container.count() == 1:
+                        return []
+                raise CollectorError("MODULE_COLLECTION_FAILED", f"MISSING_SOURCE:{spec.selector}")
+            return [spec.value_map.get(value, value) for value in values]
         if await locator.count() != 1:
             # The failing locator is contract metadata, not page content, so it is safe to name.
             raise CollectorError("MODULE_COLLECTION_FAILED", f"MISSING_SOURCE:{spec.selector}")
@@ -920,7 +947,12 @@ class BrowserAdapter:
             self.registry.response_body_max_bytes or 1,
             metrics=self.operation_metrics,
         ) as capture:
-            if spec.entry:
+            if spec.reload_homepage:
+                await page.goto(creator.verified_homepage, wait_until="domcontentloaded")
+                self.registry.validate_homepage(page.url)
+                await self.check_session(page)
+                await self.verify_identity(page, creator)
+            elif spec.entry:
                 # Registered module entry; identity was verified on the homepage before leaving it.
                 entry = urljoin(creator.verified_homepage, spec.entry)
                 self.registry.validate_platform_url(entry)
@@ -930,7 +962,10 @@ class BrowserAdapter:
             await self.actions(page, spec.actions)
             await self.wait_ready(page, spec.ready, spec.ready_hidden)
             await self.check_session(page)
+            if spec.response_settle_seconds:
+                await asyncio.sleep(spec.response_settle_seconds)
             data, failures = await capture.read()
+            replays = dict(capture.replays)
         page_url = page.url
         absence = await self.collection_absence(page, spec, operation, data, failures)
         if absence is not None:
@@ -945,8 +980,16 @@ class BrowserAdapter:
                 contract_version=self.registry.contract_version,
                 evidence_refs=[evidence_ref],
             )
-        if any(s.required and s.key in failures for s in spec.requests):
-            raise CollectorError("MODULE_COLLECTION_FAILED", "FEATURED_RESPONSE_FAILED")
+        failed_required = [
+            f"{request.key}={failures[request.key]}"
+            for request in spec.requests
+            if request.required and request.key in failures
+        ]
+        if failed_required:
+            raise CollectorError(
+                "MODULE_COLLECTION_FAILED",
+                "FEATURED_RESPONSE_FAILED:" + ",".join(sorted(failed_required)),
+            )
         raw_result = data.get(spec.result_request_key)
         # A registered incremental load contributes several correlated bodies for the same key.
         bodies = raw_result if isinstance(raw_result, list) else [raw_result]
@@ -956,11 +999,12 @@ class BrowserAdapter:
             if not isinstance(part, list):
                 raise CollectorError("MODULE_COLLECTION_FAILED", "FEATURED_SCHEMA_MISMATCH")
             rows.extend(part)
+        await self.complete_joined_card_sources(page, spec, rows, data, replays)
         # The latest in-module load reports the end state; an earlier page may still say "more".
         load_complete = bool(bodies) and (
             text_value(lookup(bodies[-1], spec.load_complete_path)) == spec.load_complete_value
         )
-        period = None
+        period = spec.default_period_label
         if spec.default_period_path:
             period = next(
                 (
@@ -1034,6 +1078,80 @@ class BrowserAdapter:
         observation._settle_status()
         return observation
 
+    async def complete_joined_card_sources(
+        self,
+        page: Page,
+        spec: FeaturedCollectionSpec,
+        rows: list[Any],
+        data: dict[str, Any],
+        replays: dict[str, ReplayRequest],
+    ) -> None:
+        """Replay an observed same-origin lookup only for card joins the lazy UI omitted."""
+        for field in spec.card_fields:
+            source = field.source
+            if not (
+                source.request_key
+                and source.join_row_path
+                and source.join_response_path
+                and source.join_request_path
+            ):
+                continue
+            replay = replays.get(source.request_key)
+            if not replay or replay.method != "GET":
+                continue
+            request_spec = next(
+                (request for request in spec.requests if request.key == source.request_key), None
+            )
+            if request_spec is None:
+                continue
+            raw_bodies = data.get(source.request_key)
+            joined = raw_bodies if isinstance(raw_bodies, list) else [raw_bodies]
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                join_value = lookup(row, source.join_row_path)
+                if join_value is None or any(
+                    body is not None and lookup(body, source.join_response_path) == join_value
+                    for body in joined
+                ):
+                    continue
+                params = copy.deepcopy(replay.body)
+                try:
+                    replace_path(params, source.join_request_path, text_value(join_value))
+                    parsed = urlsplit(replay.url)
+                    replay_url = urlunsplit(
+                        (
+                            parsed.scheme,
+                            parsed.netloc,
+                            parsed.path,
+                            urlencode(params, doseq=True),
+                            "",
+                        )
+                    )
+                    response = await page.evaluate(
+                        JOIN_LOOKUP_FETCH_JS,
+                        {"url": replay_url, "headers": replay.headers},
+                    )
+                    encoded = str(response.get("text", "")).encode()
+                    if (
+                        int(response.get("status", 0)) != 200
+                        or "json" not in str(response.get("contentType", "")).lower()
+                        or len(encoded) > (self.registry.response_body_max_bytes or 1)
+                    ):
+                        continue
+                    body = json.loads(encoded)
+                    if request_spec.success_path and (
+                        text_value(lookup(body, request_spec.success_path))
+                        != request_spec.success_value
+                    ):
+                        continue
+                    if lookup(body, source.join_response_path) != join_value:
+                        continue
+                except (BrowserError, ValueError, TypeError, json.JSONDecodeError):
+                    continue
+                joined.append(body)
+            data[source.request_key] = joined
+
     @staticmethod
     def _coverage_notes(spec: FeaturedCollectionSpec, cards: list[FeaturedCard]) -> list[str]:
         notes: list[str] = []
@@ -1077,7 +1195,24 @@ class BrowserAdapter:
             raise CollectorError("PLATFORM_PAGE_CHANGED", "MISSING_RESPONSE_CONTRACT")
         if source.request_key in failures:
             raise CollectorError("MODULE_COLLECTION_FAILED", failures[source.request_key])
-        value = lookup(row, source.path)
+        if source.join_row_path and source.join_response_path:
+            join_value = lookup(row, source.join_row_path)
+            if join_value is None:
+                raise CollectorError("MODULE_COLLECTION_FAILED", "MISSING_SOURCE_JOIN_KEY")
+            raw_bodies = data.get(source.request_key)
+            bodies = raw_bodies if isinstance(raw_bodies, list) else [raw_bodies]
+            matches = [
+                body
+                for body in bodies
+                if body is not None and lookup(body, source.join_response_path) == join_value
+            ]
+            if not matches:
+                raise CollectorError("MODULE_COLLECTION_FAILED", "MISSING_SOURCE_JOIN")
+            # Signing may be repeated for the same URI. The latest correlated response is the
+            # current signed URL; unrelated image responses are ignored by the equality join.
+            value = lookup(matches[-1], source.path)
+        else:
+            value = lookup(row, source.path)
         if value is None:
             raise CollectorError("MODULE_COLLECTION_FAILED", "MISSING_SOURCE")
         return value
@@ -1149,7 +1284,23 @@ class BrowserAdapter:
             except CollectorError as exc:
                 if exc.code != "MODULE_COLLECTION_FAILED":
                     raise
-                observation.failure_reason = exc.reason
+                if exc.reason == "MISSING_SOURCE" and field_spec.missing_source_status:
+                    observation = FieldObservation.model_validate(
+                        {
+                            **observation.model_dump(),
+                            "status": FieldStatus(field_spec.missing_source_status),
+                            "failure_reason": None,
+                            "source_kind": field_spec.source.kind,
+                            "source_contract": self.registry.contract_version,
+                            "path_ref": field_spec.source.path,
+                            "evidence_refs": [
+                                f"{operation}:{spec.key.value}:{field_spec.key}",
+                                field_spec.missing_source_evidence,
+                            ],
+                        }
+                    )
+                else:
+                    observation.failure_reason = exc.reason
             except (ValueError, TypeError):
                 observation.failure_reason = "FIELD_SCHEMA_MISMATCH"
             fields.append(observation)
@@ -1204,6 +1355,7 @@ class BrowserAdapter:
             return number(
                 text_value(raw),
                 unit="ratio" if field_spec.kind == "ratio" else field_spec.unit or "count",
+                ratio_input=field_spec.ratio_input,
             )
         if field_spec.kind == "quote":
             if not field_spec.currency or not field_spec.cooperation_form:
@@ -1220,7 +1372,10 @@ class BrowserAdapter:
         if field_spec.kind == "tags":
             if not isinstance(raw, list) or not all(isinstance(v, str) for v in raw):
                 raise CollectorError("MODULE_COLLECTION_FAILED", "TAGS_SCHEMA")
-            return raw
+            values = list(dict.fromkeys(value.strip() for value in raw if value.strip()))
+            if not values:
+                raise CollectorError("MODULE_COLLECTION_FAILED", "TAGS_SCHEMA")
+            return values
         if not isinstance(raw, (str, int)) or not str(raw).strip():
             raise CollectorError("MODULE_COLLECTION_FAILED", "TEXT_SCHEMA")
         return str(raw)
@@ -1245,6 +1400,67 @@ class BrowserAdapter:
                 "timeoutMs": spec.timeout_seconds * 1000,
             },
         )
+        if result.get("error") == "COVER_FETCH_FAILED":
+            # Signed CDN images may deliberately omit CORS response headers. A page-level fetch
+            # then fails before JavaScript can read the response even though the same browser can
+            # render the image. Keep the transfer inside the current page/context/line: initiate
+            # a real image resource request and read the response Playwright already observed.
+            def related_image(response: Any) -> bool:
+                request = response.request
+                first = request
+                while first.redirected_from:
+                    first = first.redirected_from
+                return (
+                    first.url == url
+                    and request.resource_type == "image"
+                    and response.status not in {301, 302, 303, 307, 308}
+                )
+
+            try:
+                async with page.expect_response(
+                    related_image, timeout=spec.timeout_seconds * 1000
+                ) as response_info:
+                    loaded = await page.evaluate(
+                        """
+                        (source) => new Promise((resolve) => {
+                          const image = new Image();
+                          image.onload = () => { image.remove(); resolve(true); };
+                          image.onerror = () => { image.remove(); resolve(false); };
+                          image.src = source;
+                          document.body.appendChild(image);
+                        })
+                        """,
+                        url,
+                    )
+                response = await response_info.value
+                if not loaded:
+                    raise CollectorError("COVER_STORE_FAILED", "COVER_FETCH_FAILED")
+                chain: list[str] = []
+                request_cursor: Any = response.request
+                while request_cursor:
+                    chain.append(request_cursor.url)
+                    request_cursor = request_cursor.redirected_from
+                chain.reverse()
+                if len(chain) - 1 > spec.max_redirects:
+                    raise CollectorError("COVER_STORE_FAILED", "COVER_REDIRECT_LIMIT")
+                for hop in chain:
+                    parsed = urlsplit(hop)
+                    if (
+                        parsed.scheme != "https"
+                        or parsed.hostname not in spec.allowed_hosts
+                        or parsed.port not in {None, 443}
+                    ):
+                        raise CollectorError("COVER_STORE_FAILED", "COVER_HOST_NOT_ALLOWED")
+                return FetchedCover(
+                    body=await response.body(),
+                    content_type=response.headers.get("content-type", ""),
+                    final_url=response.url,
+                    status_code=response.status,
+                )
+            except CollectorError:
+                raise
+            except (BrowserError, TimeoutError) as exc:
+                raise CollectorError("COVER_STORE_FAILED", "COVER_FETCH_FAILED") from exc
         if result.get("error"):
             raise CollectorError("COVER_STORE_FAILED", str(result["error"]))
         return FetchedCover(
@@ -1350,7 +1566,7 @@ class BrowserAdapter:
                 operation_id=operation,
                 session_version=ctx.session_version,
                 unit=field.unit,
-                period_label=period,
+                period_label=field.period_label or period,
             )
             source = field.source
             try:
@@ -1388,7 +1604,9 @@ class BrowserAdapter:
                 if status == FieldStatus.COLLECTED:
                     if field.kind in {"number", "ratio"}:
                         value: Any = number(
-                            text, unit="ratio" if field.kind == "ratio" else field.unit or "count"
+                            text,
+                            unit="ratio" if field.kind == "ratio" else field.unit or "count",
+                            ratio_input=field.ratio_input,
                         )
                         if field.compare_rounding and field.fallback and source == field.source:
                             try:
@@ -1404,6 +1622,7 @@ class BrowserAdapter:
                                         unit="ratio"
                                         if field.kind == "ratio"
                                         else field.unit or "count",
+                                        ratio_input=field.ratio_input,
                                     ),
                                 ):
                                     raise CollectorError(
@@ -1424,7 +1643,9 @@ class BrowserAdapter:
                     elif field.kind == "tags":
                         if not isinstance(raw, list) or not all(isinstance(v, str) for v in raw):
                             raise CollectorError("MODULE_COLLECTION_FAILED", "TAGS_SCHEMA")
-                        value = raw
+                        value = list(dict.fromkeys(item.strip() for item in raw if item.strip()))
+                        if not value:
+                            raise CollectorError("MODULE_COLLECTION_FAILED", "TAGS_SCHEMA")
                     elif field.kind == "structured":
                         # Keep platform-native arrays/objects intact. Unit and enum semantics are
                         # supplied by the verified field contract and are never inferred here.
@@ -1446,7 +1667,24 @@ class BrowserAdapter:
             except CollectorError as exc:
                 if exc.code != "MODULE_COLLECTION_FAILED":
                     raise
-                observation.failure_reason = exc.reason
+                if exc.reason == "MISSING_SOURCE" and field.missing_source_status:
+                    observation = FieldObservation.model_validate(
+                        {
+                            **observation.model_dump(),
+                            "status": FieldStatus(field.missing_source_status),
+                            "failure_reason": None,
+                            "source_kind": source.kind,
+                            "source_contract": self.registry.contract_version,
+                            "path_ref": source.path
+                            or (source.locator.selector if source.locator else None),
+                            "evidence_refs": [
+                                f"{operation}:{field.key}",
+                                field.missing_source_evidence,
+                            ],
+                        }
+                    )
+                else:
+                    observation.failure_reason = exc.reason
             except (ValueError, TypeError):
                 observation.failure_reason = "FIELD_SCHEMA_MISMATCH"
             fields.append(observation)

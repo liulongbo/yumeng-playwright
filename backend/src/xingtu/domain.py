@@ -555,7 +555,14 @@ class FeaturedCollectionObservation(Model):
 
     @property
     def complete(self) -> bool:
-        return self.status == CollectionStatus.COMPLETE
+        # A registered terminal absence is a completed check, not a collected collection. Failed,
+        # unread and endpoint-unknown states remain incomplete.
+        return self.status in {
+            CollectionStatus.COMPLETE,
+            CollectionStatus.EMPTY,
+            CollectionStatus.NO_PERMISSION,
+            CollectionStatus.NOT_PROVIDED,
+        }
 
     def fingerprint(self) -> str:
         """Ordered identity fingerprint used to decide whether a reload is the same set."""

@@ -1,15 +1,19 @@
 {
-  "version": "full-homepage-inventory-v2-draft",
-  "inventory_verified": false,
+  "version": "full-homepage-inventory-v4-six-fields-live-verified",
+  "inventory_verified": true,
   "modules": {
-    "basic": ["platform_creator_id", "nickname", "avatar_uri", "followers", "gender", "city", "province", "mcn_name", "content_theme_labels", "creator_type_raw", "author_type_raw", "industry_labels_raw", "content_style_labels_raw", "douyin_sec_uid", "douyin_unique_id"],
+    "basic": ["platform_creator_id", "nickname", "avatar_uri", "followers", "gender", "city", "province", "mcn_name", "content_theme_labels", "creator_type_raw", "author_type_raw", "industry_labels_raw", "content_style_labels_raw", "douyin_sec_uid", "douyin_unique_id", "introduction", "monthly_deep_users", "monthly_follower_growth_rate", "creator_type_label", "industry_labels"],
     "commercial": ["cooperation_offers", "marketing_industry_tags"],
     "spread": ["play_median", "interaction_rate", "completion_rate", "average_duration", "average_likes", "average_comments", "average_shares", "expected_cpm", "expected_cpe", "sales_expected_cpm", "play_stability", "item_rate_metrics", "commercial_play_count", "commercial_natural_play_count", "commercial_cpm_20_60", "commercial_cpm_60", "commercial_cpe_20_60", "commercial_cpe_60"],
     "seeding": ["a3_increment", "search_after_view", "search_after_view_rate", "personal_search_after_view", "personal_search_after_view_rate", "search_word_ctr", "seeding_link_structure"],
     "fulfillment": ["credit_score", "new_credit_score", "historical_order_count", "processing_order_count", "max_processing_order_count", "message_reply_rate", "industry_order_distribution", "industry_play_distribution", "cooperation_industry_distribution"],
     "conversion": ["gpm_range", "sales_amount_range", "component_click_count_range", "component_click_rate_range", "related_cpc_range", "recommended_product_count", "product_price_range", "related_video_count", "related_video_play_median", "local_sales_overview"],
-    "fans": [],
-    "creation": []
+    "fans": ["monthly_connected_users", "fans_daily_trend", "fans_daily_delta", "fans_growth", "fans_growth_rate", "connection_funnel", "connection_daily_trend", "audience_distributions", "audience_last_updated_at"],
+    "creation": ["video_content_distribution", "hot_comment_tokens", "content_theme_density", "recent_video_performance", "recent_xingtu_video_performance", "performance_descriptions"]
   },
-  "evidence_refs": ["docs/evidence/AUTO-01-current-account-inventory-2026-09-28.md"]
+  "evidence_refs": [
+    "docs/evidence/AUTO-01-current-account-inventory-2026-09-28.md",
+    "docs/evidence/F06-live-contract-minio-2026-10-07.md#f05-inventory",
+    "docs/evidence/F05-six-fields-2026-10-08.md"
+  ]
 }

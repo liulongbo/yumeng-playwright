@@ -26,7 +26,7 @@ test-integration:
 test-contract:
 	.venv/bin/pytest backend/tests/contract -q
 test-e2e:
-	.venv/bin/pytest tests/e2e -q
+	PYTHONPATH=$(CURDIR) .venv/bin/pytest tests/e2e -q
 check: lint format-check typecheck test-unit
 migrate:
 	.venv/bin/xingtu migrate --environment "$(ENVIRONMENT)"
