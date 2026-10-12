@@ -7,6 +7,8 @@ dependencies = [
   "pydantic>=2.11,<3", "psycopg[binary]>=3.2,<4",
   "temporalio>=1.12,<2", "playwright>=1.55,<2",
   "boto3>=1.40,<2", "redis>=6,<7",
+  "fastapi>=0.116,<1", "uvicorn>=0.35,<1", "httpx>=0.28,<1",
+  "argon2-cffi>=25,<26", "langgraph>=1,<2",
 ]
 
 [dependency-groups]
@@ -14,6 +16,8 @@ dev = ["pytest>=8,<9", "pytest-asyncio>=1,<2", "ruff>=0.12,<1", "mypy>=1.17,<2",
 
 [project.scripts]
 xingtu = "xingtu.cli:main"
+xingtu-api = "xingtu.product_cli:run_api"
+xingtu-product = "xingtu.product_cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -37,4 +41,3 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.13"
 files = ["backend/src"]
 strict = true
-

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import suppress
 from pathlib import Path
 
@@ -9,10 +10,12 @@ from temporalio import activity
 from temporalio.client import Client, WorkflowExecutionStatus
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
+from temporalio.service import RPCError
 from temporalio.worker import Worker
 
 from .adapter import BrowserAdapter
 from .browser_host import BrowserHost
+from .challenge import ChallengeHandler, ChallengePolicy
 from .contracts import PlatformRegistry
 from .covers import CoverPipeline, build_cover_store
 from .domain import CollectorError, ExecutionContext, TaskStatus
@@ -22,13 +25,22 @@ from .repository import Repository
 from .runtime import UnitConfig, ensure_line
 from .workflow import CollectionWorkflow
 
+logger = logging.getLogger(__name__)
+
 
 class Activities:
-    def __init__(self, repo: Repository, config: UnitConfig, private_root: Path):
+    def __init__(
+        self,
+        repo: Repository,
+        config: UnitConfig,
+        private_root: Path,
+        challenge_policy: ChallengePolicy | None = None,
+    ):
         self.repo, self.config, self.private_root = repo, config, private_root
         # Temporal is configured for one Activity at a time, and this process lock also makes the
         # per-unit BrowserHost ownership explicit for direct tests/callers.
         self.host_lock = asyncio.Lock()
+        self.challenge_policy = challenge_policy or ChallengePolicy()
 
     @activity.defn(name="collect_segment_v1")
     async def collect(self, root: str) -> str:
@@ -82,7 +94,7 @@ class Activities:
                 raise CollectorError("LEASE_LOST", "BROWSER_HOST_NOT_STARTED")
             await host.heartbeat()
             activity.heartbeat(root)
-            if engine:
+            if engine and host.mode == "collect":
                 engine.guard()
 
         async def heartbeat() -> None:
@@ -98,7 +110,11 @@ class Activities:
                     return
 
         unit = self.repo.unit(task.execution_unit_id)
-        maintenance = unit["state"] in {"NEEDS_LOGIN", "ACCOUNT_MISMATCH"}
+        maintenance = unit["state"] in {
+            "NEEDS_LOGIN",
+            "ACCOUNT_MISMATCH",
+            "NEEDS_VERIFICATION",
+        }
         if maintenance:
             with self.repo.edit(root) as (current, _):
                 if current.attempt_id != task.attempt_id:
@@ -106,11 +122,15 @@ class Activities:
                 current.state = (
                     TaskStatus.WAITING_FOR_ACCOUNT
                     if unit["state"] == "ACCOUNT_MISMATCH"
+                    else TaskStatus.WAITING_FOR_VERIFICATION
+                    if unit["state"] == "NEEDS_VERIFICATION"
                     else TaskStatus.WAITING_FOR_LOGIN
                 )
                 current.failure_reason = (
                     "ACCOUNT_MISMATCH"
                     if unit["state"] == "ACCOUNT_MISMATCH"
+                    else "PLATFORM_SECURITY_CHALLENGE"
+                    if unit["state"] == "NEEDS_VERIFICATION"
                     else "ACCOUNT_LOGIN_REQUIRED"
                 )
 
@@ -127,16 +147,61 @@ class Activities:
                 ) as active_host:
                     host = active_host
                     pulse = asyncio.create_task(heartbeat())
+                    challenge_handler = ChallengeHandler(self.repo, self.challenge_policy)
                     try:
                         if host.mode == "maintenance":
-                            await host.maintain_and_promote(
-                                timeout=900, actor="browser-host:" + task.attempt_id
-                            )
+                            recovering_challenge = unit["state"] == "NEEDS_VERIFICATION"
+                            maintenance_timeout = self.challenge_policy.timeout_seconds
+                            if recovering_challenge:
+                                maintenance_timeout = challenge_handler.remaining_timeout(
+                                    self.repo.get(root)
+                                )
+                                if maintenance_timeout <= 0:
+                                    challenge_handler.failed(
+                                        root,
+                                        task.attempt_id,
+                                        "SECURITY_CHALLENGE_TIMEOUT",
+                                    )
+                                    with self.repo.edit(root) as (current, conn):
+                                        self.repo.persist_creators(conn, current, publish=True)
+                                        current.pipeline_complete = False
+                                        current.state = TaskStatus.PARTIAL_COMPLETED
+                                        current.failure_reason = "SECURITY_CHALLENGE_TIMEOUT"
+                                    return TaskStatus.PARTIAL_COMPLETED
+                            try:
+                                await host.maintain_and_promote(
+                                    timeout=maintenance_timeout,
+                                    actor="browser-host:" + task.attempt_id,
+                                    challenge_handler=challenge_handler
+                                    if recovering_challenge
+                                    else None,
+                                )
+                            except CollectorError as exc:
+                                if recovering_challenge and exc.code.startswith(
+                                    "SECURITY_CHALLENGE_"
+                                ):
+                                    challenge_handler.failed(root, task.attempt_id, exc.code)
+                                    with self.repo.edit(root) as (current, conn):
+                                        self.repo.persist_creators(conn, current, publish=True)
+                                        current.pipeline_complete = False
+                                        current.state = TaskStatus.PARTIAL_COMPLETED
+                                        current.failure_reason = exc.code
+                                    return TaskStatus.PARTIAL_COMPLETED
+                                raise
+                            if recovering_challenge:
+                                current = self.repo.get(root)
+                                challenge_handler.recovered(
+                                    root,
+                                    task.attempt_id,
+                                    current.checkpoint.challenge_current_creator,
+                                )
+                                await challenge_handler.cooldown()
                         while True:
                             with self.repo.edit(root) as (current, _):
                                 if current.state in {
                                     TaskStatus.WAITING_FOR_LOGIN,
                                     TaskStatus.WAITING_FOR_ACCOUNT,
+                                    TaskStatus.WAITING_FOR_VERIFICATION,
                                     TaskStatus.WAITING_FOR_RESOURCE,
                                     TaskStatus.RETRY_WAIT,
                                 }:
@@ -163,6 +228,9 @@ class Activities:
                                 guard,
                                 on_session_health=host.observe_session,
                             )
+                            adapter.creator_interval_seconds = (
+                                self.challenge_policy.creator_interval_seconds
+                            )
                             adapter.search_page = host.take_collection_page()
                             engine = Engine(
                                 self.repo, adapter, ctx, evidence=evidence, covers=covers
@@ -182,11 +250,49 @@ class Activities:
                                         exc.code, "browser-host:" + task.attempt_id
                                     )
                                     engine.record_error(exc)
-                                    await host.maintain_and_promote(
-                                        timeout=900,
-                                        actor="browser-host:" + task.attempt_id,
-                                        page=maintenance_page,
-                                    )
+                                    if exc.code == "PLATFORM_SECURITY_CHALLENGE":
+                                        attempt = challenge_handler.register(root, task.attempt_id)
+                                        if not attempt.allowed:
+                                            return engine.partial_complete(
+                                                attempt.terminal_reason
+                                                or "SECURITY_CHALLENGE_LIMIT"
+                                            )
+                                        if maintenance_page is None:
+                                            challenge_handler.failed(
+                                                root,
+                                                task.attempt_id,
+                                                "SECURITY_CHALLENGE_UNKNOWN",
+                                            )
+                                            return engine.partial_complete(
+                                                "SECURITY_CHALLENGE_UNKNOWN"
+                                            )
+                                        try:
+                                            await host.maintain_and_promote(
+                                                timeout=self.challenge_policy.timeout_seconds,
+                                                actor="browser-host:" + task.attempt_id,
+                                                page=maintenance_page,
+                                                challenge_handler=challenge_handler,
+                                            )
+                                        except CollectorError as recovery_error:
+                                            reason = (
+                                                recovery_error.code
+                                                if recovery_error.code.startswith(
+                                                    "SECURITY_CHALLENGE_"
+                                                )
+                                                else "SECURITY_CHALLENGE_UNKNOWN"
+                                            )
+                                            challenge_handler.failed(root, task.attempt_id, reason)
+                                            return engine.partial_complete(reason)
+                                        challenge_handler.recovered(
+                                            root, task.attempt_id, attempt.creator_id
+                                        )
+                                        await challenge_handler.cooldown()
+                                    else:
+                                        await host.maintain_and_promote(
+                                            timeout=self.challenge_policy.timeout_seconds,
+                                            actor="browser-host:" + task.attempt_id,
+                                            page=maintenance_page,
+                                        )
                                     engine = None
                                     continue
                                 # Rate limits consume a bounded Temporal retry budget; no nested
@@ -225,7 +331,9 @@ class Activities:
                         return current.state
                     current.state = (
                         TaskStatus.WAITING_FOR_LOGIN
-                        if exc.code in {"ACCOUNT_LOGIN_REQUIRED", "PLATFORM_SECURITY_CHALLENGE"}
+                        if exc.code == "ACCOUNT_LOGIN_REQUIRED"
+                        else TaskStatus.WAITING_FOR_VERIFICATION
+                        if exc.code == "PLATFORM_SECURITY_CHALLENGE"
                         else TaskStatus.WAITING_FOR_ACCOUNT
                         if exc.code == "ACCOUNT_MISMATCH"
                         else TaskStatus.WAITING_FOR_RESOURCE
@@ -260,10 +368,16 @@ async def dispatch(repo: Repository, client: Client, queue: str) -> None:
                 id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
             )
         except WorkflowAlreadyStartedError:
-            await handle.signal(CollectionWorkflow.wake)
+            # The workflow may already have finished; a wake signal is then meaningless and must
+            # not take the worker down.
+            with suppress(RPCError):
+                await handle.signal(CollectionWorkflow.wake)
         with repo.connect() as conn:
+            # ``workflow_started_at`` is the durable fact the cancel path uses to decide whether a
+            # collection process can still be holding this task (FIX-01 P1-B).
             conn.execute(
-                "UPDATE task_dispatches SET sent=true WHERE root_task_id=%s AND segment=%s",
+                """UPDATE task_dispatches SET sent=true,workflow_started_at=now()
+                WHERE root_task_id=%s AND segment=%s""",
                 (root, row["segment"]),
             )
     # Cancellation must also wake workflows paused on a signal.
@@ -273,13 +387,27 @@ async def dispatch(repo: Repository, client: Client, queue: str) -> None:
             (queue.removeprefix("xingtu-"),),
         ).fetchall()
     for row in cancelling:
-        handle = client.get_workflow_handle(f"collect/{row['root_task_id']}")
-        description = await handle.describe()
-        if description.status == WorkflowExecutionStatus.RUNNING:
-            await handle.signal(CollectionWorkflow.wake)
-        else:
-            with repo.edit(str(row["root_task_id"])) as (task, _):
-                task.state = TaskStatus.CANCELLED
+        root = str(row["root_task_id"])
+        handle = client.get_workflow_handle(f"collect/{root}")
+        try:
+            description = await handle.describe()
+        except RPCError:
+            description = None
+        if description is not None and description.status == WorkflowExecutionStatus.RUNNING:
+            try:
+                await handle.signal(CollectionWorkflow.wake)
+            except RPCError:
+                # The workflow finished between describe and signal. Nothing is running for this
+                # root, so the cancellation is finalised here instead of killing the worker.
+                logger.info("collect workflow for %s ended before the wake signal", root)
+                _finalise_cancelled(repo, root)
+            continue
+        _finalise_cancelled(repo, root)
+
+
+def _finalise_cancelled(repo: Repository, root: str) -> None:
+    with repo.edit(root) as (task, _):
+        task.state = TaskStatus.CANCELLED
 
 
 async def run_worker(
@@ -288,6 +416,7 @@ async def run_worker(
     client = await Client.connect(address)
     queue = f"xingtu-{config.unit_id}"
     activities = Activities(repo, config, private_root)
+    logger.info("collection worker polling %s on %s", queue, address)
     async with Worker(
         client,
         task_queue=queue,
@@ -296,5 +425,8 @@ async def run_worker(
         max_concurrent_activities=1,
     ):
         while True:
-            await dispatch(repo, client, queue)
+            try:
+                await dispatch(repo, client, queue)
+            except Exception as exc:  # noqa: BLE001 - the consumer must survive any tick error
+                logger.warning("collection dispatch tick failed: %s", type(exc).__name__)
             await asyncio.sleep(2)

@@ -14,6 +14,49 @@ from .domain import CollectorError
 
 
 @dataclass
+class RequestDiagnostic:
+    """Bounded, de-identified facts about one rejected response.
+
+    A schema rejection must be actionable: which registered request was rejected, with what HTTP
+    status and content type, and the platform's own business code. Response bodies, URLs, query
+    values, headers and page text are never kept.
+    """
+
+    request_key: str
+    http_status: int | None = None
+    content_type_kind: str | None = None
+    business_code: str | None = None
+    business_path: str | None = None
+    root_keys: list[str] = None  # type: ignore[assignment]
+    lookup_error: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.root_keys is None:
+            self.root_keys = []
+
+    def as_evidence(self) -> dict[str, object]:
+        return {
+            "request_key": self.request_key,
+            "http_status": self.http_status,
+            "content_type_kind": self.content_type_kind,
+            "business_code": self.business_code,
+            "business_path": self.business_path,
+            "root_keys": list(self.root_keys),
+            "lookup_error": self.lookup_error,
+        }
+
+
+def content_type_kind(headers: dict[str, str]) -> str:
+    """Classify a content type without keeping the raw header value."""
+
+    value = (headers or {}).get("content-type", "").lower()
+    for marker in ("json", "html", "text", "javascript", "image", "octet-stream"):
+        if marker in value:
+            return marker
+    return "other" if value else "missing"
+
+
+@dataclass
 class ReplayRequest:
     """One matched same-origin JSON request kept in memory for verified page advancement."""
 
@@ -101,6 +144,8 @@ class ResponseCollector:
         self.failures: dict[str, str] = {}
         self.replays: dict[str, ReplayRequest] = {}
         self.global_error: CollectorError | None = None
+        # Diagnostics for the response that produced ``global_error``; cleared for a clean run.
+        self.failure_diagnostics: dict[str, RequestDiagnostic] = {}
         self.pending: set[asyncio.Task[None]] = set()
         self.changed = asyncio.Event()
         self.closed = False
@@ -150,6 +195,9 @@ class ResponseCollector:
                     continue
                 if spec.key in self.seen and not spec.repeats:
                     self.failures[spec.key] = "RESPONSE_UNCORRELATED"
+                    self.metrics["duplicate_requests"] = (
+                        self.metrics.get("duplicate_requests", 0) + 1
+                    )
                 self.seen.add(spec.key)
                 if request not in self.requests:
                     self.metrics["requests"] = self.metrics.get("requests", 0) + 1
@@ -178,11 +226,35 @@ class ResponseCollector:
         self.pending.discard(task)
         self.changed.set()
 
+    def _record_diagnostic(
+        self, exc: CollectorError, diagnostic: RequestDiagnostic
+    ) -> CollectorError:
+        """Attach the request diagnostic to the error and keep it for evidence."""
+
+        self.failure_diagnostics[diagnostic.request_key] = diagnostic
+        diagnostics = getattr(exc, "diagnostics", None)
+        if diagnostics is None:
+            try:
+                exc.diagnostics = [diagnostic]
+            except (AttributeError, ValueError):  # pragma: no cover - plain exceptions
+                pass
+        else:
+            diagnostics.append(diagnostic)
+        return exc
+
     async def read_response(self, response: Response, spec: RequestSpec) -> None:
+        data: Any = None
         try:
             headers = response.headers
             if "json" not in headers.get("content-type", "").lower():
-                raise CollectorError("PLATFORM_PAGE_CHANGED", "RESPONSE_CONTENT_TYPE")
+                raise self._record_diagnostic(
+                    CollectorError("PLATFORM_PAGE_CHANGED", "RESPONSE_CONTENT_TYPE"),
+                    RequestDiagnostic(
+                        request_key=spec.key,
+                        http_status=response.status,
+                        content_type_kind=content_type_kind(headers),
+                    ),
+                )
             length = headers.get("content-length")
             if length and int(length) > self.max_bytes:
                 raise CollectorError("MODULE_COLLECTION_FAILED", "RESPONSE_TOO_LARGE")
@@ -193,14 +265,29 @@ class ResponseCollector:
             business_code = (
                 text_value(lookup(data, spec.success_path)) if spec.success_path else None
             )
+            diagnostic = RequestDiagnostic(
+                request_key=spec.key,
+                http_status=response.status,
+                content_type_kind=content_type_kind(headers),
+                business_code=business_code,
+                business_path=spec.success_path,
+                root_keys=sorted(str(key) for key in data)[:32] if isinstance(data, dict) else [],
+            )
             if business_code is not None and business_code in spec.cursor_invalid_codes:
-                raise CollectorError("PLATFORM_PAGE_CHANGED", "SEARCH_CURSOR_INVALID")
+                raise self._record_diagnostic(
+                    CollectorError("PLATFORM_PAGE_CHANGED", "SEARCH_CURSOR_INVALID"), diagnostic
+                )
             if business_code is not None and business_code in spec.error_codes:
-                raise CollectorError(spec.error_codes[business_code], "REGISTERED_BUSINESS_ERROR")
+                raise self._record_diagnostic(
+                    CollectorError(spec.error_codes[business_code], "REGISTERED_BUSINESS_ERROR"),
+                    diagnostic,
+                )
             if response.status != 200 or (
                 spec.success_path and business_code != spec.success_value
             ):
-                raise CollectorError("PLATFORM_PAGE_CHANGED", "RESPONSE_SCHEMA_MISMATCH")
+                raise self._record_diagnostic(
+                    CollectorError("PLATFORM_PAGE_CHANGED", "RESPONSE_SCHEMA_MISMATCH"), diagnostic
+                )
             if not all(
                 text_value(lookup(data, k)) == resolve(v, self.bindings)
                 for k, v in spec.response_match.items()
@@ -220,8 +307,18 @@ class ResponseCollector:
                 self.failures[spec.key] = exc.reason
             else:
                 self.global_error = exc
-        except (ValueError, TypeError):
-            self.global_error = CollectorError("PLATFORM_PAGE_CHANGED", "RESPONSE_SCHEMA_MISMATCH")
+        except (ValueError, TypeError) as exc:
+            # A malformed body is a rejected response, not an unhandled defect; name the request.
+            diagnostic = RequestDiagnostic(
+                request_key=spec.key,
+                http_status=response.status,
+                content_type_kind=content_type_kind(response.headers),
+                root_keys=sorted(str(key) for key in data)[:32] if isinstance(data, dict) else [],
+                lookup_error=type(exc).__name__,
+            )
+            self.global_error = self._record_diagnostic(
+                CollectorError("PLATFORM_PAGE_CHANGED", "RESPONSE_SCHEMA_MISMATCH"), diagnostic
+            )
         except Exception:
             # Browser transport failures are failed reads, never an empty result.
             self.failures[spec.key] = "RESPONSE_READ_FAILED"

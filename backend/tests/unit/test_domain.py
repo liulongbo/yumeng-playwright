@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 from xingtu.contracts import PlatformRegistry
 from xingtu.domain import (
+    Checkpoint,
     CollectorError,
     FieldObservation,
     FieldStatus,
@@ -130,6 +131,19 @@ def test_shipped_registry_cannot_run():
     )
     with pytest.raises(CollectorError, match="UNVERIFIED_REGISTRY"):
         registry.require_enabled(live=True)
+
+
+def test_old_checkpoint_payload_gets_backward_compatible_challenge_defaults():
+    checkpoint = Checkpoint.model_validate(
+        {
+            "conditions_digest": "digest",
+            "contract_version": "v1",
+            "adapter_version": "v1",
+        }
+    )
+    assert checkpoint.challenge_count == checkpoint.challenge_recovery_count == 0
+    assert checkpoint.challenge_state is None
+    assert checkpoint.navigation_count == checkpoint.featured_load_count == 0
 
 
 def registry_dict(capabilities):

@@ -9,6 +9,7 @@ from typing import Any
 from playwright.async_api import BrowserContext, Page
 
 from .adapter import BrowserAdapter
+from .challenge import ChallengeHandler
 from .contracts import PlatformRegistry
 from .domain import (
     CollectorError,
@@ -100,6 +101,7 @@ class BrowserHost:
             else ReleaseDisposition.SESSION_UNVERIFIED
         )
         self.session_health: SessionHealth | None = None
+        self.maintenance_reason: str | None = None
 
     @classmethod
     @asynccontextmanager
@@ -166,7 +168,7 @@ class BrowserHost:
             SessionHealthStatus.VALID: ReleaseDisposition.VERIFIED_READY,
             SessionHealthStatus.LOGIN_REQUIRED: ReleaseDisposition.LOGIN_REQUIRED,
             SessionHealthStatus.ACCOUNT_MISMATCH: ReleaseDisposition.ACCOUNT_MISMATCH,
-            SessionHealthStatus.SECURITY_CHALLENGE: ReleaseDisposition.LOGIN_REQUIRED,
+            SessionHealthStatus.SECURITY_CHALLENGE: ReleaseDisposition.SECURITY_CHALLENGE,
             SessionHealthStatus.INDETERMINATE: ReleaseDisposition.SESSION_UNVERIFIED,
         }[health.status]
 
@@ -180,6 +182,7 @@ class BrowserHost:
         timeout: float,
         actor: str,
         page: Page | None = None,
+        challenge_handler: ChallengeHandler | None = None,
     ) -> int:
         if self.mode != "maintenance" or not self.browser:
             raise CollectorError("LEASE_LOST", "HOST_NOT_IN_MAINTENANCE")
@@ -195,7 +198,17 @@ class BrowserHost:
             # itself.  A protected business page keeps a reusable session on the signed-in app;
             # a genuinely logged-out session is redirected to login by the platform.
             await maintenance_page.goto(search.entry_url, wait_until="domcontentloaded")
-        account = await wait_for_manual_clearance(maintenance_page, session, timeout)
+        if challenge_handler:
+            health = await challenge_handler.wait_for_stable_session(
+                maintenance_page,
+                session,
+                self.config.expected_account_id,
+                timeout_seconds=timeout,
+            )
+            self.observe_session(health)
+            account = health.observed_account_id or ""
+        else:
+            account = await wait_for_manual_clearance(maintenance_page, session, timeout)
         if account != self.config.expected_account_id:
             self.observe_session(
                 SessionHealth(
@@ -245,6 +258,7 @@ class BrowserHost:
             line_verified=True,
         )
         self.mode = "collect"
+        self.maintenance_reason = None
         # Hand the exact page that proved the account and protected capability to the
         # collector.  Creating a fresh page here is both unnecessary and confusing to a
         # person clearing a login/challenge: it looks like a second, logged-out browser even
@@ -270,8 +284,11 @@ class BrowserHost:
             actor,
         )
         self.mode = "maintenance"
+        self.maintenance_reason = reason
         self.release_disposition = (
             ReleaseDisposition.ACCOUNT_MISMATCH
             if reason == "ACCOUNT_MISMATCH"
+            else ReleaseDisposition.SECURITY_CHALLENGE
+            if reason == "PLATFORM_SECURITY_CHALLENGE"
             else ReleaseDisposition.LOGIN_REQUIRED
         )

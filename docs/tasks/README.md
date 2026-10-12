@@ -1,5 +1,53 @@
 # 开发任务索引
 
+# 2026-10-12 当前执行单元星图登录状态实时核验（只读）
+
+用户询问"当前执行单元内巨量星图的登录状态是失效还是有效"。先固定对象：开发库只有 `unit-local-mac-02` 一个执行单元（`.runtime/units/local-dev-mac-02.json`，绑定账号 `ID: 1807978499337419`，profile `.runtime/profiles/unit-local-mac-02`）。库中 `last_session_status=VALID` 的时间是 `2026-10-12T01:12:41+08:00`（14.4 小时前），而项目契约明确"持久化状态不构成活动会话证明，只有当前进程观测可产生 `VALID`"，故用户授权后补做只读进程内观测：`xingtu session-diagnostics`（`15:36:53 → 15:37:01+08:00`，exit 0）→ **`SessionHealthStatus.VALID`**，账号精确等于绑定账号，受保护页可见，无登录页、无安全挑战。**结论：有效**；未搜索、未采集、未写业务库。新增 SESSION-01 存活时长下界数据点（≥14.4 小时且跨冷启动，账号无漂移），上界仍未测。证据：[会话实时只读核验证据](../evidence/UNIT-01-session-live-check-2026-10-12.md)。[UNIT-01](UNIT-01.md) 保持**待验收**、[SESSION-01](SESSION-01.md) 保持**进行中／未验收**。
+
+# 2026-10-11 MCP 原生工具 UI 端到端复跑
+
+以已注册到 profile 的原生 `mcp__playwright__*` 工具 + 真实 Chrome 复跑「发起 → 需求转换 → 状态流转 → 任务中心 → 取消」：13 条用例 12 PASS / 1 FAIL。PASS：登录门禁、发起「露营/3」→ `QUEUED` v3（2.67 s，真实 1126/88 tokens）、阻塞面板（`t+140 s`，且此时 `consumer_alive=true` 仍被判阻塞）、`RECEIVED` 阶段取消 → `CANCELLED` v1（0 次模型调用）、会话跨 API 重启、控制台无 JS 异常。FAIL：**DEF-01** 已 `QUEUED` 任务取消停在 `CANCELLING`（需 P2 收尾，P1）。另有 3 条低级问题（Vite 代理在 API 停机窗口返回 500、`browser_wait_for` 长等待提前返回、主动取消被显示为「需要关注」）。报告见 [MCP UI 端到端测试报告](../testing/mcp-ui-e2e-2026-10-11.md)。
+
+# 2026-10-11 RECEIVED 永久停留缺陷修复（本轮）
+
+用户 UI 提交的产品任务长期停在 `RECEIVED`。真实样本 `3c96c78a-77f8-4e11-8081-953b12deae91`（media-a / 关键词「户外」/ 目标 4）停留 **7 小时 8 分**，`intake_dispatches.sent=false` 且 `updated_at == created_at`，`model_runs`/`filter_plans` 均为 0。
+
+根因（已验证，两个独立条件）：① 产品入口独有的常驻 P1 Intake Worker 没有运行；② 缺少 `DEEPSEEK_API_KEY`，该 Worker 启动即 `DEEPSEEK_API_KEY_REQUIRED` 退出。原 `docs/development.md` §5 启动步骤只含 API 与前端，`make dev` 也只起 Compose，因此按文档操作必然复现；缺消费者时系统没有任何失败面。
+
+本轮最小修复：`make m3-check`（13 项只读前置自检）与 `make m3-up`（启动 API + Intake Worker 并在出现**新鲜消费者**后才 READY，新增 `collection-worker` 目标）；派发循环异常隔离 + 派发失败留痕；`TaskDetail.intake` 三态可见性（`INTAKE_WORKER_UNAVAILABLE` / `INTAKE_DISPATCH_FAILING`）与 `GET /api/health/workers`；`promote_intake` 失败终态化；`no_proxy` 中 `[::1]` 导致 httpx `InvalidURL` 的环境缺陷修复。
+
+复核：真实 DeepSeek + 隔离 schema 下 `RECEIVED`（无消费者）→ `QUEUED`（+1.71 s），真实 `model_runs` 1126/88 tokens、1262 ms，`filter_plans` 与确定性期望完全相等。分层回归：`make check` exit 0（单元 178 passed）、集成 69 passed/1 skipped、契约 28 passed、e2e 9 passed。证据见 [M3 Intake Worker 修复证据](../evidence/M3-intake-worker-fix-2026-10-11.md)；[INTAKE-01](INTAKE-01.md) 已回到**已完成**：2026-10-11 23:08 用真实 Playwright MCP + 真实 Chrome 完成完整 UI 复跑（登录 → 发起「户外/4」→ `QUEUED` v3 @ t+1.61 s → 无 Worker 时阻塞面板 @ t+120.5 s → UI 取消 → `CANCELLED` v1、0 次模型调用），浏览器控制台无 JS 异常；P2 采集段仍需单独采集授权。
+
+机制修正：Temporal poller 的 `last_access_time` 是粗粒度信号（健康 Worker 实测刷新间隔 58/58/121 s，停止后条目仍保留数分钟），“无人接管”判定改为任务级 120 s + 无派发失败记录，poller 阈值 180 s 仅作诊断元数据。
+
+# 2026-10-11 完整新任务闭环修复复核（历史）
+
+本轮继续处理“完整端到端闭环未成功”的问题。首次冒烟的新任务 `b12b5785-f90a-42c2-8c4f-67c54ab690e4` 停在 `RECEIVED`，原因是当时只运行 API/前端，没有运行 Intake Worker/Collection Worker，且没有 `DEEPSEEK_API_KEY`。本轮启动本地受控 Intake/Collection Worker，并使用 localhost-only DeepSeek-compatible Fixture，不把 Fixture 误报为真实 DeepSeek。
+
+通过 Playwright MCP 创建并完成新任务 `acd929aa-874e-4de8-8fb1-6a9295cf07ff`：`RECEIVED → PARSING → QUEUED → COLLECTING → COMPLETED`，最终发现 20、有效 1、资料完整 1、精选完整 1、失败 0。另修复任务终态后达人列表未刷新问题，页面最终显示“1 位可查看 / 已发布快照”。完整证据见[冒烟报告](../testing/smoke-test-f04-f05-f06-m3.md)。
+
+当前边界：真实 DeepSeek 新任务现场调用、真实自然安全验证恢复、生产 HTTPS/Secure Cookie/正式域名仍未验收；相关卡片不得因本地 Fixture 闭环通过而拔高状态。
+
+# 2026-10-10 F04/F05/F06/M3 核心冒烟复核
+
+2026-10-10T23:15+08:00 修复追记：冒烟后继续修复既有真实产品任务 `f47eb1cf-f038-4f9f-ae3d-e02aa8a995d3`。最小改动为在 verified contract 中显式登记 `seeding.search_word_ctr` 与 `fulfillment.message_reply_rate` 的成功响应缺源口径为 `NO_DATA`；随后启动 P2 Worker 并 retry，同一 root 已达到 `COMPLETED`，`profile_complete_count=2`、`featured_complete_count=2`、`pipeline_complete=true`。前端/API/DB 已复核一致。详见[冒烟报告修复追记](../testing/smoke-test-f04-f05-f06-m3.md#2026-10-10-修复追记既有真实产品闭环已补齐到-completed)。新建任务当场创建并执行到完成仍依赖重新提供 `DEEPSEEK_API_KEY` 并运行 Intake Worker。
+
+高级 QA 冒烟测试已执行并生成完整报告：[F04/F05/F06/M3 核心冒烟测试报告](../testing/smoke-test-f04-f05-f06-m3.md)。本轮完成 Git/服务/MCP 基线、现有脚本盘点、后端四层回归、MinIO 专项、Playwright MCP 真实 UI 登录/创建/取消/结果查看/退出，以及 API/DB/前端跨层一致性验证。结果：F04 核心冒烟 PASS 但完整新任务执行受 worker 未启动阻塞；F05 自动化 PASS、真实样本为 `PARTIAL_COMPLETED` 且展示一致；F06 PASS；M3 本地 UI/API/DB 冒烟 PASS；CHALLENGE-01 合成回归 PASS 但真实自然挑战仍待验收。
+
+本轮新建受控任务 `b12b5785-f90a-42c2-8c4f-67c54ab690e4` 已通过 UI 取消，避免后续真实平台采集；既有真实结果任务 `f47eb1cf-f038-4f9f-ae3d-e02aa8a995d3` 用于结果读取一致性验证。当前状态不拔高：F04、APP-01、CHALLENGE-01 仍待验收；F05、F06、INTAKE-01、CONSOLE-01 保持已完成。
+
+# 2026-10-10 F05 安全验证托管实施
+
+[CHALLENGE-01](CHALLENGE-01.md) 已完成后端托管主链路、产品查询摘要、旧检查点兼容、恢复减量入口、官方开放能力字段矩阵，以及任务详情页等待安全验证展示。续作回归：164 项单元、28 项 Browser Contract、67 项后端集成（1 skipped）、7 项 E2E、前端类型/3 项单测/构建均通过；挑战专项集成 2 项通过。当前状态为**待验收／未验收**：真实平台自然挑战、同页真实恢复、一次恢复只增加一次 `session_version` 及重复请求下降 50% 仍待补证。详见[实施证据](../evidence/CHALLENGE-01-implementation-2026-10-10.md)与[DEC-015](../decisions/DEC-015-security-challenge-orchestration.md)。
+
+# 2026-10-10 M3 真实 DeepSeek 与产品闭环验收
+
+在 localhost 开发环境中，使用真实 DeepSeek Flash、PostgreSQL、Temporal、现有 `unit-local-mac-02` 和已核验星图关键词能力完成产品闭环：`media-a` 提交“游戏剧情”、目标 2，任务按 `RECEIVED → PARSING → QUEUED → COLLECTING → PARTIAL_COMPLETED` 执行，最终发现 20 位、有效 2 位、发布 2 份任务快照，并保存优秀传播 8 张、优秀种草 6 张卡片及 14/14 个封面。真实 Chromium 完成两媒介共享读取、退出后旧 Cookie 失效、重登恢复与任务内结果查看；真实 DeepSeek `model_runs`、幂等提交和 P1→P2 同根晋级均已核对。任务因一位达人 `fans` 模块响应 Schema 变化如实保持部分完成，未修改 F04/F05/F06 采集逻辑。详见[真实产品闭环证据](../evidence/M3-real-product-acceptance-2026-10-10.md)。[INTAKE-01](INTAKE-01.md) 与 [CONSOLE-01](CONSOLE-01.md) 已完成；[APP-01](APP-01.md) 仅剩本轮明确不执行的生产 HTTPS/域名/Secure Cookie 环境验收，状态为待验收。
+
+# 2026-10-10 M3 本地产品控制台启动与真实数据联调
+
+应用迁移 008 后，以 `.venv/bin/xingtu-api`（`127.0.0.1:8000`）+ `npm --prefix frontend run dev`（`127.0.0.1:5173`）启动 M3 产品页面，并在**真实开发库**（`127.0.0.1:55432 / xingtu_development`，迁移前已 `pg_dump` 备份）与**真实 Chromium** 上完成只读联调：11 条真实任务列表、任务详情四类计数、达人 F05 字段与 F06 双集合、4 张 `STORED` 封面经认证 HTTP 200（无会话 401、跨任务 404）、两媒介账号共享读取、页面刷新保持会话与退出回登录；浏览器无运行错误。该阶段未提交新任务、未推进任务状态，且当时环境没有 DeepSeek 凭据，因此三张 M3 卡仍为进行中；后续真实闭环及最新状态见上一节。详见[本地控制台启动联调证据](../evidence/M3-local-console-startup-2026-10-10.md)。
+
 # 2026-10-08 F05 六字段补采完成
 
 [F05](F05.md) 已按指定达人 `6963508724337999903` 补齐介绍、月连接用户数、月深度用户数、月涨粉率、达人类型和行业标签。正式主页清单由 75 字段升级为 81 字段；两次真实重采后开发库仍只有 1 条达人主记录、不可变快照由 2 份增至 4 份，最终任务 `COMPLETED / profile_complete_count=1`。`make check`（122 单元）、28 项 Browser Contract、56 项 PostgreSQL 集成（另 1 项专用 MinIO endpoint 未配置而跳过）和 4 项 Temporal E2E 通过。详见[六字段验收证据](../evidence/F05-six-fields-2026-10-08.md)。
@@ -66,7 +114,7 @@ B3/C 最终证明自动选号在当前 Playwright 环境中不可靠：目标条
 [AUTO-01](AUTO-01.md)：**进行中／未验收**，为跨现有功能卡的优化跟踪项，不计入原 12 个一期交付单元。2026-09-29 已实现单达人 `IDENTITY_UNREADABLE` 三次尝试后跳过续跑、按能力 scope 的 Contract breaker，并通过合成 20/200 位连续任务；旧“任务结束必回 NEEDS_LOGIN”已被 DEC-013 取代。未验收：真实全字段、第 3 页及终点、真实 5/10/20、50/100 与 7 天观察。
 
 
-> 更新时间：2026-10-08T22:45:00+08:00。具体实现与验收事实只在各卡片及其证据维护；本表同步ID、标题、状态和链接。
+> 更新时间：2026-10-10T23:15:00+08:00。具体实现与验收事实只在各卡片及其证据维护；本表同步ID、标题、状态和链接。
 
 **先看[项目任务进度总览](../项目任务进度总览.md)**：当前进度、推荐顺序、F/T/U覆盖、依赖及AI执行方式。
 
@@ -78,14 +126,26 @@ B3/C 最终证明自动选号在当前 Playwright 环境中不可靠：目标条
 | UNIT-01 | 执行单元与平台核验（先本地后蜂窝） | 待验收 | [UNIT-01.md](UNIT-01.md) |
 | F04 | 平台筛选、搜索与候选发现 | 待验收 | [F04.md](F04.md) |
 | F05 | 达人主页资料采集 | 已完成 | [F05.md](F05.md) |
-| APP-01 | 产品应用基础与登录会话 | 待办 | [APP-01.md](APP-01.md) |
-| INTAKE-01 | 筛选表单、P1转换与可靠提交 | 待办 | [INTAKE-01.md](INTAKE-01.md) |
-| F06 | 主页精选作品采集与封面存储 | 进行中 | [F06.md](F06.md) |
-| CONSOLE-01 | 任务中心与任务内达人结果 | 待办 | [CONSOLE-01.md](CONSOLE-01.md) |
+| APP-01 | 产品应用基础与登录会话 | 待验收 | [APP-01.md](APP-01.md) |
+| INTAKE-01 | 筛选表单、P1转换与可靠提交 | 已完成 | [INTAKE-01.md](INTAKE-01.md) |
+| F06 | 主页精选作品采集与封面存储 | 已完成 | [F06.md](F06.md) |
+| CONSOLE-01 | 任务中心与任务内达人结果 | 已完成 | [CONSOLE-01.md](CONSOLE-01.md) |
 | F09 | 手动刷新达人 | 待办 | [F09.md](F09.md) |
 | F10 | 执行单元状态与远程登录维护 | 待办 | [F10.md](F10.md) |
 | OPS-01 | 生产运行、资源调度与运维恢复 | 待办 | [OPS-01.md](OPS-01.md) |
 | RELEASE-01 | 一期全链路联调与上线验收 | 待办 | [RELEASE-01.md](RELEASE-01.md) |
+
+## 本轮修复任务（2026-10-12）
+
+| ID | 标题 | 状态 | 卡片 |
+|---|---|---|---|
+| FIX-01 | 真实采集闭环修复（fans 模块 / 取消终态 / 采集 Worker 稳定性 / 取消展示） | 已完成 | [FIX-01.md](FIX-01.md) |
+
+依据 2026-10-11～10-12 两轮 Playwright MCP + 真实 Chrome 实测建立。四类问题：**P0-A** F05 `fans` 模块读取失败导致真实采集永远收口为「部分完成」；**P1-B** 已 `QUEUED` 任务取消停在 `CANCELLING`；**P1-C** 采集 Worker 派发崩溃（已修、已补测试）；**P3-D** 主动取消被显示成「需要关注」。
+
+**2026-10-12 收口结果（已完成）**：P0-A 用真实探针证明 `fans` 的 4 个请求全部 HTTP 200 / `base_resp.status_code=0`、契约字段路径全部存在，失败属**平台瞬时响应被拒绝**而非契约漂移或解析缺陷；为被拒绝响应补齐请求级脱敏诊断（请求 key / HTTP 状态 / content-type 类别 / 业务码 / 响应顶层 key），**未修改 verified contract、未放宽任何断言**。P1-B 经迁移 009（`task_dispatches.workflow_started_at`）+ `Activities.collect` 终态短路 + 取消分支判定，实现「从未启动采集 → 一步 `CANCELLED`；已启动 → 维持 `CANCELLING` 交 P2」。P1-C 补齐采集 Worker 5 例与 intake 等价 1 例单元测试。P3-D 中性文案与中性徽标落地。
+
+**真实验收**：全新提交、不干预的任务 `7620fb83-019a-45c5-a547-1c42e2b12080`（宠物 / 目标 1）达 `COMPLETED`、`profile_complete_count=1`、8 模块全 `COLLECTED`（`fans` 9/9 字段）、2 组精选 `COMPLETE`、5 张卡片全 `STORED`，页面无「需要关注」；`QUEUED` 取消（`91a112ed-5dfe-488c-856d-c70e3109eecf`）一次 API 调用直达 `CANCELLED` v4。`make check` / 契约 28 / 集成 71+1 skipped / e2e 9 全通过。证据见 [FIX-01 真实采集闭环修复证据](../evidence/FIX-01-real-collection-close-2026-10-12.md)。
 
 ## 管理文档任务（不计入产品进度）
 

@@ -9,9 +9,96 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Replayer, Worker
 from xingtu.domain import CollectorError, TaskStatus
 from xingtu.engine import Engine
+from xingtu.intake import LLMResult, build_expected_plan
+from xingtu.intake_worker import IntakeActivities, IntakeProcessor
+from xingtu.intake_workflow import IntakeWorkflow
+from xingtu.product_auth import PasswordService
+from xingtu.product_models import RequirementForm
+from xingtu.product_repository import ProductRepository
 from xingtu.workflow import CollectionWorkflow
 
 from backend.tests.synthetic import SyntheticAdapter
+
+
+async def test_product_intake_workflow_promotes_same_root_and_replays(repo):
+    from xingtu.contracts import PlatformRegistry
+
+    products = ProductRepository(repo)
+    user_id = products.create_user(
+        "temporal-media",
+        "Temporal 媒介",
+        PasswordService().hash("a-secure-password"),
+        actor="test",
+    )
+    registry = PlatformRegistry.model_validate_json(
+        Path("contracts/douyin_xingtu.verified.json").read_text()
+    )
+    form = RequirementForm(keyword="宠物", target_count=20)
+    created = products.create_product_task(
+        form,
+        capability_version=registry.capabilities.version,
+        user_id=user_id,
+        idempotency_key="temporal-intake",
+        model_config_id="synthetic-flash",
+        prompt_version="m3-filter-plan-v1",
+    )
+    expected = build_expected_plan(form, registry.capabilities)
+
+    class SyntheticLLM:
+        provider = "synthetic"
+        model = "synthetic-flash"
+
+        async def generate_filter_plan(self, **kwargs):
+            del kwargs
+            return LLMResult(payload=expected.model_dump(mode="json"), response_model=self.model)
+
+    processor = IntakeProcessor(
+        products,
+        registry,
+        SyntheticLLM(),
+        execution_unit_id="unit",
+    )
+    activities = IntakeActivities(processor)
+    executable = os.environ.get("XINGTU_TEMPORAL_TEST_BINARY")
+    async with await WorkflowEnvironment.start_local(
+        dev_server_existing_path=executable,
+        dev_server_download_version="v1.9.1",
+        download_dest_dir=str(Path(".runtime/temporal-test").resolve()),
+        dev_server_log_level="error",
+    ) as env:
+        async with Worker(
+            env.client,
+            task_queue="product-intake-test",
+            workflows=[IntakeWorkflow],
+            activities=[activities.process],
+        ):
+            handle = await env.client.start_workflow(
+                IntakeWorkflow.run,
+                created.root_task_id,
+                id="intake-" + created.root_task_id,
+                task_queue="product-intake-test",
+            )
+            assert await handle.result() == TaskStatus.QUEUED
+            history = await handle.fetch_history()
+            await Replayer(workflows=[IntakeWorkflow]).replay_workflow(history)
+    task = repo.get(created.root_task_id)
+    assert task.root_task_id == created.root_task_id
+    assert task.source == "model" and task.plan == expected
+    with repo.connect() as conn:
+        assert (
+            conn.execute(
+                "SELECT count(*) AS n FROM model_runs WHERE root_task_id=%s",
+                (created.root_task_id,),
+            ).fetchone()["n"]
+            == 1
+        )
+        assert (
+            conn.execute(
+                "SELECT count(*) AS n FROM task_dispatches WHERE root_task_id=%s",
+                (created.root_task_id,),
+            ).fetchone()["n"]
+            == 1
+        )
 
 
 async def test_waiting_for_login_requires_an_explicit_wake(repo, started):

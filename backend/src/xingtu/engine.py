@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -34,6 +35,26 @@ EVIDENCE_ERROR_CODES = frozenset(
         "MODULE_COLLECTION_FAILED",
     }
 )
+
+
+def rejected_response_diagnostic(error: CollectorError | None) -> dict[str, Any]:
+    """Allowlisted facts about the response that was rejected, or an empty mapping.
+
+    The collector attaches at most one diagnostic per registered request. Only the request key,
+    HTTP status, content-type kind, the platform's own business code path/value and the response's
+    top-level key names are kept; bodies, URLs, query values and headers never are.
+    """
+
+    for item in getattr(error, "diagnostics", []) or []:
+        as_evidence = getattr(item, "as_evidence", None)
+        if callable(as_evidence):
+            return dict(as_evidence())
+    return {}
+
+
+def response_key_paths(diagnostic: dict[str, Any]) -> list[str]:
+    keys = diagnostic.get("root_keys")
+    return [str(key) for key in keys] if isinstance(keys, list) else []
 
 
 class Engine:
@@ -77,9 +98,11 @@ class Engine:
         operation_id: str,
         failure_reason: str | None = None,
         payload: object | None = None,
+        error: CollectorError | None = None,
     ) -> str | None:
         if not self.evidence:
             return None
+        diagnostic = rejected_response_diagnostic(error) if error else {}
         # Storage failures surface as STORAGE_UNAVAILABLE; evidence is never silently dropped.
         return self.evidence.save(
             EvidenceSummary(
@@ -93,6 +116,9 @@ class Engine:
                 kind="failure" if kind == "failure" else "summary",
                 schema_keys=schema_keys(payload),
                 failure_reason=failure_reason,
+                response_keys=response_key_paths(diagnostic),
+                status_code=diagnostic.get("http_status") if diagnostic else None,
+                diagnostic=diagnostic,
             )
         )
 
@@ -110,6 +136,10 @@ class Engine:
             for source, target in (
                 ("requests", "observed_requests"),
                 ("responses", "observed_responses"),
+                ("navigations", "navigation_count"),
+                ("duplicate_requests", "duplicate_request_count"),
+                ("featured_loads", "featured_load_count"),
+                ("cover_requests", "cover_request_count"),
             ):
                 value = int(metrics.get(source, 0))
                 delta = max(0, value - self.last_metrics.get(source, 0))
@@ -214,6 +244,9 @@ class Engine:
                 )
             if candidate:
                 await self.collect(candidate.ref.platform_creator_id)
+                interval = float(getattr(self.adapter, "creator_interval_seconds", 0.0))
+                if interval:
+                    await asyncio.sleep(interval)
                 continue
             if task.valid_count >= task.plan.target_count:
                 return self.finish()
@@ -370,6 +403,11 @@ class Engine:
             candidate.state = "collecting"
             task.state = TaskStatus.COLLECTING
             ref = candidate.ref.model_copy(deep=True)
+            already_complete = candidate.valid and self.repo.pipeline_complete(task, identity)
+            if already_complete:
+                candidate.state = "done"
+                candidate.failure_reason = None
+                return
         start = time.monotonic()
         try:
             async with self.adapter.profile(ref, self.ctx):
@@ -409,6 +447,7 @@ class Engine:
                                 if optional_schema_failure
                                 else exc.reason
                             ),
+                            error=exc,
                         )
                         if optional_schema_failure:
                             # The creator identity and basic threshold remain strict. A malformed
@@ -698,6 +737,7 @@ class Engine:
                 "failure",
                 operation_id=uid(),
                 failure_reason=f"{error.code}:{error.reason}" if error.reason else error.code,
+                error=error,
             )
         breaker: str | None = None
         scope = self.contract_scope(error)
@@ -714,7 +754,7 @@ class Engine:
             "ACCOUNT_LOGIN_REQUIRED": TaskStatus.WAITING_FOR_LOGIN,
             "ACCOUNT_MISMATCH": TaskStatus.WAITING_FOR_ACCOUNT,
             "SESSION_INDETERMINATE": TaskStatus.WAITING_FOR_RESOURCE,
-            "PLATFORM_SECURITY_CHALLENGE": TaskStatus.WAITING_FOR_LOGIN,
+            "PLATFORM_SECURITY_CHALLENGE": TaskStatus.WAITING_FOR_VERIFICATION,
             "RESOURCE_UNAVAILABLE": TaskStatus.WAITING_FOR_RESOURCE,
             "LEASE_LOST": TaskStatus.WAITING_FOR_RESOURCE,
             "PLATFORM_RATE_LIMITED": TaskStatus.RETRY_WAIT,
@@ -742,3 +782,22 @@ class Engine:
             task.state = state
             task.failure_reason = error.code + (":" + error.reason if error.reason else "")
         return state
+
+    def partial_complete(self, reason: str) -> str:
+        """Publish all durable progress and stop a challenge loop with an explicit reason."""
+
+        with self.repo.edit(self.root) as (task, conn):
+            if task.attempt_id != self.ctx.attempt_id:
+                return task.state
+            if task.state in {
+                TaskStatus.CANCELLED,
+                TaskStatus.COMPLETED,
+                TaskStatus.PARTIAL_COMPLETED,
+            }:
+                return task.state
+            self.refresh_counts(task)
+            self.repo.persist_creators(conn, task, publish=True)
+            task.pipeline_complete = False
+            task.state = TaskStatus.PARTIAL_COMPLETED
+            task.failure_reason = reason
+        return TaskStatus.PARTIAL_COMPLETED

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -316,6 +317,10 @@ def main() -> None:
                 )
             )
         elif args.command == "worker":
+            # Worker lifecycle and dispatch failures must be visible in the process log.
+            logging.basicConfig(
+                level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
+            )
             config = load_unit(args.config)
             asyncio.run(run_worker(repository(), config, address, ROOT / ".runtime/profiles"))
         elif args.command == "start":
