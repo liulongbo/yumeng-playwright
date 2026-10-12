@@ -211,6 +211,15 @@ class ProductRepository:
                     or {"root_task_id": str(old["root_task_id"]), "status": "RECEIVED"}
                 )
             root_task_id, requirement_id, p1_task_id = uid(), uid(), uid()
+            if origin_root_task_id is not None:
+                # A syntactically valid UUID that names no task used to surface as an unhandled
+                # ForeignKeyViolation (HTTP 500). The header is client input, so reject it as a
+                # validation error inside the same transaction as the insert.
+                known = conn.execute(
+                    "SELECT 1 FROM root_tasks WHERE root_task_id=%s", (origin_root_task_id,)
+                ).fetchone()
+                if not known:
+                    raise CollectorError("INVALID_FORM", "ORIGIN_TASK_NOT_FOUND")
             state = P1WorkflowState(
                 root_task_id=root_task_id,
                 requirement_id=requirement_id,

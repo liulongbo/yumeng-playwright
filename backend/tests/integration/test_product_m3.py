@@ -722,3 +722,87 @@ def test_api_serialises_intake_block_reason(repo):
     assert detail.status_code == 200
     assert detail.json()["intake"]["blocked_reason"] == "INTAKE_WORKER_UNAVAILABLE"
     assert detail.json()["intake"]["consumer_alive"] is False
+
+
+def test_origin_root_task_id_is_validated_before_the_foreign_key(repo):
+    """X-Origin-Root-Task-Id is client input; an unknown task must be 422, never an unhandled 500.
+
+    The header used to reach the INSERT unchecked, so a syntactically valid UUID naming no task
+    raised a ForeignKeyViolation outside the CollectorError handler. The three cases below pin the
+    rejected, accepted and absent forms. The database foreign key is deliberately kept as the
+    backstop for a source task deleted concurrently with this request.
+    """
+    products = ProductRepository(repo)
+    passwords = PasswordService()
+    products.create_user(
+        "media-origin", "媒介 Origin", passwords.hash("origin-password"), actor="test"
+    )
+    registry_path = Path("contracts/douyin_xingtu.verified.json")
+    settings = ProductSettings(
+        database_url=repo.dsn,
+        redis_url="unused",
+        login_hmac_key=b"x" * 32,
+        registry_path=registry_path,
+        secure_cookie=True,
+        allowed_origins=("https://app.test",),
+        cover_config=ProductCoverConfig(
+            kind="local", directory=Path(".runtime/covers"), allowed_root=Path(".runtime")
+        ),
+    )
+    app = create_app(
+        ProductServices(
+            auth=AuthService(products, MemoryLoginLimiter(), passwords=passwords),
+            products=products,
+            queries=ProductQueries(repo),
+            registry=PlatformRegistry.model_validate_json(registry_path.read_text()),
+            covers=NoopCoverReader(),
+            settings=settings,
+        )
+    )
+    client = TestClient(app, base_url="https://app.test")
+    login = client.post(
+        "/api/auth/login",
+        headers={"Origin": "https://app.test"},
+        json={"username": "media-origin", "password": "origin-password"},
+    )
+    assert login.status_code == 200
+    csrf = login.json()["csrf_token"]
+
+    def submit(key: str, origin: str | None):
+        headers = {
+            "Origin": "https://app.test",
+            "X-CSRF-Token": csrf,
+            "Idempotency-Key": key,
+        }
+        if origin is not None:
+            headers["X-Origin-Root-Task-Id"] = origin
+        return client.post(
+            "/api/tasks", headers=headers, json={"keyword": "宠物", "target_count": 1}
+        )
+
+    unknown = "11111111-1111-1111-1111-111111111111"
+    missing = submit("origin-missing", unknown)
+    assert missing.status_code == 422
+    body = missing.json()
+    assert body["code"] == "INVALID_FORM"
+    assert body["message"] == "ORIGIN_TASK_NOT_FOUND"
+    assert body["request_id"]
+    assert body["field_errors"] == []
+    with repo.connect() as conn:
+        left = conn.execute(
+            "SELECT count(*) AS n FROM root_tasks WHERE origin_root_task_id=%s", (unknown,)
+        ).fetchone()
+    assert left and left["n"] == 0
+
+    source = submit("origin-source", None)
+    assert source.status_code == 202
+    source_root = source.json()["root_task_id"]
+
+    linked = submit("origin-linked", source_root)
+    assert linked.status_code == 202
+    linked_root = linked.json()["root_task_id"]
+    with repo.connect() as conn:
+        row = conn.execute(
+            "SELECT origin_root_task_id FROM root_tasks WHERE root_task_id=%s", (linked_root,)
+        ).fetchone()
+    assert row and str(row["origin_root_task_id"]) == source_root
