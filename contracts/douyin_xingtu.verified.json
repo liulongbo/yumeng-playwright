@@ -860,6 +860,8 @@
           "key": "search_word_ctr",
           "name": "搜索词点击率",
           "kind": "structured",
+          "missing_source_status": "NO_DATA",
+          "missing_source_evidence": "live:2026-10-10:seed-base-success-response-optional-search-word-ctr-absent",
           "source": {
             "kind": "response",
             "request_key": "seed_base",
@@ -963,6 +965,8 @@
           "key": "message_reply_rate",
           "name": "消息回复率",
           "kind": "structured",
+          "missing_source_status": "NO_DATA",
+          "missing_source_evidence": "live:2026-10-10:contract-base-success-response-optional-message-reply-rate-absent",
           "source": {
             "kind": "response",
             "request_key": "contract_base",

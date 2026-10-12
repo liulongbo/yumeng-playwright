@@ -151,7 +151,9 @@ def test_network_mode_is_persisted_and_immutable(repo):
         repo.register_unit("local-unit", "acct", "local-dev", "/tmp/local-profile")
     with repo.connect() as conn:
         versions = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
-    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6, 7]
+    # 009 adds task_dispatches.workflow_started_at (FIX-01 P1-B): the applied set is asserted
+    # exhaustively so a migration that silently stops being applied is caught here.
+    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 
 def test_account_rebinding_is_explicit_audited_and_requires_released_browser(repo, started):

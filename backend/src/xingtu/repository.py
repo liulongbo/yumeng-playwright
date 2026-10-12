@@ -37,6 +37,7 @@ RUNNING = {
     TaskStatus.COLLECTING,
     TaskStatus.PERSISTING,
     TaskStatus.RETRY_WAIT,
+    TaskStatus.WAITING_FOR_VERIFICATION,
 }
 
 
@@ -491,6 +492,7 @@ class Repository:
             ReleaseDisposition.VERIFIED_READY: "READY",
             ReleaseDisposition.LOGIN_REQUIRED: "NEEDS_LOGIN",
             ReleaseDisposition.ACCOUNT_MISMATCH: "ACCOUNT_MISMATCH",
+            ReleaseDisposition.SECURITY_CHALLENGE: "NEEDS_VERIFICATION",
             ReleaseDisposition.SESSION_UNVERIFIED: "SESSION_UNVERIFIED",
             ReleaseDisposition.BROWSER_UNCONFIRMED: "QUARANTINED",
         }[disposition]
@@ -498,6 +500,7 @@ class Repository:
             ReleaseDisposition.VERIFIED_READY: "VALID",
             ReleaseDisposition.LOGIN_REQUIRED: "LOGIN_REQUIRED",
             ReleaseDisposition.ACCOUNT_MISMATCH: "ACCOUNT_MISMATCH",
+            ReleaseDisposition.SECURITY_CHALLENGE: "SECURITY_CHALLENGE",
             ReleaseDisposition.SESSION_UNVERIFIED: "INDETERMINATE",
             ReleaseDisposition.BROWSER_UNCONFIRMED: "INDETERMINATE",
         }[disposition]
@@ -646,7 +649,8 @@ class Repository:
             result = conn.execute(
                 "UPDATE task_dispatches d SET sent=false FROM root_tasks r "
                 "WHERE d.root_task_id=r.root_task_id AND d.segment=(r.payload->>'segment')::int "
-                "AND r.unit_id=%s AND r.state IN ('WAITING_FOR_LOGIN','WAITING_FOR_ACCOUNT') "
+                "AND r.unit_id=%s AND r.state IN "
+                "('WAITING_FOR_LOGIN','WAITING_FOR_ACCOUNT','WAITING_FOR_VERIFICATION') "
                 "AND d.sent=true",
                 (unit,),
             )
@@ -662,7 +666,8 @@ class Repository:
                 raise CollectorError("RESOURCE_UNAVAILABLE", "unit not registered")
             waiting = conn.execute(
                 "SELECT count(*) AS n FROM root_tasks WHERE unit_id=%s "
-                "AND state IN ('WAITING_FOR_LOGIN','WAITING_FOR_ACCOUNT')",
+                "AND state IN "
+                "('WAITING_FOR_LOGIN','WAITING_FOR_ACCOUNT','WAITING_FOR_VERIFICATION')",
                 (unit,),
             ).fetchone()
             assert waiting
@@ -683,7 +688,8 @@ class Repository:
                 """UPDATE task_dispatches d SET sent=false FROM root_tasks r
                 WHERE d.root_task_id=r.root_task_id
                 AND d.segment=(r.payload->>'segment')::int AND r.unit_id=%s
-                AND r.state IN ('WAITING_FOR_LOGIN','WAITING_FOR_ACCOUNT')""",
+                AND r.state IN
+                ('WAITING_FOR_LOGIN','WAITING_FOR_ACCOUNT','WAITING_FOR_VERIFICATION')""",
                 (unit,),
             )
             conn.execute(

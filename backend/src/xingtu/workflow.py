@@ -47,7 +47,15 @@ class CollectionWorkflow:
                 "WAITING_FOR_LOGIN",
                 "WAITING_FOR_ACCOUNT",
             } and workflow.patched("waiting-for-login-explicit-wake-v1")
-            if state == "PAUSED_BUDGET" or wait_for_explicit_login:
+            wait_for_explicit_verification = (
+                state == "WAITING_FOR_VERIFICATION"
+                and workflow.patched("waiting-for-verification-explicit-wake-v1")
+            )
+            if (
+                state == "PAUSED_BUDGET"
+                or wait_for_explicit_login
+                or wait_for_explicit_verification
+            ):
                 # Login/challenge maintenance is user-driven.  A timeout must not poll every 30
                 # seconds and repeatedly launch visible Chrome processes; `xingtu login` records
                 # the durable dispatch intent that sends this wake. `patched` preserves replay

@@ -30,6 +30,10 @@ class EvidenceSummary(Model):
     schema_keys: list[str] = Field(default_factory=list)
     status_code: int | None = None
     failure_reason: str | None = None
+    # Bounded structural facts about the rejected response: dotted key paths only, never values.
+    response_keys: list[str] = Field(default_factory=list)
+    # Allowlisted request-level facts (request key, HTTP status, content-type kind, business code).
+    diagnostic: dict[str, object] = Field(default_factory=dict)
 
     def body(self) -> bytes:
         return json.dumps(self.model_dump(mode="json"), sort_keys=True).encode()

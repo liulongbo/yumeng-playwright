@@ -5,7 +5,7 @@ import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Literal, Self
+from typing import Any, Literal, Self
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
@@ -26,6 +26,7 @@ class Model(BaseModel):
 class CollectorError(Exception):
     def __init__(self, code: str, reason: str = ""):
         self.code, self.reason = code, reason
+        self.diagnostics: list[Any] = []
         super().__init__(f"{code}: {reason}")
 
 
@@ -45,6 +46,11 @@ ERROR_CODES = frozenset(
         "ACCOUNT_MISMATCH",
         "SESSION_INDETERMINATE",
         "PLATFORM_SECURITY_CHALLENGE",
+        "SECURITY_CHALLENGE_LIMIT",
+        "SECURITY_CHALLENGE_TIMEOUT",
+        "SECURITY_CHALLENGE_SESSION_INVALID",
+        "SECURITY_CHALLENGE_ACCOUNT_MISMATCH",
+        "SECURITY_CHALLENGE_UNKNOWN",
         "RESOURCE_UNAVAILABLE",
         "LEASE_LOST",
         "CREATOR_INVALID",
@@ -77,6 +83,7 @@ class TaskStatus(StrEnum):
     RETRY_WAIT = "RETRY_WAIT"
     WAITING_FOR_LOGIN = "WAITING_FOR_LOGIN"
     WAITING_FOR_ACCOUNT = "WAITING_FOR_ACCOUNT"
+    WAITING_FOR_VERIFICATION = "WAITING_FOR_VERIFICATION"
     WAITING_FOR_RESOURCE = "WAITING_FOR_RESOURCE"
     PAUSED_BUDGET = "PAUSED_BUDGET"
     CANCELLING = "CANCELLING"
@@ -112,8 +119,25 @@ class ReleaseDisposition(StrEnum):
     VERIFIED_READY = "VERIFIED_READY"
     LOGIN_REQUIRED = "LOGIN_REQUIRED"
     ACCOUNT_MISMATCH = "ACCOUNT_MISMATCH"
+    SECURITY_CHALLENGE = "SECURITY_CHALLENGE"
     SESSION_UNVERIFIED = "SESSION_UNVERIFIED"
     BROWSER_UNCONFIRMED = "BROWSER_UNCONFIRMED"
+
+
+class ChallengeType(StrEnum):
+    SLIDER_OR_INTERACTIVE = "SLIDER_OR_INTERACTIVE"
+    LOGIN_REQUIRED = "LOGIN_REQUIRED"
+    ACCOUNT_MISMATCH = "ACCOUNT_MISMATCH"
+    UNKNOWN_SECURITY_CHALLENGE = "UNKNOWN_SECURITY_CHALLENGE"
+
+
+class ChallengeState(StrEnum):
+    DETECTED = "DETECTED"
+    HANDLING = "HANDLING"
+    VERIFIED = "VERIFIED"
+    TIMEOUT = "TIMEOUT"
+    FAILED = "FAILED"
+    LIMIT_EXCEEDED = "LIMIT_EXCEEDED"
 
 
 class SessionHealth(Model):
@@ -743,6 +767,10 @@ class Checkpoint(Model):
     # Only requests correlated by a registered operation; not all browser/network traffic.
     observed_requests: int = Field(default=0, ge=0)
     observed_responses: int = Field(default=0, ge=0)
+    navigation_count: int = Field(default=0, ge=0)
+    duplicate_request_count: int = Field(default=0, ge=0)
+    featured_load_count: int = Field(default=0, ge=0)
+    cover_request_count: int = Field(default=0, ge=0)
     module_seconds: dict[str, float] = Field(default_factory=dict)
     failure_counts: dict[str, int] = Field(default_factory=dict)
     rescan_reasons: list[str] = Field(default_factory=list)
@@ -753,6 +781,18 @@ class Checkpoint(Model):
     featured_collection_types: list[str] = Field(default_factory=list)
     featured_card_fields: dict[str, list[str]] = Field(default_factory=dict)
     featured_checkpoint_versions: dict[str, int] = Field(default_factory=dict)
+    # Security-challenge orchestration is checkpointed so Activity retries and Workflow replay do
+    # not reset limits or lose the user-visible waiting summary. All fields have v1-safe defaults.
+    challenge_count: int = Field(default=0, ge=0)
+    challenge_recovery_count: int = Field(default=0, ge=0)
+    challenge_recoveries_by_creator: dict[str, int] = Field(default_factory=dict)
+    challenge_first_detected_at: datetime | None = None
+    challenge_last_detected_at: datetime | None = None
+    challenge_wait_started_at: datetime | None = None
+    challenge_last_recovered_at: datetime | None = None
+    challenge_current_creator: str | None = None
+    challenge_type: ChallengeType | None = None
+    challenge_state: ChallengeState | None = None
     contract_version: str
     adapter_version: str
     revision: int = 0
@@ -795,7 +835,7 @@ class TaskRecord(Model):
     checkpoint: Checkpoint
     failure_reason: str | None = None
     profile_requirement: ProfileRequirement | None = None
-    source: Literal["internal_acceptance"] = "internal_acceptance"
+    source: Literal["internal_acceptance", "model"] = "internal_acceptance"
     segment: int = 0
     valid_count: int = 0
     profile_complete_count: int = 0

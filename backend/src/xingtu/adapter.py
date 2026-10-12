@@ -224,6 +224,14 @@ class BrowserAdapter:
         self.search_replay: ReplayRequest | None = None
         self.initial_observations: dict[str, ModuleObservation] = {}
         self.operation_metrics: dict[str, int] = {}
+        self.creator_interval_seconds = 0.0
+
+    def metric(self, key: str, amount: int = 1) -> None:
+        self.operation_metrics[key] = self.operation_metrics.get(key, 0) + amount
+
+    async def navigate(self, page: Page, url: str) -> None:
+        self.metric("navigations")
+        await page.goto(url, wait_until="domcontentloaded")
 
     def locator(self, page: Page, spec: LocatorSpec) -> Locator:
         return (
@@ -526,9 +534,9 @@ class BrowserAdapter:
             if attempt > 1 and attempt % 2 == 0:
                 # Bounce through the registered SSO entry so the parent session can hand off a
                 # fresh business session, mirroring the verified manual recovery flow.
-                await page.goto(sso_url, wait_until="domcontentloaded")
+                await self.navigate(page, sso_url)
             target = targets[(attempt - 1) % len(targets)]
-            await page.goto(target, wait_until="domcontentloaded")
+            await self.navigate(page, target)
             # Every bootstrap probe uses the short poll window.  The full session boot timeout is
             # for a session already sitting on the protected surface; a first hop that the platform
             # redirects away never becomes readable, and waiting the full timeout only burns the
@@ -764,7 +772,7 @@ class BrowserAdapter:
                 metrics=self.operation_metrics,
             ) as capture:
                 # Register before navigation, including the homepage's initial business responses.
-                await page.goto(creator.verified_homepage, wait_until="domcontentloaded")
+                await self.navigate(page, creator.verified_homepage)
                 self.registry.validate_homepage(page.url)
                 await self.check_session(page)
                 await self.verify_identity(page, creator)
@@ -837,7 +845,7 @@ class BrowserAdapter:
                 # Registered module entry page; identity was verified before leaving the homepage.
                 entry = urljoin(creator.verified_homepage, spec.entry)
                 self.registry.validate_platform_url(entry)
-                await page.goto(entry, wait_until="domcontentloaded")
+                await self.navigate(page, entry)
                 self.registry.validate_platform_url(page.url)
                 await self.check_session(page)
             await self.actions(page, spec.actions)
@@ -897,7 +905,19 @@ class BrowserAdapter:
         await self.verify_identity(page, creator)
         observations: list[FeaturedCollectionObservation] = []
         for spec in self.registry.featured:
+            candidate = next(
+                (
+                    item
+                    for item in cp.candidates
+                    if item.ref.platform_creator_id == creator.platform_creator_id
+                ),
+                None,
+            )
+            previous = candidate.collections.get(spec.key.value) if candidate else None
+            if previous is not None and previous.complete:
+                continue
             try:
+                self.metric("featured_loads")
                 observations.append(await self._collect_featured(page, spec, creator, ctx))
             except CollectorError as exc:
                 # One module failing must never drop the other module's committed result.
@@ -948,7 +968,7 @@ class BrowserAdapter:
             metrics=self.operation_metrics,
         ) as capture:
             if spec.reload_homepage:
-                await page.goto(creator.verified_homepage, wait_until="domcontentloaded")
+                await self.navigate(page, creator.verified_homepage)
                 self.registry.validate_homepage(page.url)
                 await self.check_session(page)
                 await self.verify_identity(page, creator)
@@ -956,7 +976,7 @@ class BrowserAdapter:
                 # Registered module entry; identity was verified on the homepage before leaving it.
                 entry = urljoin(creator.verified_homepage, spec.entry)
                 self.registry.validate_platform_url(entry)
-                await page.goto(entry, wait_until="domcontentloaded")
+                await self.navigate(page, entry)
                 self.registry.validate_platform_url(page.url)
                 await self.check_session(page)
             await self.actions(page, spec.actions)
@@ -1391,6 +1411,7 @@ class BrowserAdapter:
         page = self.detail_page or self.search_page
         if page is None:
             raise CollectorError("COVER_STORE_FAILED", "COVER_SESSION_UNAVAILABLE")
+        self.metric("cover_requests")
         result = await page.evaluate(
             COVER_FETCH_JS,
             {

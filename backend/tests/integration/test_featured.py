@@ -2,9 +2,11 @@
 
 import hashlib
 
+import pytest
 from xingtu.covers import CoverPipeline, LocalCoverStore
-from xingtu.domain import ExecutionContext, ReleaseDisposition, TaskStatus, uid
+from xingtu.domain import CollectorError, ExecutionContext, ReleaseDisposition, TaskStatus, uid
 from xingtu.engine import Engine
+from xingtu.product_queries import ProductQueries
 
 from backend.tests.synthetic import SyntheticAdapter
 
@@ -116,6 +118,50 @@ async def test_full_run_is_complete_and_persists_identity_snapshots_and_covers(
     assert referenced and store.path(referenced).is_file()
     assert repo.cover_reference(ctx.root_task_id, referenced) is not None
     assert repo.cover_reference(uid(), referenced) is None
+
+    # F08 reads the task-linked immutable snapshot and keeps both groups independent.
+    product_results = ProductQueries(repo)
+    creator_page = product_results.list_creators(ctx.root_task_id)
+    assert len(creator_page.items) == 2
+    assert all(item.view_kind == "published" for item in creator_page.items)
+    first_creator = creator_page.items[0]
+    reach = product_results.contents(ctx.root_task_id, first_creator.creator_id, "excellent_reach")
+    seeding = product_results.contents(
+        ctx.root_task_id, first_creator.creator_id, "excellent_seeding"
+    )
+    assert [card["payload"]["platform_content_id"] for card in reach["cards"]] == [
+        "v1",
+        "v2",
+    ]
+    assert [card["payload"]["platform_content_id"] for card in seeding["cards"]] == [
+        "v2",
+        "v9",
+    ]
+    first_reach = product_results.contents(
+        ctx.root_task_id,
+        first_creator.creator_id,
+        "excellent_reach",
+        limit=1,
+    )
+    assert len(first_reach["cards"]) == 1 and first_reach["next_cursor"]
+    second_reach = product_results.contents(
+        ctx.root_task_id,
+        first_creator.creator_id,
+        "excellent_reach",
+        cursor=first_reach["next_cursor"],
+        limit=1,
+    )
+    assert len(second_reach["cards"]) == 1 and second_reach["next_cursor"] is None
+    with pytest.raises(CollectorError, match="INVALID_CURSOR"):
+        product_results.contents(
+            ctx.root_task_id,
+            first_creator.creator_id,
+            "excellent_seeding",
+            cursor=first_reach["next_cursor"],
+            limit=1,
+        )
+    with pytest.raises(CollectorError, match="CREATOR_NOT_FOUND"):
+        product_results.get_creator(uid(), first_creator.creator_id)
 
     # An unreferenced object is removable; a published one is kept.
     stray = store.put(
