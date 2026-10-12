@@ -12,3 +12,12 @@ __pycache__/
 *.har
 *.zip
 .DS_Store
+frontend/node_modules/
+frontend/dist/
+.lazyweb/
+# Transient Playwright MCP session output (page snapshots, console logs, screenshots).
+.playwright-mcp/
+# TypeScript build artefacts emitted into the source tree by `tsc -b`.
+frontend/tsconfig.*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
