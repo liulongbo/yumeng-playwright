@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Literal
 
@@ -44,7 +45,11 @@ class ProductCoverReader:
             client = self.s3_client or boto3.client("s3", endpoint_url=self.config.endpoint)
             try:
                 response = client.get_object(Bucket=self.config.bucket, Key=object_id)
-                body = response["Body"].read()
+                # botocore only returns the pooled HTTP connection once the streaming body has
+                # been closed. Without this the reader leaks one connection per cover request
+                # until the pool is exhausted and cover loading stalls.
+                with closing(response["Body"]) as stream:
+                    body = stream.read()
             except (BotoCoreError, ClientError, KeyError, OSError) as exc:
                 raise CollectorError("STORAGE_UNAVAILABLE", "COVER_OBJECT_READ_FAILED") from exc
         if len(body) != byte_size or hashlib.sha256(body).hexdigest() != checksum:

@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import os
 from collections.abc import Awaitable, Callable
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Literal, Protocol
 from urllib.parse import urlsplit
@@ -241,7 +242,10 @@ class S3CoverStore:
         try:
             head = self.client.head_object(Bucket=self.bucket, Key=object_id)
             response = self.client.get_object(Bucket=self.bucket, Key=object_id)
-            body = response["Body"].read()
+            # See ProductCoverReader.read: an unclosed streaming body never returns its pooled
+            # HTTP connection, so the cover-verification path would leak one per read-back.
+            with closing(response["Body"]) as stream:
+                body = stream.read()
         except (BotoCoreError, ClientError, KeyError, OSError) as exc:
             raise CollectorError("STORAGE_UNAVAILABLE", "COVER_OBJECT_READBACK_FAILED") from exc
         # Botocore preserves the header spelling returned by a server. AWS commonly returns
