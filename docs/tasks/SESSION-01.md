@@ -1,7 +1,7 @@
 # SESSION-01：平台会话真实存活时长核验
 
 状态：进行中
-更新时间：2026-10-06T18:01:11+08:00（Asia/Shanghai）
+更新时间：2026-10-12T15:37:00+08:00（Asia/Shanghai）
 是否验收：否
 
 ## 目标与范围
@@ -40,7 +40,7 @@
 - [ ] H2 自动化风控：登录后仅静默不访问 vs. 立即访问搜索/主页，会话存活时长对照。
 - [ ] H3 启动参数：`--disable-quic`、`--force-webrtc-ip-handling-policy=disable_non_proxied_udp` 的对照实验（优先级低于 H-A/H-B，因其不解释账号漂移）。
 - [ ] **H-A/H-B 账号漂移根因**：判定 profile 是否并存多个账号登录态；若是，明确"单元 profile 只允许单一绑定账号"的检测与约束方式。（2026-10-05：漂移现象已复现、载体收敛到 `star_sessionid`，见[证据](../evidence/account-drift-probe-2026-10-05.md)；H-A 与 H-B **仍未区分**，故不勾选。2026-10-06：新增**可用规避**路径——清除旧身份后改绑到"只含单一子账号"的新登录身份，两次独立冷启动判定 `STABLE`，见[改绑证据](../evidence/SESSION-01-account-rebinding-2026-10-06.md)；根因本身仍未区分，该项保持不勾选。）
-- [ ] 存活时长实测：测出会话失效的**时间下界与上界**（本轮仅知"至少存活约 20 分钟且跨越多次浏览器重启"，未测上界）。
+- [ ] 存活时长实测：测出会话失效的**时间下界与上界**（本轮仅知"至少存活约 20 分钟且跨越多次浏览器重启"，未测上界）。2026-10-12 新增下界数据点：上次进程内确证（01:12:41+08）后，**14.4 小时后**再次冷启动仍为 `VALID` 且账号一致（见[会话实时只读核验证据](../evidence/UNIT-01-session-live-check-2026-10-12.md)）；**上界与失效条件仍未测**，故不勾选。
 - [ ] 结论回写：把根因结论写入技术方案、[AUTO-01](AUTO-01.md)、[UNIT-01](UNIT-01.md) 与 [DEC-011](../decisions/DEC-011-automation-optimization.md)（本轮已回写 SESSION-01 与本卡，其余待根因确定后统一回填）。
 - [x] 显式账号改绑：迁移 007 + `Repository.rebind_unit_account` + `xingtu rebind-account` 已实现；改绑带操作者/原因/证据、宿主占用时拒绝、自动化路径仍不可变更身份；集成测试覆盖。
 - [x] 混合持久化与冷启动引导：持久目录 + storage-state 显式注入（会话有效时导出、下次启动首次导航前注入、只在保护页可读时覆盖），冷启动引导改为有界重试 + 短探测；对照实验证明注入快照决定"能否进入后台"。单元 114 + 契约 22 通过。**存活上界与长期稳定性仍未测，故本项只勾"机制已实现并现场验证"，不代表验收通过。**
@@ -248,3 +248,4 @@
 - 2026-10-06T15:19:21+08:00：进行中 → 进行中。用户明确授权将本轮改动发布到 `main`。发布前确认本地与 `origin/main` 无分叉，敏感信息复核未发现明文 Cookie/Token/请求正文，`.runtime/` 持续被忽略；`make check` 通过（Ruff/format/mypy/107 单测），完整 Browser Contract 在允许 Chromium Mach port 的环境中 21 passed，探针 10+2 项自检通过。受限沙箱中的首次 Contract 运行因 macOS `bootstrap_check_in ... Permission denied (1100)` 未启动 Chromium，属运行环境拒绝而非断言失败。本次发布不改变真实平台验收结论，整卡仍为进行中／未验收。
 - 2026-10-06T16:35:00+08:00：进行中 → 进行中。用户决策**舍弃旧登录身份**并改用只含单一子账号的新巨量星图账号：备份 `.runtime/profiles/unit-local-mac-02.bak-20261006T161500`（200 MiB）后清空重建 profile，用项目真实 Chrome 完成人工登录，冷启动读到新账号 `ID: 1807978499337419`（受保护页可见）。新增**显式审计改绑**能力（迁移 007 `unit_account_rebindings`、`Repository.rebind_unit_account`、CLI `xingtu rebind-account`；宿主占用时拒绝、`register_unit` 与 `ACCOUNT_MISMATCH` 仍禁止自动改绑），改绑后单元为 `SESSION_UNVERIFIED`/`ACCOUNT_BINDING_CHANGED`。**规避有效性验证通过**：改绑后两次独立冷启动（间隔 10 秒）判定 `STABLE`，实测账号恒为新身份、跨轮身份 Cookie 零变化，与改绑前"重启即回退 `1832740070238347`"对照成立。`ruff`/`format`/`mypy` 通过、单元 108 passed、集成 53 passed / 1 failed（该失败在 HEAD `bc74e27` 上同样失败，属本分支"翻页+全字段"进行中改动的既有失败，与本轮无关，已登记遗留）。证据见[改绑与漂移规避证据](../evidence/SESSION-01-account-rebinding-2026-10-06.md)。漂移根因与存活上界仍未闭合，整卡保持进行中／未验收。
 - 2026-10-06T18:01:11+08:00：进行中 → 进行中。用户要求"先修复账号不稳定问题"，并按**混合持久化（持久目录 + 显式 storage-state 注入）**方案实施。① 定位业务会话载体 `.xingtu.cn/star_sessionid` 为**会话级 Cookie**（`is_persistent=0`、`has_expires=0`），落盘不确定正是"有时登录、有时未登录"的直接机制；② 实现会话有效时导出 `context.storage_state()`（`.runtime/storage-state/<unit>.json`，`0600`）并在下次启动**首次导航前**注入全部 Cookie 与 localStorage，仅在页面出现契约保护页标志时才覆盖快照；③ **对照实验决定性**：同一 profile，注入快照 → 账号可读、后台可进；移走快照 → 被打回 `/?redirect_uri=...`。④ 同时修复冷启动引导缺陷：worker 路径下 `inspect_session` 会在已被重定向的页面上耗尽 `session_boot_timeout_seconds=180s`，改为有界重试（≤4 次，轮流使用新登记的 `session.business_urls`）+ 每次 15s 短探测。⑤ 效果：宠物 22 位采集**首次端到端跑通**（40 候选 / 22 有效 / 67 快照 / 两页翻页），全程未再因"被踢回登录页"空转。`ruff`/`format`/`mypy` 通过、单元 114 项通过、契约 22 项通过。存活上界仍未测，快照注入属凭证复用、平台若收紧需重评，整卡保持进行中／未验收。
+- 2026-10-12T15:37:00+08:00：进行中 → 进行中（不变）。用户要求检查当前执行单元的星图登录状态是否失效，显式授权后执行**只读实时核验** `xingtu session-diagnostics`（`2026-10-12T15:36:53 → 15:37:01+08:00`，exit 0）：结果 `SessionHealthStatus.VALID`，`protected_page_verified=true`、`login_page_verified=false`、`challenge_verified=false`，`observed_account_id == expected_account_id == ID: 1807978499337419`（**漂移规避继续成立**），Chrome 154.0.8037.98、`normal_close_confirmed=true`。据此新增**存活时长下界**数据点：上次进程内确证（01:12:41+08）之后，**14.4 小时**且跨越新的冷启动仍被平台接受。**存活上界与失效诱因（H1/H2/H3、H-A/H-B）仍未闭合**，本卡保持进行中／未验收。证据见[会话实时只读核验证据](../evidence/UNIT-01-session-live-check-2026-10-12.md)。

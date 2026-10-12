@@ -1,5 +1,9 @@
 # 开发任务索引
 
+# 2026-10-12 当前执行单元星图登录状态实时核验（只读）
+
+用户询问"当前执行单元内巨量星图的登录状态是失效还是有效"。先固定对象：开发库只有 `unit-local-mac-02` 一个执行单元（`.runtime/units/local-dev-mac-02.json`，绑定账号 `ID: 1807978499337419`，profile `.runtime/profiles/unit-local-mac-02`）。库中 `last_session_status=VALID` 的时间是 `2026-10-12T01:12:41+08:00`（14.4 小时前），而项目契约明确"持久化状态不构成活动会话证明，只有当前进程观测可产生 `VALID`"，故用户授权后补做只读进程内观测：`xingtu session-diagnostics`（`15:36:53 → 15:37:01+08:00`，exit 0）→ **`SessionHealthStatus.VALID`**，账号精确等于绑定账号，受保护页可见，无登录页、无安全挑战。**结论：有效**；未搜索、未采集、未写业务库。新增 SESSION-01 存活时长下界数据点（≥14.4 小时且跨冷启动，账号无漂移），上界仍未测。证据：[会话实时只读核验证据](../evidence/UNIT-01-session-live-check-2026-10-12.md)。[UNIT-01](UNIT-01.md) 保持**待验收**、[SESSION-01](SESSION-01.md) 保持**进行中／未验收**。
+
 # 2026-10-11 MCP 原生工具 UI 端到端复跑
 
 以已注册到 profile 的原生 `mcp__playwright__*` 工具 + 真实 Chrome 复跑「发起 → 需求转换 → 状态流转 → 任务中心 → 取消」：13 条用例 12 PASS / 1 FAIL。PASS：登录门禁、发起「露营/3」→ `QUEUED` v3（2.67 s，真实 1126/88 tokens）、阻塞面板（`t+140 s`，且此时 `consumer_alive=true` 仍被判阻塞）、`RECEIVED` 阶段取消 → `CANCELLED` v1（0 次模型调用）、会话跨 API 重启、控制台无 JS 异常。FAIL：**DEF-01** 已 `QUEUED` 任务取消停在 `CANCELLING`（需 P2 收尾，P1）。另有 3 条低级问题（Vite 代理在 API 停机窗口返回 500、`browser_wait_for` 长等待提前返回、主动取消被显示为「需要关注」）。报告见 [MCP UI 端到端测试报告](../testing/mcp-ui-e2e-2026-10-11.md)。

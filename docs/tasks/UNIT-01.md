@@ -1,7 +1,7 @@
 # UNIT-01：执行单元与平台核验
 
 状态：待验收  
-更新时间：2026-10-06T16:35:00+08:00
+更新时间：2026-10-12T15:37:00+08:00
 
 ## 2026-10-06 单元账号绑定变更（改绑）
 
@@ -96,10 +96,14 @@
   - 未执行（本轮二）：分页第 2 页及以后、其余主页模块、筛选枚举、访问节奏、生产线路/远程维护（U06/U07/U08）、Docker Compose、`make setup`、S3。
   - 最终离线复测：`ruff check`/`ruff format --check`/`mypy` 通过；`pytest` 单测 94 / 契约 13 / 集成 26 / E2E 3 全绿。
 - 2026-09-26 历史记录（保留）：未执行全部实机核验项（真实账号、线路、profile 隔离实测、远程浏览器维护），原因为 J1900/蜂窝模块/SIM/真实星图账号未到位且 U06 承载方案未选定；执行单元 Activity 强制 `require_enabled(live=True)`，无法用合成注册表绕过；`make dev` Compose 依赖编排因 Docker 守护进程未运行未执行。
+- 2026-10-12（真实平台，**只读会话核验**）：用户显式授权只读核验后执行 `xingtu session-diagnostics --config .runtime/units/local-dev-mac-02.json`（`XINGTU_DIAGNOSTIC_HMAC_KEY` 取自 `.runtime/drift-probe.hmac-key`，`PYTHONPATH=backend/src`），`2026-10-12T15:36:53+08:00 → 15:37:01+08:00`、exit `0`。结果 `SessionHealthStatus.VALID`：`observed_account_id == expected_account_id == ID: 1807978499337419`、`protected_page_verified=true`、`login_page_verified=false`、`challenge_verified=false`、Chrome `154.0.8037.98`、`normal_close_confirmed=true`。**未**执行搜索、采集或任何业务写入；`session-diagnostics` 不取租约，故库中 `execution_units.last_session_checked_at` 仍为旧观测 `2026-10-12T01:12:41+08:00`，本次结论以报告文件为准。详见[会话实时只读核验证据](../evidence/UNIT-01-session-live-check-2026-10-12.md)。
+  - 核验前的既有记录（**不作为实时结论**）：库中 `state=READY`、`last_session_status=VALID`、`last_session_reason=PROTECTED_PAGE_AND_ACCOUNT_VERIFIED`，时间 `2026-10-12T01:12:41+08:00`，对应根任务 `7a5111cc-49cd-431d-90ca-3120201e809e` `COMPLETED`。按 `domain.py` 的 `SessionHealthStatus` 契约，持久化状态**从不**构成活动会话证明，只有当前进程观测可产生 `VALID`，故必须补做本次进程内观测。
+  - 本次核验不改变本卡验收结论：分页/其余主页模块/筛选枚举与访问节奏、生产线路与隔离（U07/U08）、远程承载（U06）仍未验收。
 
 ## 交接信息
 
 - 当前资源：用户已确认设备及账号具备；本轮实测到系统 Chrome 154.0.8037.57 + Playwright 1.63.0 可真实启动并访问 `https://www.xingtu.cn/`（HTTP 200）。
+- **会话现状（2026-10-12T15:37+08:00 实测）**：`unit-local-mac-02` 的星图登录状态为**有效**（`SessionHealthStatus.VALID`，受保护页可见，账号 = `ID: 1807978499337419`），可继续免人工登录发起采集。注意 `star_sessionid` 为会话级 Cookie，该结论只对"当前这一时段"成立；采集 Worker（PID 75094）在线且无待处理任务，单元 `owner=NULL`、`browser_stopped=true`、无待处理根任务。
 - 阻塞已解除（2026-09-27 本轮二）：真实登录、真实搜索与 2 位达人主页采集均已完成并落库（[真实采集证据](../evidence/UNIT-01-real-collection-2026-09-27.md)）。以下历史解除条件保留备查：
   1. `xingtu research --config .runtime/units/local-dev-mac.json --url https://www.xingtu.cn/ --out .runtime/research/r01-login --login-wait-seconds 1500 --login-done-file .runtime/research/login.done --steps .runtime/research/steps-login.json`（登录完成后由人工信号或超时结束）；
   2. 依据真实观察登记会话/搜索/主页契约到 `contracts/douyin_xingtu.verified.json`，通过 `require_enabled(live=True)` 与 13.5 交付清单；
@@ -120,6 +124,7 @@
 - 2026-09-27T09:51:41+08:00：阻塞 → 进行中；用户确认资源齐全，明确优先本机IP+Chrome+账号开发验证；新增本地阶段清单，保留全部生产验收。
 - 2026-09-27T17:35:00+08:00：阻塞 → 待验收；用户可接收验证码后完成真实登录（`READY`/session_version=4）、按真实交互登记并发布平台契约 `xingtu-ad-creator-square-v1`、完成 2 位达人真实采集与落库核对（`valid=2`/`profile_complete=2`）。仍剩分页、其余主页模块、筛选枚举、访问节奏与全部生产线路/远程维护验收，故为“待验收”。见[真实采集证据](../evidence/UNIT-01-real-collection-2026-09-27.md)。
 - 2026-09-27T11:20:00+08:00：进行中 → 阻塞；本地开发网络模式、真实 Chrome 兼容性、研究采集工具与本地验证载体已实现并实测（87 项离线/本地测试通过，门槛负向实测通过）；真实星图登录因用户手机不在身边、无法接收验证码而未完成，会话/搜索/主页契约未登记，F04/F05 真实采集未执行。解除条件见交接信息。见[本地阶段证据](../evidence/UNIT-01-local-stage-2026-09-27.md)。
+- 2026-10-12T15:37:00+08:00：待验收 → 待验收（不变）。用户授权后对当前唯一执行单元 `unit-local-mac-02` 执行只读实时会话核验：`xingtu session-diagnostics` 冷启动真实 Chrome 访问已登记受保护入口，得 `SessionHealthStatus.VALID`，账号精确等于绑定账号 `ID: 1807978499337419`，无登录页、无安全挑战、浏览器正常关闭。该核验只补"当前进程会话有效"这一项证据，未改变本卡"待验收"状态与其余未验收项。见[会话实时只读核验证据](../evidence/UNIT-01-session-live-check-2026-10-12.md)。
 
 ## 2026-09-28 AUTO-01 联动回归
 
