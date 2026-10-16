@@ -21,11 +21,16 @@ from .product_models import (
     AuthenticatedUser,
     CommandRequest,
     CreateTaskResponse,
+    CreatorLibraryDetail,
+    CreatorLibraryHistory,
+    CreatorLibraryPage,
+    CreatorLibraryQuote,
     CreatorPage,
     CreatorSummary,
     FieldError,
     LoginRequest,
     ProductError,
+    ProfileFieldCatalog,
     RequirementForm,
     TaskDetail,
     TaskPage,
@@ -33,6 +38,7 @@ from .product_models import (
 )
 from .product_queries import ProductQueries
 from .product_repository import ProductRepository
+from .profile_catalog import build_profile_field_catalog
 from .repository import Repository
 from .worker_health import INTAKE_QUEUE, WorkerHealthMonitor
 
@@ -47,7 +53,7 @@ class ProductSettings:
     login_hmac_key: bytes
     registry_path: Path
     model_config_id: str = "deepseek-flash"
-    prompt_version: str = "m3-filter-plan-v1"
+    prompt_version: str = "m3-filter-plan-v2"
     secure_cookie: bool = True
     allowed_origins: tuple[str, ...] = ()
     cover_config: ProductCoverConfig | None = None
@@ -99,7 +105,7 @@ class ProductSettings:
             login_hmac_key=hmac_key.encode(),
             registry_path=registry_path,
             model_config_id=os.environ.get("XINGTU_DEEPSEEK_MODEL", "deepseek-flash"),
-            prompt_version=os.environ.get("XINGTU_PROMPT_VERSION", "m3-filter-plan-v1"),
+            prompt_version=os.environ.get("XINGTU_PROMPT_VERSION", "m3-filter-plan-v2"),
             secure_cookie=secure,
             allowed_origins=origins,
             cover_config=cover_config,
@@ -303,6 +309,22 @@ def create_app(
             mode="json"
         )
 
+    @app.get(
+        "/api/platforms/douyin_xingtu/profile-field-catalog",
+        response_model=ProfileFieldCatalog,
+    )
+    def profile_field_catalog(
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+    ) -> ProfileFieldCatalog:
+        """Display names, kinds and registered units for the 81 profile fields.
+
+        Read-only projection of the already-loaded verified registry: no database access, no
+        business values.  Evidence-corrected display names are marked with `name_source`.
+        """
+
+        del user
+        return build_profile_field_catalog(services.registry)
+
     @app.post("/api/tasks", response_model=CreateTaskResponse, status_code=202)
     def create_task(
         form: RequirementForm,
@@ -447,6 +469,136 @@ def create_app(
             cursor=cursor,
             limit=limit,
         )
+
+    @app.get("/api/creator-library", response_model=CreatorLibraryPage)
+    def creator_library(
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+        platform: Literal["douyin_xingtu"] = "douyin_xingtu",
+        industry: str | None = None,
+        creator_type: str | None = None,
+        province: str | None = None,
+        city: str | None = None,
+        followers_min: Annotated[float | None, Query(ge=0)] = None,
+        followers_max: Annotated[float | None, Query(ge=0)] = None,
+        monthly_growth_min: float | None = None,
+        monthly_growth_max: float | None = None,
+        interaction_min: Annotated[float | None, Query(ge=0)] = None,
+        interaction_max: Annotated[float | None, Query(ge=0)] = None,
+        completion_min: Annotated[float | None, Query(ge=0)] = None,
+        completion_max: Annotated[float | None, Query(ge=0)] = None,
+        expected_cpm_min: Annotated[float | None, Query(ge=0)] = None,
+        expected_cpm_max: Annotated[float | None, Query(ge=0)] = None,
+        expected_cpe_min: Annotated[float | None, Query(ge=0)] = None,
+        expected_cpe_max: Annotated[float | None, Query(ge=0)] = None,
+        cooperation_form: str | None = None,
+        complete_only: bool = False,
+        sort: Literal[
+            "updated_at",
+            "followers",
+            "monthly_growth",
+            "interaction",
+            "completion",
+            "expected_cpm",
+            "expected_cpe",
+        ] = "updated_at",
+        direction: Literal["asc", "desc"] = "desc",
+        cursor: str | None = None,
+        limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    ) -> CreatorLibraryPage:
+        del user, platform
+        ranges = (
+            (followers_min, followers_max),
+            (monthly_growth_min, monthly_growth_max),
+            (interaction_min, interaction_max),
+            (completion_min, completion_max),
+            (expected_cpm_min, expected_cpm_max),
+            (expected_cpe_min, expected_cpe_max),
+        )
+        if any(low is not None and high is not None and low > high for low, high in ranges):
+            raise CollectorError("INVALID_FORM", "INVALID_CREATOR_LIBRARY_RANGE")
+        return services.queries.list_creator_library(
+            industry=industry,
+            creator_type=creator_type,
+            province=province,
+            city=city,
+            followers_min=followers_min,
+            followers_max=followers_max,
+            monthly_growth_min=monthly_growth_min,
+            monthly_growth_max=monthly_growth_max,
+            interaction_min=interaction_min,
+            interaction_max=interaction_max,
+            completion_min=completion_min,
+            completion_max=completion_max,
+            expected_cpm_min=expected_cpm_min,
+            expected_cpm_max=expected_cpm_max,
+            expected_cpe_min=expected_cpe_min,
+            expected_cpe_max=expected_cpe_max,
+            cooperation_form=cooperation_form,
+            complete_only=complete_only,
+            sort=sort,
+            direction=direction,
+            cursor=cursor,
+            limit=limit,
+        )
+
+    @app.get("/api/creator-library/{creator_id}", response_model=CreatorLibraryDetail)
+    def creator_library_detail(
+        creator_id: str, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    ) -> CreatorLibraryDetail:
+        del user
+        return services.queries.get_creator_library(creator_id)
+
+    @app.get("/api/creator-library/{creator_id}/history", response_model=CreatorLibraryHistory)
+    def creator_library_history(
+        creator_id: str, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    ) -> CreatorLibraryHistory:
+        del user
+        return services.queries.creator_library_history(creator_id)
+
+    @app.get("/api/creator-library/{creator_id}/quotes", response_model=list[CreatorLibraryQuote])
+    def creator_library_quotes(
+        creator_id: str,
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+        cooperation_form: str | None = None,
+    ) -> list[CreatorLibraryQuote]:
+        del user
+        return services.queries.creator_library_quotes(creator_id, cooperation_form)
+
+    @app.get("/api/creator-library/{creator_id}/contents")
+    def creator_library_contents(
+        creator_id: str,
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+        collection_type: Literal["excellent_reach", "excellent_seeding"] = "excellent_reach",
+        cursor: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """精选集合 for the library entry (CD-04); read-only, scoped to the creator's snapshot."""
+        del user
+        return services.queries.creator_library_contents(
+            creator_id, collection_type, cursor=cursor, limit=limit
+        )
+
+    @app.get("/api/creator-library/{creator_id}/covers/{object_id:path}")
+    def creator_library_cover(
+        creator_id: str,
+        object_id: str,
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+    ) -> Response:
+        """A stored cover of **this** creator's collection cards, never another creator's."""
+        del user
+        try:
+            creator_id = str(UUID(creator_id))
+        except ValueError as exc:
+            raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND") from exc
+        reference = services.queries.creator_library_cover_reference(creator_id, object_id)
+        if not reference:
+            raise CollectorError("INVALID_FORM", "COVER_NOT_FOUND")
+        body = services.covers.read(
+            object_id,
+            checksum=str(reference["checksum"]),
+            byte_size=int(reference["byte_size"]),
+        )
+        return StreamingResponse(iter([body]), media_type=reference["content_type"])
 
     @app.get("/api/tasks/{root_task_id}/covers/{object_id:path}")
     def cover(

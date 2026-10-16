@@ -1,7 +1,7 @@
 # UNIT-01：执行单元与平台核验
 
 状态：待验收  
-更新时间：2026-10-12T15:37:00+08:00
+更新时间：2026-10-14T15:56:00+08:00
 
 ## 2026-10-06 单元账号绑定变更（改绑）
 
@@ -99,11 +99,12 @@
 - 2026-10-12（真实平台，**只读会话核验**）：用户显式授权只读核验后执行 `xingtu session-diagnostics --config .runtime/units/local-dev-mac-02.json`（`XINGTU_DIAGNOSTIC_HMAC_KEY` 取自 `.runtime/drift-probe.hmac-key`，`PYTHONPATH=backend/src`），`2026-10-12T15:36:53+08:00 → 15:37:01+08:00`、exit `0`。结果 `SessionHealthStatus.VALID`：`observed_account_id == expected_account_id == ID: 1807978499337419`、`protected_page_verified=true`、`login_page_verified=false`、`challenge_verified=false`、Chrome `154.0.8037.98`、`normal_close_confirmed=true`。**未**执行搜索、采集或任何业务写入；`session-diagnostics` 不取租约，故库中 `execution_units.last_session_checked_at` 仍为旧观测 `2026-10-12T01:12:41+08:00`，本次结论以报告文件为准。详见[会话实时只读核验证据](../evidence/UNIT-01-session-live-check-2026-10-12.md)。
   - 核验前的既有记录（**不作为实时结论**）：库中 `state=READY`、`last_session_status=VALID`、`last_session_reason=PROTECTED_PAGE_AND_ACCOUNT_VERIFIED`，时间 `2026-10-12T01:12:41+08:00`，对应根任务 `7a5111cc-49cd-431d-90ca-3120201e809e` `COMPLETED`。按 `domain.py` 的 `SessionHealthStatus` 契约，持久化状态**从不**构成活动会话证明，只有当前进程观测可产生 `VALID`，故必须补做本次进程内观测。
   - 本次核验不改变本卡验收结论：分页/其余主页模块/筛选枚举与访问节奏、生产线路与隔离（U07/U08）、远程承载（U06）仍未验收。
+- 2026-10-14（真实平台，**只读会话核验**）：用户要求核验执行单元星图登录状态并在失效时唤起 Chrome 人工登录，同时记录“登录态快速失效”的原因。执行 `xingtu session-diagnostics --config .runtime/units/local-dev-mac-02.json`（HMAC 密钥为本轮新生成的本机 `.runtime/diag.hmac-key`，因历史 `.runtime/drift-probe.hmac-key` 已不在工作区，故本次报告 HMAC 与旧报告不可比对），`2026-10-14T15:49:46 → 15:49:53+08:00`、exit `0`。结果 `VALID`、`observed == expected == ID: 1807978499337419`、`protected_page_verified=true`、`login_page_verified=false`、`challenge_verified=false`、`evidence_reason=PROTECTED_PAGE_AND_ACCOUNT_VERIFIED`（**未**走人工确认降级）、`session_snapshot.restored_before_navigation=true`、Chrome `155.0.8059.40`、`normal_close_confirmed=true`。**未**执行搜索、采集或任何业务写入；结论以报告文件为准。据此存活下界更新为**约 29 小时 / 3 次冷启动**（首份快照 2026-10-13T16:48+08 → 本轮），上界仍未测。根因与 5 项待优化缺口见[登录状态核验与快速失效根因记录](../evidence/SESSION-01-login-lifetime-root-cause-2026-10-14.md)。本卡验收结论不变。
 
 ## 交接信息
 
 - 当前资源：用户已确认设备及账号具备；本轮实测到系统 Chrome 154.0.8037.57 + Playwright 1.63.0 可真实启动并访问 `https://www.xingtu.cn/`（HTTP 200）。
-- **会话现状（2026-10-12T15:37+08:00 实测）**：`unit-local-mac-02` 的星图登录状态为**有效**（`SessionHealthStatus.VALID`，受保护页可见，账号 = `ID: 1807978499337419`），可继续免人工登录发起采集。注意 `star_sessionid` 为会话级 Cookie，该结论只对"当前这一时段"成立；采集 Worker（PID 75094）在线且无待处理任务，单元 `owner=NULL`、`browser_stopped=true`、无待处理根任务。
+- **会话现状（2026-10-14T15:49+08:00 实测）**：`unit-local-mac-02` 的星图登录状态为**有效**（`VALID`，受保护页可见，账号 = `ID: 1807978499337419`，快照在首个导航前恢复），可继续免人工登录发起采集；用户已按需打开专属 profile 的 Chrome 窗口（用完须 `Command-Q`，否则采集会 `PROFILE_IN_USE`）。注意 `star_sessionid` 为会话级 Cookie，登录态跨重启依赖私有快照，该结论只对“当前这一时段”成立。根因记录见[登录状态核验与快速失效根因记录](../evidence/SESSION-01-login-lifetime-root-cause-2026-10-14.md)。
 - 阻塞已解除（2026-09-27 本轮二）：真实登录、真实搜索与 2 位达人主页采集均已完成并落库（[真实采集证据](../evidence/UNIT-01-real-collection-2026-09-27.md)）。以下历史解除条件保留备查：
   1. `xingtu research --config .runtime/units/local-dev-mac.json --url https://www.xingtu.cn/ --out .runtime/research/r01-login --login-wait-seconds 1500 --login-done-file .runtime/research/login.done --steps .runtime/research/steps-login.json`（登录完成后由人工信号或超时结束）；
   2. 依据真实观察登记会话/搜索/主页契约到 `contracts/douyin_xingtu.verified.json`，通过 `require_enabled(live=True)` 与 13.5 交付清单；

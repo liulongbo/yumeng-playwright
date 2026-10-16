@@ -24,7 +24,7 @@ from .product_models import (
     P1WorkflowState,
     RequirementForm,
 )
-from .repository import Repository
+from .repository import TERMINAL_COMPLETED_AT_CLAUSE, Repository
 
 
 class ProductRepository:
@@ -457,9 +457,16 @@ class ProductRepository:
                 (Jsonb(state.model_dump(mode="json")), state.p1_task_id),
             )
             conn.execute(
-                """UPDATE root_tasks SET state=%s,version=%s,payload=%s,updated_at=now()
-                WHERE root_task_id=%s""",
-                (status, int(row["version"]) + 1, Jsonb(payload), state.root_task_id),
+                """UPDATE root_tasks SET state=%s,version=%s,payload=%s,updated_at=now()"""
+                + TERMINAL_COMPLETED_AT_CLAUSE
+                + """ WHERE root_task_id=%s""",
+                (
+                    status,
+                    int(row["version"]) + 1,
+                    Jsonb(payload),
+                    True,
+                    state.root_task_id,
+                ),
             )
 
     def promote_intake(

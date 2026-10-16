@@ -21,7 +21,9 @@ from .repository import Repository
 from .runtime import BrowserRuntime, UnitConfig, ensure_line
 
 
-async def wait_for_manual_clearance(page: Page, spec: Any, timeout: float) -> str:
+async def wait_for_manual_clearance(
+    page: Page, spec: Any, timeout: float, manually_attested_account_id: str | None = None
+) -> str:
     """Wait for normal human login/challenge handling without reading any secret values."""
 
     def locator(loc: Any) -> Any:
@@ -54,6 +56,8 @@ async def wait_for_manual_clearance(page: Page, spec: Any, timeout: float) -> st
                 account = ""
         if protected and account.strip():
             return account.strip()
+        if protected and manually_attested_account_id:
+            return manually_attested_account_id
         if loop.time() >= deadline:
             raise CollectorError("ACCOUNT_LOGIN_REQUIRED", "MAINTENANCE_TIMEOUT")
         await asyncio.sleep(min(1.0, max(0.1, deadline - loop.time())))
@@ -208,7 +212,12 @@ class BrowserHost:
             self.observe_session(health)
             account = health.observed_account_id or ""
         else:
-            account = await wait_for_manual_clearance(maintenance_page, session, timeout)
+            account = await wait_for_manual_clearance(
+                maintenance_page,
+                session,
+                timeout,
+                self.config.manually_attested_account_id,
+            )
         if account != self.config.expected_account_id:
             self.observe_session(
                 SessionHealth(
@@ -231,20 +240,16 @@ class BrowserHost:
             self.heartbeat,
             live=True,
             on_session_health=self.observe_session,
+            manually_attested_account_id=self.config.manually_attested_account_id,
         )
         try:
-            await verifier.check_session(maintenance_page, timeout=30)
+            health = await verifier.check_session(maintenance_page, timeout=30)
         finally:
             await verifier.close()
-        self.observe_session(
-            SessionHealth(
-                status=SessionHealthStatus.VALID,
-                expected_account_id=self.config.expected_account_id,
-                observed_account_id=account,
-                protected_page_verified=True,
-                evidence_reason="PROTECTED_PAGE_AND_ACCOUNT_VERIFIED",
-            )
-        )
+        # Preserve whether the current-session proof was a DOM identity or the explicit,
+        # time-bounded manual attestation.  Do not relabel the latter as automatic verification.
+        self.observe_session(health)
+        await self.runtime.export_session_snapshot(self.browser)
         await self.heartbeat()
         self.session_version = self.repo.promote_maintenance_to_collect(
             self.config.unit_id,

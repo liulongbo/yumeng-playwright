@@ -1,0 +1,178 @@
+{
+  "round": "CD-06",
+  "run_at": "2026-10-15T16:34:38+0800",
+  "base": "http://127.0.0.1:5173",
+  "creator": "甄选聊车",
+  "mcp": "project Playwright MCP server over MCP stdio (mcp_client.py); tool direct-call not exposed",
+  "checks": [
+    {
+      "check": "CD06-MCP",
+      "passed": true,
+      "detail": "Playwright MCP 1.62.0-alpha-2026-06-29 over stdio, 23 tools (tool direct-call not exposed in this session)"
+    },
+    {
+      "check": "CD06-FUL-01-three-modules-removed",
+      "passed": true,
+      "detail": "履约能力 headings=['履约与合作表现']（应只剩「履约与合作表现」）"
+    },
+    {
+      "check": "CD06-FUL-02-removed-titles-absent",
+      "passed": true,
+      "detail": "章节标题=['履约与合作表现']"
+    },
+    {
+      "check": "CD06-FUL-03-no-raw-json",
+      "passed": true,
+      "detail": "正文是否泄漏原始 JSON：False"
+    },
+    {
+      "check": "CD06-FUL-04-data-retained-in-api",
+      "passed": true,
+      "detail": "三个字段仍由 API 返回（仅移除页面展示）：{'ok': True, 'keys': ['credit_score', 'new_credit_score', 'historical_order_count', 'processing_order_count', 'max_processing_order_count', 'message_reply_rate', 'industry_order_distribution', 'industry_play_distribution', 'cooperation_industry_distribution'], 'industry_order': 'COLLECTED', 'industry_play': 'COLLECTED', 'cooperation': 'COLLECTED'}"
+    },
+    {
+      "check": "CD06-AUD-01-scale-panel-removed",
+      "passed": true,
+      "detail": "「连接用户规模与粉丝增长」仍在页面：False"
+    },
+    {
+      "check": "CD06-AUD-02-delta-panel-removed",
+      "passed": true,
+      "detail": "「近 30 日粉丝日增量」标题在页面：False；柱状图元素：False"
+    },
+    {
+      "check": "CD06-AUD-03-two-panels-merged",
+      "passed": true,
+      "detail": "两个旧标题都不再单独出现，改为合并标题；headings=['连接用户分层与同行业对比', '近 30 日连接用户与粉丝趋势', '连接用户画像']"
+    },
+    {
+      "check": "CD06-AUD-04-dual-line-chart",
+      "passed": true,
+      "detail": "两条折线：['trend-line tone-blue', 'trend-line tone-crimson']；图例=['连接用户数', '粉丝数']"
+    },
+    {
+      "check": "CD06-AUD-05-axes-left-right",
+      "passed": true,
+      "detail": "轴标题=['连接用户数', '粉丝数']（左=连接用户数，右=粉丝数）"
+    },
+    {
+      "check": "CD06-AUD-06-time-axis-dates",
+      "passed": true,
+      "detail": "X 轴日期刻度=['2026-09-13', '2026-09-19', '2026-09-25', '2026-10-01', '2026-10-07', '2026-10-13']"
+    },
+    {
+      "check": "CD06-AUD-07-axis-unit-wan",
+      "passed": true,
+      "detail": "轴刻度按「万」展示：['5027.6万', '2344.0万', '135.4万', '132.7万']"
+    },
+    {
+      "check": "CD06-AUD-08-both-series-from-real-data",
+      "passed": true,
+      "detail": "API 连接用户 30 点 / 粉丝 30 点；图上点 60 个"
+    },
+    {
+      "check": "CD06-AUD-09-last-values-match-api",
+      "passed": true,
+      "detail": "末值与 API 一致：'左轴连接用户数 · 右轴粉丝数 · 连接用户数 末值 23,439,854（2026-10-12） · 粉丝数 末值 1,353,611（2026-10-13）'"
+    },
+    {
+      "check": "CD06-AUD-10-legends",
+      "passed": true,
+      "detail": "图例=['连接用户数', '粉丝数']"
+    },
+    {
+      "check": "CD06-AUD-11-hover-shows-both",
+      "passed": true,
+      "detail": "Hover 浮层='2026-10-12连接用户数23,439,854粉丝数1,352,027'（role='tooltip'）"
+    },
+    {
+      "check": "CD06-AUD-12-hover-visible-and-guide",
+      "passed": true,
+      "detail": "withinViewport=True 参考线=True 高亮点=2 rect={'x': 1204, 'y': 616.5, 'w': 158, 'h': 65.5}"
+    },
+    {
+      "check": "CD06-AUD-13-hover-clears",
+      "passed": true,
+      "detail": "移出图表后浮层关闭=True"
+    },
+    {
+      "check": "CD06-REG-01-task-entry-parity",
+      "passed": true,
+      "detail": "任务入口同一双轴图：seriesCount=2 axes=['连接用户数', '粉丝数']"
+    },
+    {
+      "check": "CD06-REG-02-task-entry-removals",
+      "passed": true,
+      "detail": "任务入口同样移除两个模块：False"
+    },
+    {
+      "check": "CD06-REG-03-task-fulfillment",
+      "passed": true,
+      "detail": "任务入口履约能力 headings=['履约与合作表现']"
+    },
+    {
+      "check": "CD06-REG-04-商业能力",
+      "passed": true,
+      "detail": "active='商业能力' contains=True"
+    },
+    {
+      "check": "CD06-REG-04-创作能力",
+      "passed": true,
+      "detail": "active='创作能力' contains=True"
+    },
+    {
+      "check": "CD06-REG-04-报价与历史",
+      "passed": true,
+      "detail": "active='报价与历史' contains=True"
+    },
+    {
+      "check": "CD06-REG-05-mobile-no-overflow",
+      "passed": true,
+      "detail": "390px: overflow=False doc=390 viewport=390 figure=356"
+    },
+    {
+      "check": "CD06-NO-console-errors",
+      "passed": true,
+      "detail": "console error lines=0: []"
+    },
+    {
+      "check": "CD06-NO-failed-api",
+      "passed": true,
+      "detail": "failed API lines=0: []"
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "CD06-library-fulfillment",
+      "path": "docs/evidence/assets/cd06/CD06-library-fulfillment.png",
+      "note": null
+    },
+    {
+      "name": "CD06-library-audience",
+      "path": "docs/evidence/assets/cd06/CD06-library-audience.png",
+      "note": null
+    },
+    {
+      "name": "CD06-library-audience-hover",
+      "path": "docs/evidence/assets/cd06/CD06-library-audience-hover.png",
+      "note": null
+    },
+    {
+      "name": "CD06-library-audience-390",
+      "path": "docs/evidence/assets/cd06/CD06-library-audience-390.png",
+      "note": null
+    }
+  ],
+  "console": [
+    {
+      "raw": "### Result\nTotal messages: 3 (Errors: 0, Warnings: 0)\nReturning 1 messages for level \"info\"\n\n[INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=1e9a3433:22162"
+    }
+  ],
+  "network": [
+    {
+      "raw": "### Result\n32. [GET] http://127.0.0.1:5173/api/auth/me => [200] OK\n33. [GET] http://127.0.0.1:5173/api/creator-library/700ca5b0-f0c8-4436-86fe-624dfeb0f151 => [200] OK\n34. [GET] http://127.0.0.1:5173/api/creator-library/700ca5b0-f0c8-4436-86fe-624dfeb0f151/contents?collection_type=excellent_reach&limit=20 => [200] OK\n35. [GET] http://127.0.0.1:5173/api/creator-library/700ca5b0-f0c8-4436-86fe-624dfeb0f151/contents?collection_type=excellent_seeding&limit=20 => [200] OK\n36. [GET] http://127.0.0.1:5173/api/platforms/douyin_xingtu/profile-field-catalog => [200] OK\n37. [GET] http://127.0.0.1:5173/api/creator-library/700ca5b0-f0c8-4436-86fe-624dfeb0f151/quotes => [200] OK\n\nNote: 38 static requests not shown, run with \"static\" option to see them."
+    }
+  ],
+  "passed": 27,
+  "failed": 0
+}

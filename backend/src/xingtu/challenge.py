@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -8,7 +9,7 @@ from datetime import timedelta
 from typing import Any
 
 from playwright.async_api import Error as BrowserError
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .domain import (
     ChallengeState,
@@ -21,6 +22,8 @@ from .domain import (
 )
 from .repository import Repository
 
+logger = logging.getLogger(__name__)
+
 
 class ChallengePolicy(BaseModel):
     """Product-owned limits; deliberately not exposed as end-user controls."""
@@ -28,12 +31,39 @@ class ChallengePolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     stable_seconds: float = Field(default=5.0, ge=0)
+    # Minimum time the protected surface must be continuously present, with the challenge iframe
+    # absent, before "clear" may be declared at all.  The challenge iframe loads asynchronously
+    # and can be absent from the DOM while the page is still settling, so a clear declared purely
+    # from `stable_seconds` of absence is indistinguishable from "the iframe has not rendered
+    # yet".  Derived from `stable_seconds` when not given explicitly, so the observation window
+    # always stretches with the stable window instead of drifting out of proportion.
+    challenge_observation_seconds: float | None = Field(default=None, ge=0)
     timeout_seconds: float = Field(default=900.0, gt=0)
     recovery_cooldown_seconds: float = Field(default=60.0, ge=0)
     creator_interval_seconds: float = Field(default=15.0, ge=0)
     max_task_recoveries: int = Field(default=2, ge=0)
     max_creator_recoveries: int = Field(default=1, ge=0)
     poll_seconds: float = Field(default=0.25, gt=0)
+
+    @model_validator(mode="after")
+    def observation_window_covers_the_stable_window(self) -> ChallengePolicy:
+        if self.challenge_observation_seconds is None:
+            # Never shorter than the stable window, and never a bare multiple of it: a short
+            # stable window must still leave room for an asynchronously loaded iframe to appear.
+            self.challenge_observation_seconds = max(
+                self.stable_seconds * 3, self.stable_seconds + 3.0
+            )
+        elif self.challenge_observation_seconds < self.stable_seconds:
+            raise ValueError(
+                "challenge_observation_seconds must not be shorter than stable_seconds"
+            )
+        return self
+
+    @property
+    def challenge_observation_window(self) -> float:
+        """Resolved observation window; always at least `stable_seconds`."""
+        assert self.challenge_observation_seconds is not None
+        return self.challenge_observation_seconds
 
 
 @dataclass(frozen=True)
@@ -158,6 +188,16 @@ class ChallengeHandler:
             self.policy.timeout_seconds if timeout_seconds is None else timeout_seconds
         )
         stable_since: float | None = None
+        # Diagnostics for the DF-07 investigation: how long after the challenge was LAST seen
+        # visible did we declare it cleared, and how many poll samples saw it invisible.  A clear
+        # that is declared only ~stable_seconds after a challenge was visible, on a page whose
+        # anti-bot iframe loads asynchronously, is indistinguishable from "the iframe had not
+        # finished loading yet".
+        last_challenge_visible_at: float | None = None
+        protected_since: float | None = None
+        challenge_seen_count = 0
+        challenge_seen_this_wait = False
+        invisible_samples = 0
         while True:
             now = self.clock()
             if now >= deadline:
@@ -170,6 +210,10 @@ class ChallengeHandler:
                 }
                 if "PLATFORM_SECURITY_CHALLENGE" in visible_errors:
                     stable_since = None
+                    protected_since = None
+                    last_challenge_visible_at = now
+                    challenge_seen_this_wait = True
+                    challenge_seen_count += 1
                 elif "ACCOUNT_LOGIN_REQUIRED" in visible_errors:
                     raise CollectorError(
                         "SECURITY_CHALLENGE_SESSION_INVALID", "REGISTERED_LOGIN_PAGE"
@@ -177,6 +221,7 @@ class ChallengeHandler:
                 elif visible_errors:
                     raise CollectorError("SECURITY_CHALLENGE_UNKNOWN", sorted(visible_errors)[0])
                 elif await self._locator(page, session_spec.protected_ready).is_visible():
+                    invisible_samples += 1
                     account_locator = self._locator(page, session_spec.account)
                     account = ""
                     if await account_locator.count() == 1 and await account_locator.is_visible():
@@ -189,8 +234,35 @@ class ChallengeHandler:
                     if account and account != expected_account_id:
                         raise CollectorError("SECURITY_CHALLENGE_ACCOUNT_MISMATCH", "WRONG_ACCOUNT")
                     if account == expected_account_id:
+                        if protected_since is None:
+                            protected_since = now
                         stable_since = stable_since if stable_since is not None else now
-                        if now - stable_since >= self.policy.stable_seconds:
+                        observed_for = now - protected_since
+                        # The observation window applies only when a challenge was actually seen
+                        # during THIS wait: that is the case where "absent" could mean "the
+                        # asynchronous iframe has not rendered yet".  When no challenge was ever
+                        # observed there is nothing to distinguish from, and requiring the window
+                        # would needlessly make every session check wait it out.
+                        observation_ok = (
+                            not challenge_seen_this_wait
+                            or observed_for >= self.policy.challenge_observation_window
+                        )
+                        if now - stable_since >= self.policy.stable_seconds and observation_ok:
+                            since_challenge = (
+                                None
+                                if last_challenge_visible_at is None
+                                else round(now - last_challenge_visible_at, 3)
+                            )
+                            logger.info(
+                                "challenge declared clear: stable_window=%.3fs "
+                                "observed_for=%.3fs since_last_challenge_visible=%s "
+                                "challenge_samples=%s clean_samples=%s",
+                                now - stable_since,
+                                observed_for,
+                                since_challenge,
+                                challenge_seen_count,
+                                invisible_samples,
+                            )
                             return SessionHealth(
                                 status=SessionHealthStatus.VALID,
                                 expected_account_id=expected_account_id,
@@ -200,12 +272,15 @@ class ChallengeHandler:
                             )
                     else:
                         stable_since = None
+                        protected_since = None
                 else:
                     stable_since = None
+                    protected_since = None
             except CollectorError:
                 raise
             except BrowserError:
                 stable_since = None
+                protected_since = None
             remaining = max(0.0, deadline - self.clock())
             await self.sleep(min(self.policy.poll_seconds, remaining))
 

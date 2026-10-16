@@ -1,9 +1,10 @@
+import json
 from pathlib import Path
 
 import httpx
 import pytest
 from xingtu.contracts import PlatformRegistry
-from xingtu.intake import DeepSeekAdapter, IntakeGraph, LLMResult
+from xingtu.intake import DeepSeekAdapter, IntakeGraph, LLMResult, build_expected_plan
 from xingtu.product_models import ModelUsage, P1WorkflowState, RequirementForm
 
 
@@ -64,25 +65,9 @@ class SequenceAdapter:
 
 
 def expected_payload(target=20, *, keyword="宠物"):
-    return {
-        "schema_version": "filter_plan.v1",
-        "platform": "douyin_xingtu",
-        "capability_version": live_capabilities().version,
-        "target_count": target,
-        "filters": [
-            {
-                "field": "keyword",
-                "operator": "eq",
-                "value": keyword,
-                "source_fields": ["keyword"],
-                "unit": None,
-                "currency": None,
-                "cooperation_form": None,
-            }
-        ],
-        "sort": {"key": "score"},
-        "validation_errors": [],
-    }
+    return build_expected_plan(
+        RequirementForm(keyword=keyword, target_count=target), live_capabilities()
+    ).model_dump(mode="json")
 
 
 async def test_state_graph_accepts_only_exact_plan():
@@ -120,6 +105,24 @@ async def test_repair_path_can_recover_on_second_attempt():
     assert result.outcome == "succeeded"
     assert result.attempt_count == 2
     assert adapter.calls == 2
+
+
+async def test_nested_compound_value_cannot_be_deleted_added_or_changed():
+    form = RequirementForm(
+        keyword="汽车",
+        connection_users={"connected": {"min": 1, "max": 2}},
+        viewer_profile={"age": ["age_18_23"], "crowd": ["gen_z"]},
+    )
+    state = initial_state().model_copy(update={"requirement_form": form})
+    correct = build_expected_plan(form, live_capabilities()).model_dump(mode="json")
+    changed = json.loads(json.dumps(correct))
+    profile = next(item for item in changed["filters"] if item["field"] == "viewer_profile")
+    profile["value"]["crowd"] = ["town_youth"]
+    adapter = SequenceAdapter([changed])
+    result = await IntakeGraph(live_capabilities(), adapter, MemoryRuns()).run(state)
+    assert result.outcome == "failed_validation"
+    assert result.attempt_count == 3
+    assert any(error.path.endswith("value.crowd.0") for error in result.final_error)
 
 
 async def test_deepseek_adapter_uses_responses_json_schema_and_parses_usage():

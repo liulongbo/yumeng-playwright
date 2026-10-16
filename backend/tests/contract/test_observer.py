@@ -5,7 +5,7 @@ import json
 
 import pytest
 from playwright.async_api import async_playwright
-from xingtu.contracts import RequestSpec
+from xingtu.contracts import AttributeFilterEntry, RequestSpec
 from xingtu.domain import CollectorError
 from xingtu.observer import ResponseCollector
 
@@ -94,6 +94,84 @@ async def test_duplicate_matching_requests_are_ambiguous(page):
         )
         results, failures = await capture.read()
         assert not results and failures["search"] == "RESPONSE_UNCORRELATED"
+
+
+async def test_attribute_filters_are_compared_as_an_exact_multiset(page):
+    request = RequestSpec.model_validate(
+        {
+            **spec().model_dump(),
+            "method": "POST",
+            "attribute_filter_match": {
+                "path": "attribute_filter",
+                "allowed_static": [{"field_name": "price_by_video_type__ge", "field_value": "0"}],
+            },
+        }
+    )
+    await page.route("**/search", route_json)
+    expected = [
+        AttributeFilterEntry(field_name="persona_tag_level_one", field_value='["110211"]'),
+        AttributeFilterEntry(field_name="persona_tag_level_one", field_value='["110210"]'),
+    ]
+    body = {
+        "condition": "new",
+        "attribute_filter": [
+            {"field": {"field_name": "persona_tag_level_one"}, "field_value": '["110210"]'},
+            {"field": {"field_name": "price_by_video_type__ge"}, "field_value": "0"},
+            {"field": {"field_name": "persona_tag_level_one"}, "field_value": '["110211"]'},
+        ],
+    }
+    async with ResponseCollector(
+        page,
+        [request],
+        {"condition": "new", "creator": "A"},
+        1,
+        4096,
+        attribute_filters=expected,
+    ) as capture:
+        await page.evaluate(
+            "payload => fetch('/search', {method:'POST', "
+            "headers:{'content-type':'application/json'}, body:JSON.stringify(payload)})",
+            body,
+        )
+        results, failures = await capture.read()
+    assert results["search"]["creator"] == "A" and not failures
+
+
+async def test_attribute_filter_match_rejects_missing_duplicate_and_residual_filter(page):
+    request = RequestSpec.model_validate(
+        {
+            **spec().model_dump(),
+            "method": "POST",
+            "attribute_filter_match": {"path": "attribute_filter"},
+        }
+    )
+    await page.route("**/search", route_json)
+    expected = [
+        AttributeFilterEntry(field_name="persona_tag_level_one", field_value='["110211"]'),
+        AttributeFilterEntry(field_name="persona_tag_level_one", field_value='["110210"]'),
+    ]
+    body = {
+        "condition": "new",
+        "attribute_filter": [
+            {"field": {"field_name": "persona_tag_level_one"}, "field_value": '["110211"]'},
+            {"field": {"field_name": "gender"}, "field_value": "2"},
+        ],
+    }
+    async with ResponseCollector(
+        page,
+        [request],
+        {"condition": "new", "creator": "A"},
+        0.1,
+        4096,
+        attribute_filters=expected,
+    ) as capture:
+        await page.evaluate(
+            "payload => fetch('/search', {method:'POST', "
+            "headers:{'content-type':'application/json'}, body:JSON.stringify(payload)})",
+            body,
+        )
+        results, failures = await capture.read()
+    assert not results and failures["search"] == "RESPONSE_UNCORRELATED"
 
 
 @pytest.mark.parametrize(

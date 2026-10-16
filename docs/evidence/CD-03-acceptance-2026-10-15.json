@@ -1,0 +1,228 @@
+{
+  "checks": [
+    {
+      "check": "CD03-MCP",
+      "passed": true,
+      "detail": "Playwright MCP 1.62.0-alpha-2026-06-29 over stdio, 23 tools"
+    },
+    {
+      "check": "CD03-LIB-UI03-star-id",
+      "passed": true,
+      "detail": "star id='星图ID7503176021160493065' under nickname=True"
+    },
+    {
+      "check": "CD03-LIB-UI03-internal-id-absent",
+      "passed": true,
+      "detail": "rail shows the platform id, never the internal creator_id"
+    },
+    {
+      "check": "CD03-LIB-UI04-order",
+      "passed": true,
+      "detail": "kpis=['月连接用户', '月深度用户', '粉丝', '月涨粉率']"
+    },
+    {
+      "check": "CD03-LIB-UI05-units",
+      "passed": true,
+      "detail": "values=['2,344.0万', '≈1,158.0万', '135.2万', '1.97%'] expected=['2,344.0万', '≈1,158.0万', '135.2万', '1.97%']"
+    },
+    {
+      "check": "CD03-LIB-UI06-tag-order",
+      "passed": true,
+      "detail": "tags=['达人类型', '内容主题', '行业标签']"
+    },
+    {
+      "check": "CD03-LIB-UI06-tag-content",
+      "passed": true,
+      "detail": "内容主题='用车知识车辆保养驾驶技巧交规科普车祸避险汽车油耗用车成本汽车用品测评汽车保险车辆检查' 行业标签='金融业美妆游戏'"
+    },
+    {
+      "check": "CD03-LIB-UI07-gender",
+      "passed": true,
+      "detail": "gender='女' note='平台编码 2（2026-10-14 线上确证）'"
+    },
+    {
+      "check": "CD03-LIB-UI12-introduction",
+      "passed": true,
+      "detail": "intro='关注我，带你每日了解一个汽车知识🚗' white-space='pre-wrap' overflow-wrap='anywhere'"
+    },
+    {
+      "check": "CD03-LIB-UI02-UI08-UI09-UI10-removed",
+      "passed": true,
+      "detail": "rail removed-labels=False copy=False 数据来源按钮=False rail-actions=[]"
+    },
+    {
+      "check": "CD03-LIB-UI11-source-drawer-retained",
+      "passed": true,
+      "detail": "the rail itself carries no 数据来源 line; the drawer lives outside the rail"
+    },
+    {
+      "check": "CD03-LIB-UI01-page",
+      "passed": true,
+      "detail": "name='甄选聊车'"
+    },
+    {
+      "check": "CD03-LIB-regression-no-raw-json",
+      "passed": true,
+      "detail": "0 pre, leak=False"
+    },
+    {
+      "check": "CD03-LIB-UI19-chapters",
+      "passed": true,
+      "detail": "tabs=['达人概览', '商业能力', '创作能力', '履约能力', '连接用户', '报价与历史']"
+    },
+    {
+      "check": "CD03-UI17-api-fields",
+      "passed": true,
+      "detail": "status=200 star_id='7503176021160493065' gender='2' introduction='关注我，带你每日了解一个汽车知识🚗'"
+    },
+    {
+      "check": "CD03-UI17-raw-metrics",
+      "passed": true,
+      "detail": "connected={'value': '23439854', 'raw_value': '23439854', 'unit': 'count', 'is_approximate': False, 'status': 'COLLECTED', 'observed_at': '2026-10-14T01:56:05.497810Z'} deep={'value': '11580000', 'raw_value': '1,158w', 'unit': 'count', 'is_approximate': True, 'status': 'COLLECTED', 'observed_at': '2026-10-14T01:56:02.421196Z'} followers={'value': '1351784', 'raw_value': '1351784', 'unit': 'count', 'is_approximate': False, 'status': 'COLLECTED', 'observed_at': '2026-10-14T01:56:02.417478Z'}"
+    },
+    {
+      "check": "CD03-UI17-api-payload",
+      "passed": true,
+      "detail": "{\"platform_creator_id\": \"7503176021160493065\", \"gender\": \"2\", \"introduction\": \"关注我，带你每日了解一个汽车知识🚗\", \"monthly_connected_users\": {\"value\": \"23439854\", \"raw_value\": \"23439854\", \"unit\": \"count\", \"is_approximate\": false, \"status\": \"COLLECTED\", \"observed_at\": \"2026-10-14T01:56:05.497810Z\"}, \"monthly_deep_users\": {\"value\": \"11580000\", \"raw_value\": \"1,158w\", \"unit\": \"count\", \"is_approximate\": true, \"status\": \"COLLECTED\", \"observed_at\": \"2026-10-14T01:56:02.421196Z\"}, \"followers\": {\"value\": \"1351784\", \"raw_value\": \"1351784\", \"unit\": \"count\", \"is_approximate\": false, \"status\": \"COLLECTED\", \"observed_at\": \"2026-10-14T01:56:02.417478Z\"}, \"monthly_follower_growth_rate\": {\"value\": \"0.01969004266000137\", \"raw_value\": \"0.01969004266000137\", \"unit\": \"ratio\", \"is_approximate\": false, \"status\": \"COLLECTED\", \"observed_at\": \"2026-10-14T01:56:02.432141Z\"}, \"content_theme_labels\": [\"用车知识\", \"车辆保养\", \"驾驶技巧\", \"交规科普\", \"车祸避险\", \"汽车油耗\", \"用车成本\", \"汽车用品测评\", \"汽车保险\", \"车辆检查\"], \"industry_labels\": [\"金融业\", \"美妆\", \"游戏\"]}"
+    },
+    {
+      "check": "CD03-UI11-drawer-81",
+      "passed": true,
+      "detail": "fields=81 modules=8 opened=True"
+    },
+    {
+      "check": "CD03-UI11-drawer-provenance",
+      "passed": true,
+      "detail": "correction=True observation-times=81"
+    },
+    {
+      "check": "CD03-UI13-empty-state",
+      "passed": true,
+      "detail": "probe={'railAlive': True, 'errorVisible': False, 'introState': '平台暂无数据', 'genderState': '平台暂无数据', 'railTextHasNull': False, 'layoutColumns': 2}"
+    },
+    {
+      "check": "CD03-UI14-long-text-no-overflow",
+      "passed": true,
+      "detail": "rail=False page=False (DOM-only edit, reloaded after)"
+    },
+    {
+      "check": "CD03-UI15-reload",
+      "passed": true,
+      "detail": "before=['2,344.0万', '≈1,158.0万', '135.2万', '1.97%'] after=['2,344.0万', '≈1,158.0万', '135.2万', '1.97%']"
+    },
+    {
+      "check": "CD03-UI16-back-link",
+      "passed": true,
+      "detail": "back link={'text': '返回达人库', 'href': '/creators'}"
+    },
+    {
+      "check": "CD03-UI16-back-navigation",
+      "passed": true,
+      "detail": "landed on '/creators'"
+    },
+    {
+      "check": "CD03-TASK-UI03-star-id",
+      "passed": true,
+      "detail": "star id='星图ID7503176021160493065' under nickname=True"
+    },
+    {
+      "check": "CD03-TASK-UI03-internal-id-absent",
+      "passed": true,
+      "detail": "rail shows the platform id, never the internal creator_id"
+    },
+    {
+      "check": "CD03-TASK-UI04-order",
+      "passed": true,
+      "detail": "kpis=['月连接用户', '月深度用户', '粉丝', '月涨粉率']"
+    },
+    {
+      "check": "CD03-TASK-UI05-units",
+      "passed": true,
+      "detail": "values=['2,344.0万', '≈1,158.0万', '135.2万', '1.97%'] expected=['2,344.0万', '≈1,158.0万', '135.2万', '1.97%']"
+    },
+    {
+      "check": "CD03-TASK-UI06-tag-order",
+      "passed": true,
+      "detail": "tags=['达人类型', '内容主题', '行业标签']"
+    },
+    {
+      "check": "CD03-TASK-UI06-tag-content",
+      "passed": true,
+      "detail": "内容主题='用车知识车辆保养驾驶技巧交规科普车祸避险汽车油耗用车成本汽车用品测评汽车保险车辆检查' 行业标签='金融业美妆游戏'"
+    },
+    {
+      "check": "CD03-TASK-UI07-gender",
+      "passed": true,
+      "detail": "gender='女' note='平台编码 2（2026-10-14 线上确证）'"
+    },
+    {
+      "check": "CD03-TASK-UI12-introduction",
+      "passed": true,
+      "detail": "intro='关注我，带你每日了解一个汽车知识🚗' white-space='pre-wrap' overflow-wrap='anywhere'"
+    },
+    {
+      "check": "CD03-TASK-UI02-UI08-UI09-UI10-removed",
+      "passed": true,
+      "detail": "rail removed-labels=False copy=False 数据来源按钮=False rail-actions=[]"
+    },
+    {
+      "check": "CD03-TASK-UI11-source-drawer-retained",
+      "passed": true,
+      "detail": "the rail itself carries no 数据来源 line; the drawer lives outside the rail"
+    },
+    {
+      "check": "CD03-TASK-UI01-page",
+      "passed": true,
+      "detail": "name='甄选聊车'"
+    },
+    {
+      "check": "CD03-TASK-regression-no-raw-json",
+      "passed": true,
+      "detail": "0 pre, leak=False"
+    },
+    {
+      "check": "CD03-TASK-UI19-chapters",
+      "passed": true,
+      "detail": "tabs=['达人概览', '商业能力', '创作能力', '履约能力', '连接用户', '报价与历史']"
+    },
+    {
+      "check": "CD03-MOBILE-no-overflow",
+      "passed": true,
+      "detail": "overflow=False layout={'viewport': 390, 'railWidth': 358, 'railColumns': 2, 'starIdWidth': 146}"
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "CD03-library-rail",
+      "path": "docs/evidence/assets/cd03/CD03-library-rail.png",
+      "note": null
+    },
+    {
+      "name": "CD03-library-provenance",
+      "path": "docs/evidence/assets/cd03/CD03-library-provenance.png",
+      "note": null
+    },
+    {
+      "name": "CD03-long-intro-dom-fixture",
+      "path": "docs/evidence/assets/cd03/CD03-long-intro-dom-fixture.png",
+      "note": null
+    },
+    {
+      "name": "CD03-back-to-library",
+      "path": "docs/evidence/assets/cd03/CD03-back-to-library.png",
+      "note": null
+    },
+    {
+      "name": "CD03-task-rail",
+      "path": "docs/evidence/assets/cd03/CD03-task-rail.png",
+      "note": null
+    },
+    {
+      "name": "CD03-library-mobile-390",
+      "path": "docs/evidence/assets/cd03/CD03-library-mobile-390.png",
+      "note": null
+    }
+  ],
+  "failed": 0,
+  "console_errors": []
+}

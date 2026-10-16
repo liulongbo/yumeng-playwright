@@ -267,3 +267,27 @@ npm --prefix frontend run dev        # http://127.0.0.1:5173
 - 未登录访问业务 API 与封面返回 401，跨任务读取封面返回 404，均为预期保护行为。
 - **后端代码变更后必须重启 `xingtu-api`**（该入口无 `--reload`）。长期运行的旧进程持有旧 Pydantic 模型：新代码写入带新字段的检查点后（例如安全验证的 `challenge_*` 字段），旧进程读取该任务会因 `TaskRecord`/`checkpoint` 的 `extra_forbidden` 返回 500，而更早的任务仍正常。2026-10-10 本地联调中实际出现，重启为当前代码后同一任务恢复 200。
 - 同一端口只保留一个 API 进程：重复启动会以 `[Errno 48] address already in use` 退出（退出码 3）。先确认占用者（`lsof -nP -iTCP:8000 -sTCP:LISTEN`），不要并跑两个后端。
+
+## 2026-10-14 DEV-01：本机一键启停入口 `./dev.sh`
+
+上面 `make m3-up` 的默认清单**不含前端**（需 `M3_UP_FLAGS="--with-collection --with-frontend"`），且它不记录 PID，停止后 API 与前端会成为游离进程。需要「在终端一条命令唤起前后端并打开页面体验」时改用根目录入口：
+
+```bash
+./dev.sh            # = ./dev.sh up：依赖 → 前置自检 → API + P1 + P2 + 前端 → 就绪校验
+./dev.sh status     # 进程 / 端口 / HTTP / 队列消费者新鲜度 / 日志末行
+./dev.sh logs [名称] # 名称：api | intake-worker | collection-worker | frontend
+./dev.sh stop       # 只停本脚本记录过的进程（连同 npm run dev 的子进程），保留数据库/对象/profile
+./dev.sh restart    # stop + up
+./dev.sh check      # 只做前置自检
+```
+
+行为边界：
+
+- 实现为 [scripts/dev.sh](../scripts/dev.sh)，根目录 [dev.sh](../dev.sh) 只是转发；进程仍由既有入口启动，前置自检仍调用 `scripts/m3_up.py --check`，没有第二套真相，`Makefile` 未改动。
+- 默认启动四个进程：API（`xingtu-api`）、P1 Intake Worker、P2 采集 Worker（`xingtu worker --config`）、前端（`npm run dev`）。缺 P1 任务停在 `RECEIVED`，缺 P2 停在 `QUEUED`，缺前端没有页面。
+- **接管而非叠加**：已在监听的 API/前端与已在运行的 Worker 会被记录 PID 后复用；同一单元出现多个 Worker 时只保留一个并结束其余（重复 Intake 会重复派发，重复采集会在同一 profile 上互斥）。因此 `up` 可重复执行。
+- Worker 通过 `pgrep -f` 与 `lsof -c Python -F p` 取交集识别；只看命令行字符串会把本脚本自身的 shell 误判成 worker。
+- `stop` 递归结束子进程（`npm run dev` 的 Vite 是子进程，只 kill npm 会留下占用 5173 的孤儿），只处理本脚本记录过的 PID；端口被外部进程占用时打印占用者 PID 而不擅自 kill。
+- 不启停 Docker 依赖服务；依赖未起时由前置自检的 `DATABASE_REACHABLE` / `TEMPORAL_REACHABLE` 报错。依赖停止仍用 `make stop`（或 `./.runtime/dev-up.sh stop`）。
+- 采集 Worker 会打开真实 Chrome 并调用真实星图；`up` 默认包含它。页面地址 `http://127.0.0.1:5173/`，登录账号见 `.runtime/qa-credentials.env`（不写入仓库）。
+- 验证记录（前置自检、完整停启、幂等接管、真实 Chrome 页面渲染）见 [DEV-01 证据](evidence/DEV-01-launcher-2026-10-14.md)与 [DEV-01 卡片](tasks/DEV-01.md)。

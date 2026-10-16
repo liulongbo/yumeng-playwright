@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 from contextlib import asynccontextmanager, suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
 from pathlib import Path
@@ -21,6 +21,27 @@ from pydantic import Field, model_validator
 from .covers import CoverConfig
 from .domain import CollectorError, Model, NetworkMode, SegmentBudget, utcnow
 from .evidence import EvidenceConfig
+from .request_census import RequestCensus, census_path_from_env
+
+
+class ManualIdentityAttestation(Model):
+    """Audited human confirmation for a unique account when the platform omits its ID from DOM."""
+
+    account_id: str
+    actor: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    approved_at: datetime
+    valid_until: datetime
+
+    @model_validator(mode="after")
+    def time_window_is_valid(self) -> ManualIdentityAttestation:
+        if self.approved_at.tzinfo is None or self.valid_until.tzinfo is None:
+            raise ValueError("manual identity attestation timestamps must include a timezone")
+        if self.valid_until <= self.approved_at:
+            raise ValueError("manual identity attestation valid_until must be after approved_at")
+        if self.valid_until - self.approved_at > timedelta(days=31):
+            raise ValueError("manual identity attestation may not exceed 31 days")
+        return self
 
 
 class UnitConfig(Model):
@@ -60,6 +81,11 @@ class UnitConfig(Model):
     # re-inject it before the next launch's first navigation. This makes session-scoped business
     # cookies (e.g. `.xingtu.cn/star_sessionid`) survive a close whose disk flush is uncertain.
     capture_session_snapshot: bool = True
+    # A deliberately narrow, time-bounded fallback for a platform UI that no longer renders an
+    # account identifier. It is never inferred from a protected page: an operator must attest
+    # the single-account binding explicitly, and normal readable-account mismatch detection
+    # always wins over this fallback.
+    manual_identity_attestation: ManualIdentityAttestation | None = None
     # Research captures may only open hosts explicitly listed here (see `xingtu research`).
     research_allowed_hosts: list[str] = Field(default_factory=list)
     # §13.4 main path is "the browser runs the platform's own scripts". The platform session
@@ -94,11 +120,24 @@ class UnitConfig(Model):
                 )
         if self.browser_channel and self.browser_executable_path:
             raise ValueError("configure either browser_channel or browser_executable_path")
+        if self.manual_identity_attestation:
+            if not self.is_local_development:
+                raise ValueError("manual identity attestation is limited to local_development")
+            if self.manual_identity_attestation.account_id != self.expected_account_id:
+                raise ValueError("manual identity attestation must match expected_account_id")
         return self
 
     @property
     def is_local_development(self) -> bool:
         return self.network_mode == NetworkMode.LOCAL_DEVELOPMENT
+
+    @property
+    def manually_attested_account_id(self) -> str | None:
+        """Return only a currently valid, exact, local-development attestation."""
+        attestation = self.manual_identity_attestation
+        if not attestation or attestation.valid_until <= utcnow():
+            return None
+        return attestation.account_id
 
 
 class NetworkProof(Model):
@@ -420,6 +459,9 @@ class BrowserRuntime:
                             proxy["password"] = os.environ[env_name]
             self.proxied = proxy is not None
             browser: BrowserContext | None = None
+            # DIAG-01: opt-in request census. Inert unless XINGTU_REQUEST_CENSUS is set, so the
+            # default execution path attaches no listeners and behaves exactly as before.
+            census: RequestCensus | None = None
             self.stopped = False
             try:
                 async with async_playwright() as playwright:
@@ -455,6 +497,10 @@ class BrowserRuntime:
                         except BrowserError:
                             self.browser_ua = None
                         browser.on("framenavigated", self._on_frame_navigated)
+                        census_path = census_path_from_env()
+                        if census_path is not None:
+                            census = RequestCensus(census_path)
+                            census.attach(browser)
                         yield browser
                     finally:
                         if browser:
@@ -467,6 +513,9 @@ class BrowserRuntime:
                             await close_browser_context(browser)
                             self.stopped = True
                             self._context = None
+                        if census is not None:
+                            census.close()
+                            census = None
             finally:
                 fcntl.flock(lock, fcntl.LOCK_UN)
 

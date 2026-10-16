@@ -3,7 +3,14 @@ from contextlib import asynccontextmanager
 
 import psycopg
 import pytest
-from xingtu.domain import CollectorError, ReleaseDisposition
+from xingtu.domain import (
+    CollectorError,
+    ReleaseDisposition,
+    SessionHealth,
+    SessionHealthStatus,
+    TaskStatus,
+    uid,
+)
 
 
 def test_start_idempotency_conflict_and_concurrent_delivery(repo, plan):
@@ -151,9 +158,10 @@ def test_network_mode_is_persisted_and_immutable(repo):
         repo.register_unit("local-unit", "acct", "local-dev", "/tmp/local-profile")
     with repo.connect() as conn:
         versions = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
-    # 009 adds task_dispatches.workflow_started_at (FIX-01 P1-B): the applied set is asserted
-    # exhaustively so a migration that silently stops being applied is caught here.
-    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    # 010/011 add and normalise the creator-library read models (LIB-01) and 012 adds the product
+    # task completion moment: the set is asserted exhaustively so a migration that silently stops
+    # being applied is caught here.
+    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 
 def test_account_rebinding_is_explicit_audited_and_requires_released_browser(repo, started):
@@ -531,6 +539,14 @@ class _FakeRuntime:
         self.stopped = True
         self.close_ok = close_ok
         self.context = context or object()
+        # A verified promotion now re-exports the session snapshot.  This fake has no real
+        # BrowserContext, so the call is recorded instead of executed; the export itself is
+        # covered by backend/tests/unit/test_session_snapshot.py.
+        self.snapshot_exports: list[object] = []
+
+    async def export_session_snapshot(self, context):
+        self.snapshot_exports.append(context)
+        return True
 
     @asynccontextmanager
     async def open(self):
@@ -705,7 +721,7 @@ async def test_browser_host_promotes_and_collects_with_the_exact_same_context(
 
     verified = {}
 
-    async def clearance(page, _spec, _timeout):
+    async def clearance(page, _spec, _timeout, _attested=None):
         verified["maintenance_page"] = page
         return "synthetic-account"
 
@@ -715,6 +731,15 @@ async def test_browser_host_promotes_and_collects_with_the_exact_same_context(
 
         async def check_session(self, page, **_):
             verified["protected_page"] = page
+            # Promotion now observes the verifier's own health instead of relabelling a manual
+            # clearance as an automatic DOM verification, so the stub must return the real type.
+            return SessionHealth(
+                status=SessionHealthStatus.VALID,
+                expected_account_id="synthetic-account",
+                observed_account_id="synthetic-account",
+                protected_page_verified=True,
+                evidence_reason="PROTECTED_PAGE_AND_ACCOUNT_VERIFIED",
+            )
 
         async def close(self):
             pass
@@ -741,6 +766,7 @@ async def test_browser_host_promotes_and_collects_with_the_exact_same_context(
         }
     )
     browser = Browser()
+    runtime = _FakeRuntime(context=browser)
     async with BrowserHost.lease(
         repo,
         config,
@@ -749,7 +775,7 @@ async def test_browser_host_promotes_and_collects_with_the_exact_same_context(
         started.root_task_id,
         "host-owner",
         maintenance=True,
-        runtime=_FakeRuntime(context=browser),
+        runtime=runtime,
     ) as host:
         original_context = host.browser
         new_session = await host.maintain_and_promote(timeout=10, actor="test")
@@ -769,6 +795,9 @@ async def test_browser_host_promotes_and_collects_with_the_exact_same_context(
         assert len(browser.pages) == 1
         assert new_session == started.session_version + 1
         assert repo.unit("unit")["mode"] == "collect"
+        # A promotion that verified the protected surface re-exports the session snapshot for the
+        # next launch.  Losing it silently would drop session-scoped business cookies.
+        assert runtime.snapshot_exports == [browser]
     # The promotion above verified a live account and protected business capability, so a
     # confirmed close returns the unit to READY: the persisted profile may be reused by the
     # next task without another manual login.
@@ -776,3 +805,51 @@ async def test_browser_host_promotes_and_collects_with_the_exact_same_context(
     assert unit["state"] == "READY"
     assert unit["browser_stopped"] is True
     assert unit["owner"] is None
+
+
+def test_completed_at_only_moves_on_the_transition_into_a_terminal_state(repo, plan):
+    """UI-01 R4 at the worker write path: progress keeps it null, a terminal state stamps it once.
+
+    The same helper covers every collector terminal transition because all of them persist through
+    `Repository._save` / `edit`.
+    """
+
+    root = repo.create(
+        plan,
+        "unit",
+        uid(),
+        "test",
+        adapter_version="synthetic-v1",
+        contract_version="synthetic-v1",
+        modules=["basic"],
+    )
+
+    def read():
+        with repo.connect() as conn:
+            return conn.execute(
+                "SELECT state,version,updated_at,completed_at FROM root_tasks"
+                " WHERE root_task_id=%s",
+                (root,),
+            ).fetchone()
+
+    assert read()["completed_at"] is None
+
+    with repo.edit(root) as (task, _):
+        task.state = TaskStatus.SEARCHING
+    progressing = read()
+    assert progressing["completed_at"] is None
+
+    with repo.edit(root) as (task, _):
+        task.state = TaskStatus.COMPLETED
+    completed = read()
+    assert completed["completed_at"] is not None
+    assert completed["updated_at"] == completed["completed_at"]
+
+    # A later non-terminal write (a retry cycle re-entering the queue) refreshes `updated_at` and
+    # must leave the recorded completion moment untouched.
+    with repo.edit(root) as (task, _):
+        task.state = TaskStatus.QUEUED
+    reopened = read()
+    assert reopened["state"] == TaskStatus.QUEUED
+    assert reopened["completed_at"] == completed["completed_at"]
+    assert reopened["updated_at"] > completed["completed_at"]

@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Self
 from urllib.parse import parse_qs, urlsplit
 
 from playwright.async_api import Page, Request, Response
 
-from .contracts import RequestSpec
+from .contracts import AttributeFilterEntry, AttributeFilterMatchSpec, RequestSpec
 from .domain import CollectorError
 
 
@@ -123,6 +124,67 @@ def resolve(value: str, bindings: dict[str, str]) -> str:
     return bindings[value[1:]]
 
 
+def attribute_filter_signature(value: Any) -> tuple[str, str | None, str] | None:
+    if not isinstance(value, dict) or not isinstance(value.get("field"), dict):
+        return None
+    field = value["field"]
+    name = field.get("field_name")
+    raw = value.get("field_value")
+    if not isinstance(name, str) or raw is None:
+        return None
+    rel_id = field.get("rel_id", value.get("rel_id"))
+    if rel_id is not None:
+        rel_id = str(rel_id)
+    return name, rel_id, text_value(raw)
+
+
+def attribute_filters_match(
+    payload: Any,
+    spec: AttributeFilterMatchSpec,
+    expected: list[AttributeFilterEntry] | None,
+) -> bool:
+    if expected is None:
+        return False
+    values = lookup(payload, spec.path)
+    # Xingtu omits the field (JSON null) when no business filter is active.  That is the same
+    # multiset as an empty array, but only when the plan also expects no entries.
+    if values is None:
+        values = []
+    if not isinstance(values, list):
+        return False
+    actual_signatures = [attribute_filter_signature(value) for value in values]
+    if any(value is None for value in actual_signatures):
+        return False
+    actual = Counter(value for value in actual_signatures if value is not None)
+
+    def consume(item: AttributeFilterEntry) -> bool:
+        candidates: list[tuple[str, str | None, str]]
+        if item.rel_id is not None:
+            candidates = [(item.field_name, item.rel_id, item.field_value)]
+        else:
+            # rel_id is an optional discriminator.  When the registry does not publish it, match
+            # by field/value while retaining multiset cardinality and rejecting every residue.
+            candidates = sorted(
+                signature
+                for signature, count in actual.items()
+                if count and signature[0] == item.field_name and signature[2] == item.field_value
+            )
+        if not candidates or actual[candidates[0]] <= 0:
+            return False
+        actual[candidates[0]] -= 1
+        if actual[candidates[0]] == 0:
+            del actual[candidates[0]]
+        return True
+
+    # Static fields are allowed, not required.  Consume one occurrence when present; an extra
+    # occurrence remains residue and is rejected below.
+    for item in spec.allowed_static:
+        consume(item)
+    if any(not consume(item) for item in expected):
+        return False
+    return not actual
+
+
 class ResponseCollector:
     """One operation/page/session; reject ambiguity instead of choosing latest response."""
 
@@ -135,6 +197,7 @@ class ResponseCollector:
         max_bytes: int,
         *,
         metrics: dict[str, int] | None = None,
+        attribute_filters: list[AttributeFilterEntry] | None = None,
     ):
         self.page, self.specs, self.bindings = page, specs, bindings
         self.timeout, self.max_bytes = timeout, max_bytes
@@ -150,6 +213,7 @@ class ResponseCollector:
         self.changed = asyncio.Event()
         self.closed = False
         self.metrics = metrics if metrics is not None else {}
+        self.attribute_filters = attribute_filters
         # Retain exact callbacks for remove_listener.
         self.request_callback = self.on_request
         self.response_callback = self.on_response
@@ -192,6 +256,14 @@ class ResponseCollector:
                     text_value(lookup(params, k)) == resolve(v, self.bindings)
                     for k, v in spec.request_match.items()
                 ):
+                    continue
+                if spec.attribute_filter_match and not attribute_filters_match(
+                    params, spec.attribute_filter_match, self.attribute_filters
+                ):
+                    self.failures[spec.key] = "RESPONSE_UNCORRELATED"
+                    self.metrics["attribute_filter_mismatches"] = (
+                        self.metrics.get("attribute_filter_mismatches", 0) + 1
+                    )
                     continue
                 if spec.key in self.seen and not spec.repeats:
                     self.failures[spec.key] = "RESPONSE_UNCORRELATED"

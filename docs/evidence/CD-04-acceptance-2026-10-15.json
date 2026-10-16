@@ -1,0 +1,282 @@
+{
+  "checks": [
+    {
+      "check": "CD04-MCP",
+      "passed": true,
+      "detail": "Playwright MCP 1.62.0-alpha-2026-06-29 over stdio, 23 tools (not a tool direct-call; see the evidence file)"
+    },
+    {
+      "check": "CD04-BIZ-01-library",
+      "passed": true,
+      "detail": "http://127.0.0.1:5173/creators/700ca5b0-f0c8-4436-86fe-624dfeb0f151 (达人库入口)"
+    },
+    {
+      "check": "CD04-LIB-BIZ-01-BIZ-02-modules",
+      "passed": true,
+      "detail": "modules=['内容数据', '性价比/效果预估', '种草价值', '转化价值']"
+    },
+    {
+      "check": "CD04-LIB-BIZ-04-BIZ-12-scope",
+      "passed": true,
+      "detail": "scope labels are rendered in each module hint (内容数据 近30天 / 种草价值 近90天 / 转化价值 近30天)"
+    },
+    {
+      "check": "CD04-LIB-BIZ-03-content-metrics",
+      "passed": true,
+      "detail": "missing=[]"
+    },
+    {
+      "check": "CD04-LIB-BIZ-05-units",
+      "passed": true,
+      "detail": "mismatch={} (万元/k 规则，四舍五入 1 位小数)"
+    },
+    {
+      "check": "CD04-LIB-BIZ-06-peer",
+      "passed": true,
+      "detail": "compare={'完播率': '优于 98.0% 同类型达人', '互动率': '优于 74.9% 同类型达人'} (万分比 ÷100，方向为「优于」，1 位小数)"
+    },
+    {
+      "check": "CD04-LIB-BIZ-07-cpm-cpe",
+      "passed": true,
+      "detail": "cpm/cpe={'21-60': '2,969', '60+': '2,969', 'cpe21': '246', 'cpe60': '246'} (两档独立展示，未合并；币种未登记)"
+    },
+    {
+      "check": "CD04-LIB-BIZ-08-commercial-play",
+      "passed": true,
+      "detail": "播放='134.7w' 自然播放='109.2w'"
+    },
+    {
+      "check": "CD04-LIB-BIZ-11-seeding",
+      "passed": true,
+      "detail": "mismatch={} order_ok=True"
+    },
+    {
+      "check": "CD04-LIB-BIZ-14-conversion",
+      "passed": true,
+      "detail": "conversion={'相关视频数': '1', '视频播放中位数': '86.3w', '组件点击量': '—', '组件点击率': '—', 'CPC': '—'}"
+    },
+    {
+      "check": "CD04-LIB-BIZ-15-range-empty-state",
+      "passed": true,
+      "detail": "本快照的平台区间值为空标记 '-'（`component_click_count_range`/`component_click_rate_range`/`related_cpc_range`），页面显示为明确空态而不是 0：{'组件点击量': '—', '组件点击率': '—', 'CPC': '—'}"
+    },
+    {
+      "check": "CD04-LIB-BIZ-16-industry-removed",
+      "passed": true,
+      "detail": "「历史合作行业」模块已按要求从商业能力移除（数据与 API 未改）"
+    },
+    {
+      "check": "CD04-LIB-BIZ-22-quote-detail-removed",
+      "passed": true,
+      "detail": "「报价明细」模块已按要求从商业能力移除（报价数据与接口未改）"
+    },
+    {
+      "check": "CD04-LIB-BIZ-09-reach",
+      "passed": true,
+      "detail": "reach={'title': '优秀传播视频', 'cards': 4, 'persistedCovers': 4, 'brokenCovers': 0, 'firstTitle': '汽车玻璃水怎么选 给大家总结4款不同配方的玻璃水品牌#汽车 #汽车知识 #汽车玻璃水 #汽车保养 #生物基玻璃水', 'firstStats': ['播放量 194.4w', '点赞量 2.8w', '评论量 1.2k'], 'firstLink': 'https://www.iesdouyin.com/share/video/7670511622356160677/?region=CN&mid=7670511554126695183&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=ljHqkC3QWOE5Ji1VwPMybYhgcxSGeMlrV1Qq.aBQ2NU-&share_version=260800&ts=1791942975&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D', 'links': ['https://www.iesdouyin.com/share/video/7670511622356160677/?region=CN&mid=7670511554126695183&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=ljHqkC3QWOE5Ji1VwPMybYhgcxSGeMlrV1Qq.aBQ2NU-&share_version=260800&ts=1791942975&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D', 'https://www.iesdouyin.com/share/video/7676368742729703162/?region=CN&mid=7676368710512167722&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=piyk5I2ENIinNtwN3b45kDW17WjMTH9.coWVUnuUtSM-&share_version=260800&ts=1791942975&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D', 'https://www.iesdouyin.com/share/video/7688637539867138554/?region=CN&mid=7688637519705000742&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=utEh5RUIKTs3pfc_uGiqGAQzVm3jtpvO.WuUZgk_VsM-&share_version=260800&ts=1791942975&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D', 'https://www.iesdouyin.com/share/video/7687156678325138106/?region=CN&mid=7687156645444586246&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=AvOCeUGVZvJNKP9TLxDpvep3Zdy6wf5_HSVs3_pSevg-&share_version=260800&ts=1791942975&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D'], 'shareIcons': 0, 'coverSrcs': ['/api/creator-library/700ca5b0-f0c8-4436-86fe-624dfeb0f151/covers/cover%2Fefb257a6-476b-47ee-aff4-807795bb61a0%2Fbd68d5150c84a8ed7eab38abbe1c0d25facb0fe7526da9e899017f76f7c93110', '/api/creator-library/700ca5b0-f0c8-4436-86fe-624dfeb0f151/covers/cover%2Fefb257a6-476b-47ee-aff4-807795bb61a0%2F513a4bf82b835f896bd8948b1044d6a8ff6ae2e029d662332fb4ba4083f72010', '/api/creator-library/700ca5b0-f0c8-4436-86fe-624dfeb0f151/covers/cover%2Fefb257a6-476b-47ee-aff4-807795bb61a0%2F217b097a3622b2222798db75896b32788e57d689ec37d7925a620bc4a073a980', '/api/creator-library/700ca5b0-f0c8-4436-86fe-624dfeb0f151/covers/cover%2Fefb257a6-476b-47ee-aff4-807795bb61a0%2F3223b2fb1e7702d39682bbc93e53c801bfbbbca5a173d2ec7fb67eb1ae01f2da']}"
+    },
+    {
+      "check": "CD04-LIB-BIZ-13-seeding",
+      "passed": true,
+      "detail": "seeding={'title': '优秀种草视频', 'cards': 2, 'persistedCovers': 2, 'brokenCovers': 0, 'firstTitle': '以前开帕拉梅拉的老板，现在都换什么车？#汽车#60万轿车推荐#帕拉梅拉换车#仰望u7#地表最强运动轿车', 'firstStats': ['播放量 208.2w', '点赞量 1.3w', '评论量 608'], 'firstLink': 'https://www.iesdouyin.com/share/video/7684292071100316325/?region=CN&mid=7684292011935648575&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=neHCOWhP7dkbT1dSAHaQiBqNsj4ECZYUpew1wT7nXfg-&share_version=260800&ts=1791942992&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D', 'links': ['https://www.iesdouyin.com/share/video/7684292071100316325/?region=CN&mid=7684292011935648575&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=neHCOWhP7dkbT1dSAHaQiBqNsj4ECZYUpew1wT7nXfg-&share_version=260800&ts=1791942992&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D', 'https://www.iesdouyin.com/share/video/7671928350940637817/?region=CN&mid=7671928384460442409&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=2IQoS99YskM.kCd6P.3M929kCUMiEHNG36_fMYTiv4I-&share_version=260800&ts=1791942992&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D'], 'shareIcons': 0, 'coverSrcs': ['/api/creator-library/700ca5b0-f0c8-4436-86fe-624dfeb0f151/covers/cover%2Fefb257a6-476b-47ee-aff4-807795bb61a0%2Fa4fc2e6aa3104f6939717ed46ec2ae7dbc5af3d4b5308277c54a87b831801067', '/api/creator-library/700ca5b0-f0c8-4436-86fe-624dfeb0f151/covers/cover%2Fefb257a6-476b-47ee-aff4-807795bb61a0%2F0261a831e51cf872295284c78ff05d5dd2edaecf298fe65aaae1ebd8d101d3c2']}"
+    },
+    {
+      "check": "CD04-LIB-BIZ-10-video-stats",
+      "passed": true,
+      "detail": "first card stats=['播放量 194.4w', '点赞量 2.8w', '评论量 1.2k'] (字段封套已解包；顺序 播放/点赞/评论)"
+    },
+    {
+      "check": "CD04-LIB-BIZ-10-video-links",
+      "passed": true,
+      "detail": "4 个抖音作品链接，全部来自平台返回的 canonical_link（未自行拼接）；示例 'https://www.iesdouyin.com/share/video/7670511622356160677/?region=CN&m'"
+    },
+    {
+      "check": "CD04-LIB-BIZ-10-new-tab",
+      "passed": true,
+      "detail": "anchors={'count': 6, 'blank': 6} (全部 target=_blank，保留当前详情页)"
+    },
+    {
+      "check": "CD04-LIB-BIZ-23-share-icon-removed",
+      "passed": true,
+      "detail": "分享 icon 已移除（.biz-open 数量=0）；跳转仍由封面/播放入口承担（4 个作品链接 + 6 个 target=_blank 锚点）"
+    },
+    {
+      "check": "CD04-LIB-BIZ-09-BIZ-13-cover-delivery",
+      "passed": true,
+      "detail": "6 张封面全部由本项目封面端点返回真实图片字节：[{'status': 200, 'type': 'image/webp', 'bytes': 34608}, {'status': 200, 'type': 'image/webp', 'bytes': 32512}, {'status': 200, 'type': 'image/webp', 'bytes': 60916}]"
+    },
+    {
+      "check": "CD04-BIZ-18-cover-degraded",
+      "passed": true,
+      "detail": "degraded={'hasImg': True, 'hasMetric': True} after={'railAlive': True, 'metricsAlive': 24, 'errorVisible': False, 'coverMissingStates': 0, 'bodyHasNull': False}"
+    },
+    {
+      "check": "CD04-BIZ-17-empty-fields",
+      "passed": true,
+      "detail": "metrics=24 error=False"
+    },
+    {
+      "check": "CD04-BIZ-19-refresh",
+      "passed": true,
+      "detail": "after reload: cpc='—' play_median='93.0w'"
+    },
+    {
+      "check": "CD04-BIZ-20-layout",
+      "passed": true,
+      "detail": "overflow=False"
+    },
+    {
+      "check": "CD04-BIZ-24-cover-file-gap",
+      "passed": true,
+      "detail": "C位小师妹: 8 张卡片全部如实标注「封面文件缺失（需重新采集）」，未伪装成图片或 0：['封面文件缺失（需重新采集）', '封面文件缺失（需重新采集）']"
+    },
+    {
+      "check": "CD04-BIZ-24-gap-keeps-links",
+      "passed": true,
+      "detail": "封面缺失不影响作品跳转：8/8 个播放入口仍在"
+    },
+    {
+      "check": "CD04-BIZ-01-task",
+      "passed": true,
+      "detail": "http://127.0.0.1:5173/tasks/efb257a6-476b-47ee-aff4-807795bb61a0/creators/700ca5b0-f0c8-4436-86fe-624dfeb0f151 (任务入口)"
+    },
+    {
+      "check": "CD04-TASK-BIZ-01-BIZ-02-modules",
+      "passed": true,
+      "detail": "modules=['内容数据', '性价比/效果预估', '种草价值', '转化价值']"
+    },
+    {
+      "check": "CD04-TASK-BIZ-04-BIZ-12-scope",
+      "passed": true,
+      "detail": "scope labels are rendered in each module hint (内容数据 近30天 / 种草价值 近90天 / 转化价值 近30天)"
+    },
+    {
+      "check": "CD04-TASK-BIZ-03-content-metrics",
+      "passed": true,
+      "detail": "missing=[]"
+    },
+    {
+      "check": "CD04-TASK-BIZ-05-units",
+      "passed": true,
+      "detail": "mismatch={} (万元/k 规则，四舍五入 1 位小数)"
+    },
+    {
+      "check": "CD04-TASK-BIZ-06-peer",
+      "passed": true,
+      "detail": "compare={'完播率': '优于 98.0% 同类型达人', '互动率': '优于 74.9% 同类型达人'} (万分比 ÷100，方向为「优于」，1 位小数)"
+    },
+    {
+      "check": "CD04-TASK-BIZ-07-cpm-cpe",
+      "passed": true,
+      "detail": "cpm/cpe={'21-60': '2,969', '60+': '2,969', 'cpe21': '246', 'cpe60': '246'} (两档独立展示，未合并；币种未登记)"
+    },
+    {
+      "check": "CD04-TASK-BIZ-08-commercial-play",
+      "passed": true,
+      "detail": "播放='134.7w' 自然播放='109.2w'"
+    },
+    {
+      "check": "CD04-TASK-BIZ-11-seeding",
+      "passed": true,
+      "detail": "mismatch={} order_ok=True"
+    },
+    {
+      "check": "CD04-TASK-BIZ-14-conversion",
+      "passed": true,
+      "detail": "conversion={'相关视频数': '1', '视频播放中位数': '86.3w', '组件点击量': '—', '组件点击率': '—', 'CPC': '—'}"
+    },
+    {
+      "check": "CD04-TASK-BIZ-15-range-empty-state",
+      "passed": true,
+      "detail": "本快照的平台区间值为空标记 '-'（`component_click_count_range`/`component_click_rate_range`/`related_cpc_range`），页面显示为明确空态而不是 0：{'组件点击量': '—', '组件点击率': '—', 'CPC': '—'}"
+    },
+    {
+      "check": "CD04-TASK-BIZ-16-industry-removed",
+      "passed": true,
+      "detail": "「历史合作行业」模块已按要求从商业能力移除（数据与 API 未改）"
+    },
+    {
+      "check": "CD04-TASK-BIZ-22-quote-detail-removed",
+      "passed": true,
+      "detail": "「报价明细」模块已按要求从商业能力移除（报价数据与接口未改）"
+    },
+    {
+      "check": "CD04-TASK-BIZ-09-reach",
+      "passed": true,
+      "detail": "reach={'title': '优秀传播视频', 'cards': 4, 'persistedCovers': 4, 'brokenCovers': 0, 'firstTitle': '汽车玻璃水怎么选 给大家总结4款不同配方的玻璃水品牌#汽车 #汽车知识 #汽车玻璃水 #汽车保养 #生物基玻璃水', 'firstStats': ['播放量 194.4w', '点赞量 2.8w', '评论量 1.2k'], 'firstLink': 'https://www.iesdouyin.com/share/video/7670511622356160677/?region=CN&mid=7670511554126695183&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=ljHqkC3QWOE5Ji1VwPMybYhgcxSGeMlrV1Qq.aBQ2NU-&share_version=260800&ts=1791942975&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D', 'links': ['https://www.iesdouyin.com/share/video/7670511622356160677/?region=CN&mid=7670511554126695183&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=ljHqkC3QWOE5Ji1VwPMybYhgcxSGeMlrV1Qq.aBQ2NU-&share_version=260800&ts=1791942975&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D', 'https://www.iesdouyin.com/share/video/7676368742729703162/?region=CN&mid=7676368710512167722&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=piyk5I2ENIinNtwN3b45kDW17WjMTH9.coWVUnuUtSM-&share_version=260800&ts=1791942975&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D', 'https://www.iesdouyin.com/share/video/7688637539867138554/?region=CN&mid=7688637519705000742&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=utEh5RUIKTs3pfc_uGiqGAQzVm3jtpvO.WuUZgk_VsM-&share_version=260800&ts=1791942975&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D', 'https://www.iesdouyin.com/share/video/7687156678325138106/?region=CN&mid=7687156645444586246&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=AvOCeUGVZvJNKP9TLxDpvep3Zdy6wf5_HSVs3_pSevg-&share_version=260800&ts=1791942975&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D'], 'shareIcons': 0, 'coverSrcs': ['/api/tasks/efb257a6-476b-47ee-aff4-807795bb61a0/covers/cover%2Fefb257a6-476b-47ee-aff4-807795bb61a0%2Fbd68d5150c84a8ed7eab38abbe1c0d25facb0fe7526da9e899017f76f7c93110', '/api/tasks/efb257a6-476b-47ee-aff4-807795bb61a0/covers/cover%2Fefb257a6-476b-47ee-aff4-807795bb61a0%2F513a4bf82b835f896bd8948b1044d6a8ff6ae2e029d662332fb4ba4083f72010', '/api/tasks/efb257a6-476b-47ee-aff4-807795bb61a0/covers/cover%2Fefb257a6-476b-47ee-aff4-807795bb61a0%2F217b097a3622b2222798db75896b32788e57d689ec37d7925a620bc4a073a980', '/api/tasks/efb257a6-476b-47ee-aff4-807795bb61a0/covers/cover%2Fefb257a6-476b-47ee-aff4-807795bb61a0%2F3223b2fb1e7702d39682bbc93e53c801bfbbbca5a173d2ec7fb67eb1ae01f2da']}"
+    },
+    {
+      "check": "CD04-TASK-BIZ-13-seeding",
+      "passed": true,
+      "detail": "seeding={'title': '优秀种草视频', 'cards': 2, 'persistedCovers': 2, 'brokenCovers': 0, 'firstTitle': '以前开帕拉梅拉的老板，现在都换什么车？#汽车#60万轿车推荐#帕拉梅拉换车#仰望u7#地表最强运动轿车', 'firstStats': ['播放量 208.2w', '点赞量 1.3w', '评论量 608'], 'firstLink': 'https://www.iesdouyin.com/share/video/7684292071100316325/?region=CN&mid=7684292011935648575&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=neHCOWhP7dkbT1dSAHaQiBqNsj4ECZYUpew1wT7nXfg-&share_version=260800&ts=1791942992&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D', 'links': ['https://www.iesdouyin.com/share/video/7684292071100316325/?region=CN&mid=7684292011935648575&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=neHCOWhP7dkbT1dSAHaQiBqNsj4ECZYUpew1wT7nXfg-&share_version=260800&ts=1791942992&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D', 'https://www.iesdouyin.com/share/video/7671928350940637817/?region=CN&mid=7671928384460442409&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=2IQoS99YskM.kCd6P.3M929kCUMiEHNG36_fMYTiv4I-&share_version=260800&ts=1791942992&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D'], 'shareIcons': 0, 'coverSrcs': ['/api/tasks/efb257a6-476b-47ee-aff4-807795bb61a0/covers/cover%2Fefb257a6-476b-47ee-aff4-807795bb61a0%2Fa4fc2e6aa3104f6939717ed46ec2ae7dbc5af3d4b5308277c54a87b831801067', '/api/tasks/efb257a6-476b-47ee-aff4-807795bb61a0/covers/cover%2Fefb257a6-476b-47ee-aff4-807795bb61a0%2F0261a831e51cf872295284c78ff05d5dd2edaecf298fe65aaae1ebd8d101d3c2']}"
+    },
+    {
+      "check": "CD04-TASK-BIZ-10-video-stats",
+      "passed": true,
+      "detail": "first card stats=['播放量 194.4w', '点赞量 2.8w', '评论量 1.2k'] (字段封套已解包；顺序 播放/点赞/评论)"
+    },
+    {
+      "check": "CD04-TASK-BIZ-10-video-links",
+      "passed": true,
+      "detail": "4 个抖音作品链接，全部来自平台返回的 canonical_link（未自行拼接）；示例 'https://www.iesdouyin.com/share/video/7670511622356160677/?region=CN&m'"
+    },
+    {
+      "check": "CD04-TASK-BIZ-10-new-tab",
+      "passed": true,
+      "detail": "anchors={'count': 6, 'blank': 6} (全部 target=_blank，保留当前详情页)"
+    },
+    {
+      "check": "CD04-TASK-BIZ-23-share-icon-removed",
+      "passed": true,
+      "detail": "分享 icon 已移除（.biz-open 数量=0）；跳转仍由封面/播放入口承担（4 个作品链接 + 6 个 target=_blank 锚点）"
+    },
+    {
+      "check": "CD04-TASK-BIZ-09-BIZ-13-cover-delivery",
+      "passed": true,
+      "detail": "6 张封面全部由本项目封面端点返回真实图片字节：[{'status': 200, 'type': 'image/webp', 'bytes': 34608}, {'status': 200, 'type': 'image/webp', 'bytes': 32512}, {'status': 200, 'type': 'image/webp', 'bytes': 60916}]"
+    },
+    {
+      "check": "CD04-BIZ-21-entry-parity",
+      "passed": true,
+      "detail": "task modules=['内容数据', '性价比/效果预估', '种草价值', '转化价值']"
+    },
+    {
+      "check": "CD04-BIZ-21-rail-regression",
+      "passed": true,
+      "detail": "starId='星图ID7503176021160493065' facts=['性别', '地区', 'MCN', '介绍']"
+    },
+    {
+      "check": "CD04-BIZ-21-route-regression",
+      "passed": true,
+      "detail": "达人详情入口/路由在两次导航与一次刷新后均正常（见各检查项）"
+    },
+    {
+      "check": "CD04-BIZ-22-quote-data-retained",
+      "passed": true,
+      "detail": "达人库入口「报价与历史」章节仍展示真实报价历史（CD-07 起该系统采集历史模块已移除展示）：{'historyTabs': ['商业能力', '创作能力', '履约能力', '连接用户', '报价与历史'], 'quoteRows': 1, 'hasQuoteHistory': True, 'hasSnapshotHistory': False}"
+    },
+    {
+      "check": "CD04-MOBILE-no-overflow",
+      "passed": true,
+      "detail": "overflow=False"
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "CD04-library-commercial",
+      "path": "docs/evidence/assets/cd04/CD04-library-commercial.png",
+      "note": null
+    },
+    {
+      "name": "CD04-task-commercial",
+      "path": "docs/evidence/assets/cd04/CD04-task-commercial.png",
+      "note": null
+    },
+    {
+      "name": "CD04-library-mobile-390",
+      "path": "docs/evidence/assets/cd04/CD04-library-mobile-390.png",
+      "note": null
+    }
+  ],
+  "failed": 0
+}

@@ -315,10 +315,17 @@ class Supervisor:
         self.children: dict[str, subprocess.Popen[bytes]] = {}
         LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-    def start(self, name: str, command: list[str], env: dict[str, str]) -> None:
+    def start(
+        self,
+        name: str,
+        command: list[str],
+        env: dict[str, str],
+        *,
+        cwd: Path = ROOT,
+    ) -> None:
         handle = (LOG_DIR / f"{name}.log").open("ab")
         self.children[name] = subprocess.Popen(
-            command, cwd=ROOT, env=env, stdout=handle, stderr=subprocess.STDOUT
+            command, cwd=cwd, env=env, stdout=handle, stderr=subprocess.STDOUT
         )
 
     def alive(self) -> list[str]:
@@ -417,7 +424,7 @@ def main() -> int:
             )
             started.append("collection-worker")
         if args.with_frontend and not frontend_running:
-            supervisor.start("frontend", ["npm", "run", "dev"], env)
+            supervisor.start("frontend", ["npm", "run", "dev"], env, cwd=ROOT / "frontend")
             started.append("frontend")
 
         address = env.get("XINGTU_TEMPORAL_ADDRESS", "127.0.0.1:57233")

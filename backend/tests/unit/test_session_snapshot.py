@@ -12,6 +12,7 @@ import os
 import stat
 from pathlib import Path
 
+import pytest
 from xingtu.runtime import BrowserRuntime, UnitConfig
 
 REGISTRY = {
@@ -220,3 +221,25 @@ def test_missing_registry_selector_disables_the_filter_not_the_browser(tmp_path)
     runtime = BrowserRuntime(config, tmp_path)
     assert runtime.protected_ready_selector is None
     assert os.path.isdir(tmp_path) and not (tmp_path / "absent.json").exists()
+
+
+def test_manual_identity_attestation_is_local_exact_and_time_bounded(tmp_path):
+    payload = unit_config(tmp_path).model_dump(mode="json")
+    payload["manual_identity_attestation"] = {
+        "account_id": "synthetic-account",
+        "actor": "operator",
+        "reason": "single account manually confirmed",
+        "approved_at": "2026-10-13T08:39:32+00:00",
+        "valid_until": "2026-11-12T08:39:32+00:00",
+    }
+    config = UnitConfig.model_validate(payload)
+    assert config.manually_attested_account_id == "synthetic-account"
+
+    payload["manual_identity_attestation"]["account_id"] = "other-account"
+    with pytest.raises(ValueError, match="must match expected_account_id"):
+        UnitConfig.model_validate(payload)
+
+    payload["manual_identity_attestation"]["account_id"] = "synthetic-account"
+    payload["manual_identity_attestation"]["valid_until"] = "2026-11-14T08:39:33+00:00"
+    with pytest.raises(ValueError, match="may not exceed 31 days"):
+        UnitConfig.model_validate(payload)

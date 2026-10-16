@@ -1,0 +1,342 @@
+{
+  "snapshot_id": "9125b95f-a5de-4b2d-b0ff-08b6256ea64e",
+  "snapshot_captured_at": "2026-10-14T02:02:10.551872+00:00",
+  "platform_read_at": null,
+  "summary": {
+    "same": 17,
+    "time-shift": 16,
+    "note": 2
+  },
+  "findings": [
+    {
+      "group": "identity",
+      "item": "达人类型",
+      "verdict": "same",
+      "platform_live": "汽车",
+      "stored_snapshot": "汽车",
+      "note": "平台左栏与库内一致"
+    },
+    {
+      "group": "identity",
+      "item": "行业标签",
+      "verdict": "same",
+      "platform_live": [
+        "金融业",
+        "美妆",
+        "游戏"
+      ],
+      "stored_snapshot": [
+        "金融业",
+        "美妆",
+        "游戏"
+      ],
+      "note": "顺序与取值一致"
+    },
+    {
+      "group": "identity",
+      "item": "地区",
+      "verdict": "same",
+      "platform_live": "内蒙古自治区-赤峰市",
+      "stored_snapshot": "内蒙古自治区-赤峰市",
+      "note": ""
+    },
+    {
+      "group": "identity",
+      "item": "介绍",
+      "verdict": "same",
+      "platform_live": null,
+      "stored_snapshot": "关注我，带你每日了解一个汽车知识🚗",
+      "note": ""
+    },
+    {
+      "group": "identity",
+      "item": "性别编码",
+      "verdict": "same",
+      "platform_live": "女",
+      "stored_snapshot": "平台编码 2",
+      "note": "平台显示「女」，库内保存原码 2（页面按原码显示，未做映射）"
+    },
+    {
+      "group": "kpi",
+      "item": "月连接用户数",
+      "verdict": "time-shift",
+      "platform_live": 23766000.0,
+      "stored_snapshot": 23439854.0,
+      "note": "差 +326,146（+1.39%）；平台显示精度为 0.1w"
+    },
+    {
+      "group": "kpi",
+      "item": "月深度用户数",
+      "verdict": "time-shift",
+      "platform_live": 11675000.0,
+      "stored_snapshot": 11580000.0,
+      "note": "差 +95,000（+0.82%）；平台显示精度为 0.1w"
+    },
+    {
+      "group": "kpi",
+      "item": "粉丝",
+      "verdict": "time-shift",
+      "platform_live": 1352000.0,
+      "stored_snapshot": 1351784.0,
+      "note": "差 +216（+0.02%）；平台显示精度为 0.1w"
+    },
+    {
+      "group": "kpi",
+      "item": "月涨粉率",
+      "verdict": "same",
+      "platform_live": "1.97%",
+      "stored_snapshot": "1.97%（原始小数 0.01969004266000137）",
+      "note": "契约 kind=ratio，×100 与平台完全一致"
+    },
+    {
+      "group": "scale",
+      "item": "互动率显示口径",
+      "verdict": "same",
+      "platform_live": "1.1%",
+      "stored_snapshot": "1.12%（库内原值 112）",
+      "note": "库内 value ÷ 100 = 平台百分比（平台显示 1 位小数）"
+    },
+    {
+      "group": "scale",
+      "item": "互动率同行超越口径",
+      "verdict": "time-shift",
+      "platform_live": "97.56%",
+      "stored_snapshot": "74.93%（库内原值 7493）",
+      "note": "库内 overtake ÷ 100 = 「优于同类型达人」百分比"
+    },
+    {
+      "group": "scale",
+      "item": "完播率显示口径",
+      "verdict": "same",
+      "platform_live": "5.5%",
+      "stored_snapshot": "5.51%（库内原值 551）",
+      "note": "库内 value ÷ 100 = 平台百分比（平台显示 1 位小数）"
+    },
+    {
+      "group": "scale",
+      "item": "完播率同行超越口径",
+      "verdict": "time-shift",
+      "platform_live": "97.56%",
+      "stored_snapshot": "98.01%（库内原值 9801）",
+      "note": "库内 overtake ÷ 100 = 「优于同类型达人」百分比"
+    },
+    {
+      "group": "scale",
+      "item": "播放中位数",
+      "verdict": "time-shift",
+      "platform_live": 938000.0,
+      "stored_snapshot": 929620.0,
+      "note": "时间漂移（近30天窗口）"
+    },
+    {
+      "group": "scale",
+      "item": "平均时长单位",
+      "verdict": "same",
+      "platform_live": "101.4s",
+      "stored_snapshot": "10140.0（读作 101.4 秒）",
+      "note": "库内原值是「秒×100」"
+    },
+    {
+      "group": "layers",
+      "item": "阶段名称",
+      "verdict": "same",
+      "platform_live": [
+        "了解",
+        "兴趣",
+        "喜欢",
+        "追随"
+      ],
+      "stored_snapshot": [
+        "了解",
+        "兴趣",
+        "喜欢",
+        "追随"
+      ],
+      "note": "平台为阶段 1–4 命名：了解/兴趣/喜欢/追随；阶段 5 为连接用户数合计"
+    },
+    {
+      "group": "layers",
+      "item": "1. 了解",
+      "verdict": "time-shift",
+      "platform_live": 12090818.0,
+      "stored_snapshot": 11860342.0,
+      "note": "差 +230,476"
+    },
+    {
+      "group": "layers",
+      "item": "2. 兴趣",
+      "verdict": "time-shift",
+      "platform_live": 6709919.0,
+      "stored_snapshot": 6643390.0,
+      "note": "差 +66,529"
+    },
+    {
+      "group": "layers",
+      "item": "3. 喜欢",
+      "verdict": "time-shift",
+      "platform_live": 4958875.0,
+      "stored_snapshot": 4930200.0,
+      "note": "差 +28,675"
+    },
+    {
+      "group": "layers",
+      "item": "4. 追随",
+      "verdict": "time-shift",
+      "platform_live": 5937.0,
+      "stored_snapshot": 5922.0,
+      "note": "差 +15"
+    },
+    {
+      "group": "layers",
+      "item": "合计=连接用户数",
+      "verdict": "same",
+      "platform_live": 2376.6,
+      "stored_snapshot": 23439854.0,
+      "note": "平台把阶段 5 显示为「连接用户数」，与四层之和相等"
+    },
+    {
+      "group": "distribution",
+      "item": "内容主题集中度",
+      "verdict": "same",
+      "platform_live": {
+        "用车知识": 43,
+        "车辆保养": 35,
+        "驾驶技巧": 24,
+        "交规科普": 9,
+        "车祸避险": 7,
+        "汽车油耗": 6,
+        "用车成本": 6,
+        "汽车用品测评": 5,
+        "汽车保险": 4,
+        "车辆检查": 4
+      },
+      "stored_snapshot": {
+        "交规科普": 9,
+        "汽车保险": 4,
+        "汽车油耗": 6,
+        "用车成本": 6,
+        "用车知识": 43,
+        "车祸避险": 7,
+        "车辆保养": 35,
+        "车辆检查": 4,
+        "驾驶技巧": 24,
+        "汽车用品测评": 5
+      },
+      "note": "10 个主题与条数逐值一致"
+    },
+    {
+      "group": "distribution",
+      "item": "合作行业分布",
+      "verdict": "same",
+      "platform_live": "汽车(100%)",
+      "stored_snapshot": "汽车(100%)",
+      "note": "一级类目 汽车厂商 亦一致"
+    },
+    {
+      "group": "ranges",
+      "item": "商单视频看后搜率",
+      "verdict": "same",
+      "platform_live": "0.5% - 1%",
+      "stored_snapshot": "0.5% - 1%",
+      "note": "区间值逐字一致"
+    },
+    {
+      "group": "ranges",
+      "item": "个人视频看后搜率",
+      "verdict": "same",
+      "platform_live": "0.02% - 0.1%",
+      "stored_snapshot": "0.02% - 0.1%",
+      "note": "区间值逐字一致"
+    },
+    {
+      "group": "ranges",
+      "item": "A3增长数",
+      "verdict": "same",
+      "platform_live": "20,000 - 100,000",
+      "stored_snapshot": "20,000 - 100,000",
+      "note": "区间值逐字一致"
+    },
+    {
+      "group": "video",
+      "item": "高速上不能压的3种线 #汽车知识#说车聊车#行车",
+      "verdict": "time-shift",
+      "platform_live": 687000.0,
+      "stored_snapshot": 670299.0,
+      "note": "差 +16,701（+2.49%，播放量随时间增长；万位取整 ±500）"
+    },
+    {
+      "group": "video",
+      "item": "3个致命的驾驶坏习惯 #汽车知识#说车聊车#行车",
+      "verdict": "time-shift",
+      "platform_live": 1007000.0,
+      "stored_snapshot": 990748.0,
+      "note": "差 +16,252（+1.64%，播放量随时间增长；万位取整 ±500）"
+    },
+    {
+      "group": "video",
+      "item": "跑高速还是跑国道 #汽车知识#说车聊车#行车安全",
+      "verdict": "time-shift",
+      "platform_live": 2738000.0,
+      "stored_snapshot": 2719270.0,
+      "note": "差 +18,730（+0.69%，播放量随时间增长；万位取整 ±500）"
+    },
+    {
+      "group": "video",
+      "item": "路口礼让行人规则 #汽车知识#说车聊车#行车安全",
+      "verdict": "time-shift",
+      "platform_live": 3364000.0,
+      "stored_snapshot": 3342699.0,
+      "note": "差 +21,301（+0.64%，播放量随时间增长；万位取整 ±500）"
+    },
+    {
+      "group": "video",
+      "item": "加油站不会告诉你的秘密 #汽车知识#说车聊车#行",
+      "verdict": "time-shift",
+      "platform_live": 1722000.0,
+      "stored_snapshot": 1685871.0,
+      "note": "差 +36,129（+2.14%，播放量随时间增长；万位取整 ±500）"
+    },
+    {
+      "group": "video",
+      "item": "三四万的小车卖了195万台，它凭什么能叫国民代步",
+      "verdict": "time-shift",
+      "platform_live": 915000.0,
+      "stored_snapshot": 908624.0,
+      "note": "差 +6,376（+0.70%，播放量随时间增长；万位取整 ±500）"
+    },
+    {
+      "group": "video",
+      "item": "同标题可比对条数",
+      "verdict": "note",
+      "platform_live": 6,
+      "stored_snapshot": 21,
+      "note": "平台前端仅渲染懒加载出的部分卡片，未匹配的标题不代表缺失"
+    },
+    {
+      "group": "quotes",
+      "item": "报价金额与币种",
+      "verdict": "same",
+      "platform_live": "￥['40,000', '40,000']",
+      "stored_snapshot": [
+        "40,000",
+        "40,000"
+      ],
+      "note": "平台显示人民币（￥）；库内只保留原值，页面未标币种"
+    },
+    {
+      "group": "coverage",
+      "item": "平台展示但库内未采集",
+      "verdict": "note",
+      "platform_live": [
+        "预期播放量",
+        "爆文率",
+        "进店成本",
+        "组件点击率",
+        "CPC",
+        "相关视频数"
+      ],
+      "stored_snapshot": "无对应字段",
+      "note": "未采集项，不是显示错误"
+    }
+  ]
+}

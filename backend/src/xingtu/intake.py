@@ -10,7 +10,18 @@ import httpx
 from langgraph.graph import END, START, StateGraph
 from pydantic import ValidationError
 
-from .domain import Capabilities, CollectorError, Filter, FilterPlan, NumberRange, Sort
+from .domain import (
+    AudienceProfileCompound,
+    Capabilities,
+    CollectorError,
+    ConnectionUsersCompound,
+    Filter,
+    FilterPlan,
+    NumberRange,
+    RegionCompound,
+    RegionFilterSelection,
+    Sort,
+)
 from .product_models import (
     FieldError,
     LLMResult,
@@ -155,7 +166,7 @@ class DeepSeekAdapter:
             "text": {
                 "format": {
                     "type": "json_schema",
-                    "name": "filter_plan_v1",
+                    "name": "filter_plan_v2",
                     "schema": FilterPlan.model_json_schema(),
                 }
             },
@@ -223,7 +234,12 @@ class DeepSeekAdapter:
         )
 
 
-def build_expected_plan(form: RequirementForm, capabilities: Capabilities) -> FilterPlan:
+def build_expected_plan(
+    form: RequirementForm,
+    capabilities: Capabilities,
+    *,
+    capability_version: str | None = None,
+) -> FilterPlan:
     """Map values mechanically. The LLM is never allowed to invent this truth."""
     normalized = form.normalized()
     filters: list[Filter] = []
@@ -236,7 +252,7 @@ def build_expected_plan(form: RequirementForm, capabilities: Capabilities) -> Fi
                 source_fields=["keyword"],
             )
         )
-    if normalized.creator_types:
+    if normalized.schema_version == "requirement_form.v1" and normalized.creator_types:
         filters.append(
             Filter(
                 field="creator_type",
@@ -246,12 +262,17 @@ def build_expected_plan(form: RequirementForm, capabilities: Capabilities) -> Fi
             )
         )
     if normalized.followers is not None:
+        follower_source_fields = []
+        if normalized.followers.min is not None:
+            follower_source_fields.append("followers.min")
+        if normalized.followers.max is not None:
+            follower_source_fields.append("followers.max")
         filters.append(
             Filter(
                 field="followers",
                 operator="range",
                 value=NumberRange(min=normalized.followers.min, max=normalized.followers.max),
-                source_fields=["followers.min", "followers.max"],
+                source_fields=follower_source_fields,
                 unit=normalized.followers.unit,
             )
         )
@@ -265,15 +286,40 @@ def build_expected_plan(form: RequirementForm, capabilities: Capabilities) -> Fi
             )
         )
     if normalized.creator_regions:
-        filters.append(
-            Filter(
-                field="region",
-                operator="in",
-                value=normalized.creator_regions,
-                source_fields=["creator_regions"],
+        if normalized.schema_version == "requirement_form.v1":
+            filters.append(
+                Filter(
+                    field="region",
+                    operator="in",
+                    value=[value for value in normalized.creator_regions if isinstance(value, str)],
+                    source_fields=["creator_regions"],
+                )
             )
-        )
-    if normalized.quote is not None:
+        else:
+            selections = [
+                RegionFilterSelection(
+                    province_code=value.province_code,
+                    city=value.city,
+                )
+                for value in normalized.creator_regions
+                if not isinstance(value, str)
+            ]
+            region_source_fields = [
+                f"creator_regions.{index}.province_code" for index in range(len(selections))
+            ] + [
+                f"creator_regions.{index}.city"
+                for index, value in enumerate(selections)
+                if value.city is not None
+            ]
+            filters.append(
+                Filter(
+                    field="region",
+                    operator="compound",
+                    value=RegionCompound(selections=selections),
+                    source_fields=region_source_fields,
+                )
+            )
+    if normalized.schema_version == "requirement_form.v1" and normalized.quote is not None:
         filters.append(
             Filter(
                 field="quote",
@@ -285,11 +331,83 @@ def build_expected_plan(form: RequirementForm, capabilities: Capabilities) -> Fi
                 cooperation_form=normalized.quote.cooperation_form,
             )
         )
+    if normalized.creator_education is not None:
+        filters.append(
+            Filter(
+                field="education",
+                operator="eq",
+                value=normalized.creator_education,
+                source_fields=["creator_education"],
+            )
+        )
+    if normalized.yellow_v_certification is not None:
+        filters.append(
+            Filter(
+                field="yellow_v",
+                operator="eq",
+                value=normalized.yellow_v_certification,
+                source_fields=["yellow_v_certification"],
+            )
+        )
+    if normalized.connection_users is not None:
+        values: dict[str, NumberRange | str | None] = {"kind": "connection_users"}
+        connection_source_fields: list[str] = []
+        for key in ("connected", "aware", "interested", "liked", "followed"):
+            requirement_range = getattr(normalized.connection_users, key)
+            values[key] = (
+                NumberRange(min=requirement_range.min, max=requirement_range.max)
+                if requirement_range
+                else None
+            )
+            if requirement_range:
+                if requirement_range.min is not None:
+                    connection_source_fields.append(f"connection_users.{key}.min")
+                if requirement_range.max is not None:
+                    connection_source_fields.append(f"connection_users.{key}.max")
+        filters.append(
+            Filter(
+                field="connection_users",
+                operator="compound",
+                value=ConnectionUsersCompound.model_validate(values),
+                source_fields=connection_source_fields,
+                unit="ten_thousand_count",
+            )
+        )
+    for field, profile in (
+        ("viewer_profile", normalized.viewer_profile),
+        ("fan_profile", normalized.fan_profile),
+    ):
+        if profile is None:
+            continue
+        profile_data = profile.model_dump(mode="json")
+        profile_data["kind"] = field
+        profile_source_fields: list[str] = []
+        for key in ("age", "gender", "device_brand", "city_level", "crowd"):
+            value = getattr(profile, key)
+            if isinstance(value, list):
+                profile_source_fields.extend(
+                    f"{field}.{key}.{index}" for index in range(len(value))
+                )
+            elif value is not None:
+                profile_source_fields.append(f"{field}.{key}")
+        filters.append(
+            Filter(
+                field=cast(Any, field),
+                operator="compound",
+                value=AudienceProfileCompound.model_validate(profile_data),
+                source_fields=profile_source_fields,
+            )
+        )
     sort_key = normalized.sort_key or (
         capabilities.sorts[0] if len(capabilities.sorts) == 1 else ""
     )
     plan = FilterPlan(
-        capability_version=capabilities.version,
+        schema_version=(
+            "filter_plan.v1"
+            if normalized.schema_version == "requirement_form.v1"
+            else "filter_plan.v2"
+        ),
+        capability_version=capability_version or capabilities.version,
         target_count=normalized.target_count,
         filters=filters,
         sort=Sort(key=sort_key),
@@ -390,8 +508,22 @@ class IntakeGraph:
         self.graph = builder.compile()
 
     def load_context(self, state: P1WorkflowState) -> dict[str, Any]:
+        compatible_legacy = (
+            state.requirement_form.schema_version == "requirement_form.v1"
+            and state.capability_version in self.capabilities.compatible_plan_versions
+            and state.requirement_form.keyword is not None
+            and not any(
+                (
+                    state.requirement_form.creator_types,
+                    state.requirement_form.followers,
+                    state.requirement_form.creator_gender,
+                    state.requirement_form.creator_regions,
+                    state.requirement_form.quote,
+                )
+            )
+        )
         if (
-            state.capability_version != self.capabilities.version
+            (state.capability_version != self.capabilities.version and not compatible_legacy)
             or self.capabilities.status != "VERIFIED"
             or self.capabilities.sample_kind != "live"
         ):
@@ -416,7 +548,11 @@ class IntakeGraph:
             return {}
         assert state.normalized_input
         try:
-            expected = build_expected_plan(state.normalized_input, self.capabilities)
+            expected = build_expected_plan(
+                state.normalized_input,
+                self.capabilities,
+                capability_version=state.capability_version,
+            )
         except CollectorError as exc:
             return {
                 "business_errors": [

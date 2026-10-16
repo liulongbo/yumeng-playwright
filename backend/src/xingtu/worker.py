@@ -18,7 +18,7 @@ from .browser_host import BrowserHost
 from .challenge import ChallengeHandler, ChallengePolicy
 from .contracts import PlatformRegistry
 from .covers import CoverPipeline, build_cover_store
-from .domain import CollectorError, ExecutionContext, TaskStatus
+from .domain import CollectorError, ExecutionContext, TaskRecord, TaskStatus
 from .engine import Engine
 from .evidence import build_evidence_sink
 from .repository import Repository
@@ -26,6 +26,73 @@ from .runtime import UnitConfig, ensure_line
 from .workflow import CollectionWorkflow
 
 logger = logging.getLogger(__name__)
+
+
+def adopt_compatible_legacy_checkpoint(task: TaskRecord, registry: PlatformRegistry) -> bool:
+    """Adopt the current runtime contract for a pristine compatible v1 task.
+
+    This is deliberately narrower than a general checkpoint migration.  It only covers the
+    deployment boundary promised by the v2 capability registry: a queued, Keyword-only v1 plan
+    which has never started browser collection.  Once any collection progress exists, changing
+    the runtime versions would make resume semantics ambiguous and must remain fail closed.
+    """
+
+    capabilities = registry.capabilities
+    compatible = (
+        task.state == TaskStatus.QUEUED
+        and task.plan.schema_version == "filter_plan.v1"
+        and task.plan.capability_version in capabilities.compatible_plan_versions
+        and {item.field for item in task.plan.filters} == {"keyword"}
+    )
+    checkpoint = task.checkpoint
+    pristine = (
+        checkpoint.search_generation == 0
+        and checkpoint.cursor is None
+        and not checkpoint.visited_cursors
+        and not checkpoint.processed_operations
+        and not checkpoint.exhausted
+        and not checkpoint.exhaustion_evidence_refs
+        and checkpoint.search_stop_reason is None
+        and not checkpoint.candidates
+        and not checkpoint.scanned_ids
+        and checkpoint.pending_page is None
+        and not checkpoint.diagnostics
+        and checkpoint.no_progress_pages == 0
+        and checkpoint.active_seconds == 0
+        and checkpoint.observed_requests == 0
+        and checkpoint.observed_responses == 0
+        and checkpoint.navigation_count == 0
+        and checkpoint.duplicate_request_count == 0
+        and checkpoint.featured_load_count == 0
+        and checkpoint.cover_request_count == 0
+        and not checkpoint.module_seconds
+        and not checkpoint.failure_counts
+        and not checkpoint.rescan_reasons
+        and checkpoint.challenge_count == 0
+        and checkpoint.challenge_recovery_count == 0
+        and not checkpoint.challenge_recoveries_by_creator
+        and checkpoint.challenge_first_detected_at is None
+        and checkpoint.challenge_last_detected_at is None
+        and checkpoint.challenge_wait_started_at is None
+        and checkpoint.challenge_last_recovered_at is None
+        and checkpoint.challenge_current_creator is None
+        and checkpoint.challenge_type is None
+        and checkpoint.challenge_state is None
+    )
+    if not compatible or not pristine:
+        return False
+
+    checkpoint.adapter_version = registry.adapter_version
+    checkpoint.contract_version = registry.contract_version
+    checkpoint.profile_module_keys = [item.key for item in registry.modules]
+    checkpoint.profile_checkpoint_versions = {
+        item.key: item.checkpoint_version for item in registry.modules
+    }
+    checkpoint.featured_collection_types = [item.key.value for item in registry.featured]
+    checkpoint.featured_checkpoint_versions = {
+        item.key.value: item.checkpoint_version for item in registry.featured
+    }
+    return True
 
 
 class Activities:
@@ -60,6 +127,16 @@ class Activities:
         registry = PlatformRegistry.model_validate_json(self.config.registry_path.read_text())
         try:
             registry.require_enabled(live=True)
+            registry.capabilities.validate_plan(task.plan, live=True)
+            versions_changed = (
+                task.checkpoint.adapter_version != registry.adapter_version
+                or task.checkpoint.contract_version != registry.contract_version
+            )
+            if versions_changed:
+                with self.repo.edit(root) as (current, _):
+                    if not adopt_compatible_legacy_checkpoint(current, registry):
+                        raise CollectorError("PLATFORM_PAGE_CHANGED", "VERSION_MISMATCH")
+                task = self.repo.get(root)
             required_scopes = {"session", "search", "profile_identity"}
             required_scopes.update(f"profile_module:{item.key}" for item in registry.modules)
             required_scopes.update(f"featured:{item.key.value}" for item in registry.featured)
@@ -227,6 +304,7 @@ class Activities:
                                 self.config.expected_account_id,
                                 guard,
                                 on_session_health=host.observe_session,
+                                manually_attested_account_id=self.config.manually_attested_account_id,
                             )
                             adapter.creator_interval_seconds = (
                                 self.challenge_policy.creator_interval_seconds
@@ -305,6 +383,18 @@ class Activities:
                                     raise
                                 return engine.record_error(exc)
                             except BrowserError as exc:
+                                # A transport failure used to collapse into a bare
+                                # RESOURCE_UNAVAILABLE:BROWSER_TRANSPORT, leaving nothing in the
+                                # log.  Diagnosing the 2026-10-13 zero-candidate incident required
+                                # temporarily patching this line, because the decisive detail (the
+                                # page had been navigated to `https://www.xingtu.cn/?redirect_uri=...`)
+                                # existed only inside this exception.  Keep it.
+                                logger.warning(
+                                    "browser transport failure attempt=%s %s: %s",
+                                    activity.info().attempt,
+                                    type(exc).__name__,
+                                    exc,
+                                )
                                 if activity.info().attempt < 4:
                                     raise CollectorError(
                                         "RESOURCE_UNAVAILABLE", "BROWSER_TRANSPORT"

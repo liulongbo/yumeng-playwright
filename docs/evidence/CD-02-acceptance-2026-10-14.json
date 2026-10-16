@@ -1,0 +1,198 @@
+{
+  "checks": [
+    {
+      "check": "CD02-MCP",
+      "passed": true,
+      "detail": "Playwright MCP 1.62.0-alpha-2026-06-29 over stdio, 23 tools"
+    },
+    {
+      "check": "CD02-TASK-hero",
+      "passed": true,
+      "detail": "name='甄选聊车'"
+    },
+    {
+      "check": "CD02-TASK-scope",
+      "passed": true,
+      "detail": "scope='本任务采集快照'"
+    },
+    {
+      "check": "CD02-TASK-rail-kpis",
+      "passed": true,
+      "detail": "kpis=['月连接用户', '月深度用户', '粉丝', '月涨粉率']"
+    },
+    {
+      "check": "CD02-TASK-rail-kpi-values",
+      "passed": true,
+      "detail": "kpi values=['2,344.0万', '≈1,158.0万', '135.2万', '1.97%'] expected=['2,344.0万', '≈1,158.0万', '135.2万', '1.97%'] (CD-03 万/k display; ≈ marks the platform-approximate monthly figure; 1.97% is the registered ratio)"
+    },
+    {
+      "check": "CD02-TASK-chapters",
+      "passed": true,
+      "detail": "tabs=['达人概览', '商业能力', '创作能力', '履约能力', '连接用户', '报价与历史']"
+    },
+    {
+      "check": "CD02-TASK-catalog-labels",
+      "passed": true,
+      "detail": "basic labels=['星图ID', '性别 · 平台编码 2（2026-10-14 线上确证）', '城市', '省份', 'MCN公司', '达人类型（平台原值）', '作者类型（平台原值）', '行业标签（平台结构）', '内容风格标签（平台原值）', '抖音 SecUID', '抖音号', '播放稳定性', '作品传播比较指标']"
+    },
+    {
+      "check": "CD02-TASK-no-raw-json",
+      "passed": true,
+      "detail": "0 pre, leak=False"
+    },
+    {
+      "check": "CD02-TASK-quotes",
+      "passed": true,
+      "detail": "报价明细 in 「报价与历史」: rows=2 first='植入视频'"
+    },
+    {
+      "check": "CD02-TASK-featured-metrics",
+      "passed": true,
+      "detail": "featured cards=4 stats=['播放量 194.4w', '点赞量 2.8w', '评论量 1.2k'] title='汽车玻璃水怎么选 给大家总结4款不同配方的玻璃水品牌#汽车 #汽车知识 #汽车玻璃水 #汽车保养 #生物基玻璃水'"
+    },
+    {
+      "check": "CD02-TASK-rate-platform-scale",
+      "passed": true,
+      "detail": "互动率 row={'label': '互动率', 'value': '1.12%', 'overtake': '优于 74.9% 同类型达人', 'state': '平台原值 112 / 超越原值 7493'} (库内原值 112/7493 → 平台 1.12% / 优于 74.9%，原值仍保留在瓦片说明里)"
+    },
+    {
+      "check": "CD02-TASK-videos",
+      "passed": true,
+      "detail": "rows=15 bars=15"
+    },
+    {
+      "check": "CD02-TASK-video-dates",
+      "passed": true,
+      "detail": "first 发布时间='2026-10-12'"
+    },
+    {
+      "check": "CD02-TASK-creation-panels",
+      "passed": true,
+      "detail": "panels=['最新视频表现', '视频内容类型分布', '评论热词', '视频表现口径对照']"
+    },
+    {
+      "check": "CD02-TASK-fulfillment",
+      "passed": true,
+      "detail": "items=4 labels=['行业 1916', '行业 1916', '合作行业 汽车', '一级分类 汽车厂商']"
+    },
+    {
+      "check": "CD02-TASK-layers",
+      "passed": true,
+      "detail": "layer rows=5 (4 stages + total)"
+    },
+    {
+      "check": "CD02-TASK-layer-names",
+      "passed": true,
+      "detail": "平台分层名称 了解/兴趣/喜欢/追随 + 合计=连接用户数（与线上页面一致）"
+    },
+    {
+      "check": "CD02-TASK-layer-partition",
+      "passed": true,
+      "detail": "stack='50.6%\\n28.3%\\n21.0%\\n0.0%\\n了解\\n11,860,342\\n50.60%\\n同行业中位 466,345\\n兴趣\\n6,643,390\\n28.34%\\n同行业中位 96,578\\n喜欢\\n4,930,200\\n21.03%\\n同行业中位 20,201\\n追随\\n5,922\\n0.03%\\n同行业中位 0\\n连接用户数（合计）\\n23,'"
+    },
+    {
+      "check": "CD02-TASK-no-funnel",
+      "passed": true,
+      "detail": "stack mentions 漏斗=False"
+    },
+    {
+      "check": "CD02-TASK-trends",
+      "passed": true,
+      "detail": "trend panels=3 titles=['连接用户分层与同行业对比', '连接用户规模与粉丝增长', '近 30 日粉丝总数', '近 30 日粉丝日增量', '近 30 日连接用户（平台窗口口径）', '连接用户画像']"
+    },
+    {
+      "check": "CD02-TASK-trend-scope",
+      "passed": true,
+      "detail": "trend captions=['平台每日粉丝总数 · 末值 1,353,611（2026-10-13）', '平台每日粉丝净增 · 区间内净增合计 27,548', '平台窗口口径（末点=月连接用户数） · 末值 23,439,854（2026-10-12）']"
+    },
+    {
+      "check": "CD02-TASK-audience-tabs",
+      "passed": true,
+      "detail": "audience tabs=8"
+    },
+    {
+      "check": "CD02-TASK-provenance-81",
+      "passed": true,
+      "detail": "SKIPPED (not verified here): the 数据来源 entry was removed from the rail by CD-03 需求 4.10; see CD03-UI11-drawer-81 for the retained-drawer check"
+    },
+    {
+      "check": "CD02-TASK-provenance-flag",
+      "passed": true,
+      "detail": "SKIPPED (not verified here): see CD03-UI11-drawer-provenance"
+    },
+    {
+      "check": "CD02-LIB-scope",
+      "passed": true,
+      "detail": "scope='当前达人资料'"
+    },
+    {
+      "check": "CD02-LIB-chapters",
+      "passed": true,
+      "detail": "tabs=['达人概览', '商业能力', '创作能力', '履约能力', '连接用户', '报价与历史']"
+    },
+    {
+      "check": "CD02-LIB-history-index",
+      "passed": true,
+      "detail": "header='5/7 次已入索引'"
+    },
+    {
+      "check": "CD02-LIB-history-gap",
+      "passed": true,
+      "detail": "gap='LIB-01 历史索引尚未补齐：还有 2 次采集没有索引行，因此本时间线不包含它们。缺口不会被补齐为空点，需单独授权回填。'"
+    },
+    {
+      "check": "CD02-LIB-quotes",
+      "passed": true,
+      "detail": "quote rows=8"
+    },
+    {
+      "check": "CD02-MOBILE-no-overflow",
+      "passed": true,
+      "detail": "overflow=False layout={'viewport': 390, 'railWidth': 358, 'railColumns': 2, 'tabsScrollable': True}"
+    },
+    {
+      "check": "CD02-MOBILE-kpi-2col",
+      "passed": true,
+      "detail": "kpi columns=2"
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "CD02-task-overview",
+      "path": "docs/evidence/assets/cd02/CD02-task-overview.png",
+      "note": null
+    },
+    {
+      "name": "CD02-task-commercial",
+      "path": "docs/evidence/assets/cd02/CD02-task-commercial.png",
+      "note": null
+    },
+    {
+      "name": "CD02-task-creation",
+      "path": "docs/evidence/assets/cd02/CD02-task-creation.png",
+      "note": null
+    },
+    {
+      "name": "CD02-task-fulfillment",
+      "path": "docs/evidence/assets/cd02/CD02-task-fulfillment.png",
+      "note": null
+    },
+    {
+      "name": "CD02-task-audience",
+      "path": "docs/evidence/assets/cd02/CD02-task-audience.png",
+      "note": null
+    },
+    {
+      "name": "CD02-library-history",
+      "path": "docs/evidence/assets/cd02/CD02-library-history.png",
+      "note": null
+    },
+    {
+      "name": "CD02-task-mobile-390",
+      "path": "docs/evidence/assets/cd02/CD02-task-mobile-390.png",
+      "note": null
+    }
+  ],
+  "failed": 0,
+  "note": "CD02-TASK-provenance-* are recorded as SKIPPED: CD-03 需求 4.10 removed the rail entry."
+}

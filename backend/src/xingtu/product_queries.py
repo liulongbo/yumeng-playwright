@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import json
 from datetime import datetime
@@ -13,10 +14,17 @@ from psycopg.types.json import Jsonb
 from .domain import CollectorError, FilterPlan, TaskRecord, TaskStatus, uid, utcnow
 from .product_models import (
     ChallengeSummary,
+    CreatorLibraryDetail,
+    CreatorLibraryHistory,
+    CreatorLibraryHistoryPoint,
+    CreatorLibraryPage,
+    CreatorLibraryQuote,
+    CreatorLibrarySummary,
     CreatorPage,
     CreatorSummary,
     FieldError,
     IntakeProgress,
+    LibraryMetric,
     P1WorkflowState,
     RequirementForm,
     TaskCounts,
@@ -24,16 +32,12 @@ from .product_models import (
     TaskPage,
     TaskSummary,
 )
-from .repository import Repository
+from .repository import TERMINAL_COMPLETED_AT_CLAUSE, TERMINAL_TASK_STATES, Repository
 from .worker_health import INTAKE_QUEUE, WorkerHealthMonitor
 
-TERMINAL_STATES = {
-    TaskStatus.CANCELLED,
-    TaskStatus.COMPLETED,
-    TaskStatus.PARTIAL_COMPLETED,
-    TaskStatus.FAILED_VALIDATION,
-    TaskStatus.FAILED,
-}
+# The same terminal set the task write path uses to stamp `completed_at`; kept as the query layer's
+# public name because the API and result-action rules already refer to it.
+TERMINAL_STATES = set(TERMINAL_TASK_STATES)
 
 INTAKE_STAGE_STATES = {TaskStatus.RECEIVED, TaskStatus.PARSING}
 # A healthy dispatch loop flips `sent` within ~2 s and retries every 2 s, so an unsent row that has
@@ -394,6 +398,7 @@ class ProductQueries:
             version=int(row["version"]),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            completed_at=row.get("completed_at"),
             created_by=str(row["created_by"]) if row.get("created_by") else None,
             created_by_name=row.get("created_by_name"),
             source="product" if row.get("requirement_payload") else "internal_acceptance",
@@ -462,8 +467,10 @@ class ProductQueries:
                     payload = {**payload, "failure_reason": "TASK_CANCELLED"}
                     conn.execute(
                         """UPDATE root_tasks SET state='CANCELLED',version=version+1,payload=%s,
-                        updated_at=now() WHERE root_task_id=%s""",
-                        (Jsonb(payload), root_task_id),
+                        updated_at=now()"""
+                        + TERMINAL_COMPLETED_AT_CLAUSE
+                        + """ WHERE root_task_id=%s""",
+                        (Jsonb(payload), True, root_task_id),
                     )
                 elif action == "retry" and status == TaskStatus.FAILED:
                     checkpoint = conn.execute(
@@ -578,12 +585,14 @@ class ProductQueries:
                 task.version += 1
                 task.checkpoint.revision += 1
                 conn.execute(
-                    """UPDATE root_tasks SET state=%s,version=%s,payload=%s,updated_at=now()
-                    WHERE root_task_id=%s""",
+                    """UPDATE root_tasks SET state=%s,version=%s,payload=%s,updated_at=now()"""
+                    + TERMINAL_COMPLETED_AT_CLAUSE
+                    + """ WHERE root_task_id=%s""",
                     (
                         task.state,
                         task.version,
                         Jsonb(task.model_dump(mode="json", exclude={"checkpoint"})),
+                        task.state in TERMINAL_STATES,
                         root_task_id,
                     ),
                 )
@@ -746,6 +755,509 @@ class ProductQueries:
             observed_at=observed_at,
             payload=payload,
         )
+
+    @staticmethod
+    def _creator_library_scope(filters: dict[str, Any]) -> str:
+        return hashlib.sha256(
+            json.dumps(filters, sort_keys=True, default=str, separators=(",", ":")).encode()
+        ).hexdigest()[:16]
+
+    @staticmethod
+    def _library_cursor(cursor: str, scope: str) -> int:
+        try:
+            raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+            data = json.loads(raw)
+            if data["scope"] != scope or not isinstance(data["offset"], int):
+                raise ValueError("library cursor scope mismatch")
+            return data["offset"]
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise CollectorError("INVALID_FORM", "INVALID_CURSOR") from exc
+
+    @staticmethod
+    def _metric(
+        row: dict[str, Any],
+        *,
+        column: str,
+        source_key: str,
+        raw_column: str | None = None,
+        approximate_column: str | None = None,
+    ) -> LibraryMetric:
+        sources = row.get("field_sources") or {}
+        source = (
+            sources.get(source_key)
+            or sources.get(
+                {
+                    "followers_count": "basic.followers",
+                    "monthly_deep_users_count": "basic.monthly_deep_users",
+                    "monthly_connected_users_count": "fans.monthly_connected_users",
+                    "monthly_follower_growth_rate_raw": "basic.monthly_follower_growth_rate",
+                    "interaction_rate_value_raw": "spread.interaction_rate",
+                    "completion_rate_value_raw": "spread.completion_rate",
+                    "expected_cpm_21_60_raw": "spread.expected_cpm",
+                    "expected_cpm_60_plus_raw": "spread.expected_cpm",
+                    "expected_cpe_21_60_raw": "spread.expected_cpe",
+                    "expected_cpe_60_plus_raw": "spread.expected_cpe",
+                }.get(source_key, "")
+            )
+            or {}
+        )
+        value = row.get(column)
+        raw = row.get(raw_column) if raw_column else None
+        if raw is None and value is not None:
+            raw = str(value)
+        return LibraryMetric(
+            value=value,
+            raw_value=raw,
+            unit=source.get("unit"),
+            is_approximate=bool(row.get(approximate_column)) if approximate_column else False,
+            status=source.get("status") or ("COLLECTED" if value is not None else "NOT_AVAILABLE"),
+            observed_at=source.get("observed_at"),
+        )
+
+    @classmethod
+    def _creator_library_summary(cls, row: dict[str, Any]) -> CreatorLibrarySummary:
+        metric = cls._metric
+        return CreatorLibrarySummary(
+            creator_id=str(row["creator_id"]),
+            platform_creator_id=row["platform_creator_id"],
+            display_name=row.get("display_name"),
+            avatar_uri=row.get("avatar_uri"),
+            creator_type_label=row.get("creator_type_label"),
+            province=row.get("province"),
+            city=row.get("city"),
+            industry_labels=row.get("industry_labels") or [],
+            followers=metric(
+                row,
+                column="followers_count",
+                source_key="followers_count",
+                raw_column="followers_raw",
+                approximate_column="followers_is_approximate",
+            ),
+            monthly_deep_users=metric(
+                row,
+                column="monthly_deep_users_count",
+                source_key="monthly_deep_users_count",
+                raw_column="monthly_deep_users_raw",
+                approximate_column="monthly_deep_users_is_approximate",
+            ),
+            monthly_connected_users=metric(
+                row,
+                column="monthly_connected_users_count",
+                source_key="monthly_connected_users_count",
+            ),
+            monthly_follower_growth_rate=metric(
+                row,
+                column="monthly_follower_growth_rate_raw",
+                source_key="monthly_follower_growth_rate_raw",
+            ),
+            interaction_rate=metric(
+                row, column="interaction_rate_value_raw", source_key="interaction_rate_value_raw"
+            ),
+            completion_rate=metric(
+                row, column="completion_rate_value_raw", source_key="completion_rate_value_raw"
+            ),
+            expected_cpm_21_60=metric(
+                row, column="expected_cpm_21_60_raw", source_key="expected_cpm_21_60_raw"
+            ),
+            expected_cpm_60_plus=metric(
+                row, column="expected_cpm_60_plus_raw", source_key="expected_cpm_60_plus_raw"
+            ),
+            expected_cpe_21_60=metric(
+                row, column="expected_cpe_21_60_raw", source_key="expected_cpe_21_60_raw"
+            ),
+            expected_cpe_60_plus=metric(
+                row, column="expected_cpe_60_plus_raw", source_key="expected_cpe_60_plus_raw"
+            ),
+            profile_complete=bool(row["profile_complete"]),
+            pipeline_complete=bool(row["pipeline_complete"]),
+            data_updated_at=row.get("data_updated_at"),
+        )
+
+    def list_creator_library(
+        self,
+        *,
+        industry: str | None = None,
+        creator_type: str | None = None,
+        province: str | None = None,
+        city: str | None = None,
+        followers_min: float | None = None,
+        followers_max: float | None = None,
+        monthly_growth_min: float | None = None,
+        monthly_growth_max: float | None = None,
+        interaction_min: float | None = None,
+        interaction_max: float | None = None,
+        completion_min: float | None = None,
+        completion_max: float | None = None,
+        expected_cpm_min: float | None = None,
+        expected_cpm_max: float | None = None,
+        expected_cpe_min: float | None = None,
+        expected_cpe_max: float | None = None,
+        cooperation_form: str | None = None,
+        complete_only: bool = False,
+        sort: str = "updated_at",
+        direction: Literal["asc", "desc"] = "desc",
+        cursor: str | None = None,
+        limit: int = 20,
+    ) -> CreatorLibraryPage:
+        if not 1 <= limit <= 100:
+            raise CollectorError("INVALID_FORM", "INVALID_PAGE_SIZE")
+        sort_columns = {
+            "updated_at": "data_updated_at",
+            "followers": "followers_count",
+            "monthly_growth": "monthly_follower_growth_rate_raw",
+            "interaction": "interaction_rate_value_raw",
+            "completion": "completion_rate_value_raw",
+            "expected_cpm": "expected_cpm_21_60_raw",
+            "expected_cpe": "expected_cpe_21_60_raw",
+        }
+        if sort not in sort_columns:
+            raise CollectorError("INVALID_FORM", "INVALID_CREATOR_LIBRARY_SORT")
+        filters = {
+            "industry": industry,
+            "creator_type": creator_type,
+            "province": province,
+            "city": city,
+            "followers_min": followers_min,
+            "followers_max": followers_max,
+            "monthly_growth_min": monthly_growth_min,
+            "monthly_growth_max": monthly_growth_max,
+            "interaction_min": interaction_min,
+            "interaction_max": interaction_max,
+            "completion_min": completion_min,
+            "completion_max": completion_max,
+            "expected_cpm_min": expected_cpm_min,
+            "expected_cpm_max": expected_cpm_max,
+            "expected_cpe_min": expected_cpe_min,
+            "expected_cpe_max": expected_cpe_max,
+            "cooperation_form": cooperation_form,
+            "complete_only": complete_only,
+            "sort": sort,
+            "direction": direction,
+        }
+        scope = self._creator_library_scope(filters)
+        offset = self._library_cursor(cursor, scope) if cursor else 0
+        clauses = [sql.SQL("true")]
+        params: list[Any] = []
+        simple = {
+            "creator_type": "c.creator_type_label",
+            "province": "c.province",
+            "city": "c.city",
+        }
+        for key, column in simple.items():
+            if filters[key]:
+                clauses.append(sql.SQL(column + "=%s"))
+                params.append(filters[key])
+        if industry:
+            clauses.append(sql.SQL("c.industry_labels ? %s"))
+            params.append(industry)
+        if complete_only:
+            clauses.append(sql.SQL("c.profile_complete AND c.pipeline_complete"))
+        numeric_ranges = (
+            ("followers_count", followers_min, followers_max),
+            ("monthly_follower_growth_rate_raw", monthly_growth_min, monthly_growth_max),
+            ("interaction_rate_value_raw", interaction_min, interaction_max),
+            ("completion_rate_value_raw", completion_min, completion_max),
+            ("expected_cpm_21_60_raw", expected_cpm_min, expected_cpm_max),
+            ("expected_cpe_21_60_raw", expected_cpe_min, expected_cpe_max),
+        )
+        for column, minimum, maximum in numeric_ranges:
+            if minimum is not None:
+                clauses.append(sql.SQL("c." + column + ">=%s"))
+                params.append(minimum)
+            if maximum is not None:
+                clauses.append(sql.SQL("c." + column + "<=%s"))
+                params.append(maximum)
+        if cooperation_form:
+            clauses.append(
+                sql.SQL("""EXISTS(SELECT 1 FROM douyin_xingtu_creator_quote_observations q
+                WHERE q.creator_id=c.creator_id AND q.cooperation_form=%s)""")
+            )
+            params.append(cooperation_form)
+        order_column = sql.Identifier(sort_columns[sort])
+        order_direction = sql.SQL("ASC") if direction == "asc" else sql.SQL("DESC")
+        query = (
+            sql.SQL("SELECT c.* FROM douyin_xingtu_creator_current c WHERE ")
+            + sql.SQL(" AND ").join(clauses)
+            + sql.SQL(" ORDER BY ")
+            + order_column
+            + sql.SQL(" ")
+            + order_direction
+            + sql.SQL(" NULLS LAST,c.creator_id ASC LIMIT %s OFFSET %s")
+        )
+        params.extend([limit + 1, offset])
+        with self.repository.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        visible = rows[:limit]
+        next_cursor = None
+        if len(rows) > limit:
+            raw = json.dumps(
+                {"scope": scope, "offset": offset + limit}, separators=(",", ":")
+            ).encode()
+            next_cursor = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+        return CreatorLibraryPage(
+            items=[self._creator_library_summary(row) for row in visible], next_cursor=next_cursor
+        )
+
+    def get_creator_library(self, creator_id: str) -> CreatorLibraryDetail:
+        creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
+        with self.repository.connect() as conn:
+            row = conn.execute(
+                """SELECT c.*,si.module_statuses,pc.projection,s.payload AS latest_payload
+                FROM douyin_xingtu_creator_current c
+                JOIN platform_creators pc ON pc.creator_id=c.creator_id
+                LEFT JOIN douyin_xingtu_creator_snapshot_index si
+                  ON si.snapshot_id=c.latest_snapshot_id
+                LEFT JOIN creator_snapshots s ON s.snapshot_id=c.latest_snapshot_id
+                WHERE c.creator_id=%s""",
+                (creator_id,),
+            ).fetchone()
+        if not row:
+            raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+        return CreatorLibraryDetail(
+            **self._creator_library_summary(row).model_dump(),
+            latest_snapshot_id=str(row["latest_snapshot_id"])
+            if row["latest_snapshot_id"]
+            else None,
+            mcn_name=row.get("mcn_name"),
+            introduction=row.get("introduction"),
+            gender=self._gender_value(row.get("projection") or {}),
+            content_theme_labels=row.get("content_theme_labels") or [],
+            collected_field_count=int(row["collected_field_count"]),
+            failed_field_count=int(row["failed_field_count"]),
+            field_sources=row.get("field_sources") or {},
+            module_statuses=row.get("module_statuses") or {},
+            profile_payload=self._current_profile_payload(
+                row.get("latest_payload") or {}, row.get("projection") or {}
+            ),
+        )
+
+    @staticmethod
+    def _gender_value(projection: dict[str, Any]) -> str | None:
+        """`basic.gender` (the platform's own code) from the current projection.
+
+        Returns the code unchanged: the backend never assigns a meaning to it.  An empty platform
+        answer stays `None` (an explicit "no data"), never an empty string or a guessed label.
+        """
+        field = projection.get("basic.gender")
+        if not isinstance(field, dict) or field.get("status") != "COLLECTED":
+            return None
+        value = field.get("value")
+        if not isinstance(value, str) or not value.strip():
+            return None
+        return value.strip()
+
+    @staticmethod
+    def _current_profile_payload(
+        latest_payload: dict[str, Any], projection: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Overlay each current successful FieldObservation without changing snapshot history.
+
+        A current profile may legitimately consist of fields observed at different times.  The
+        envelopes carry those per-field observation times; the latest snapshot supplies module
+        state and non-success statuses for fields without a current projection value.
+        """
+        profile = copy.deepcopy(latest_payload)
+        modules = profile.get("modules")
+        if not isinstance(modules, dict):
+            return profile
+        for module_key, module in modules.items():
+            if not isinstance(module, dict):
+                continue
+            fields = module.get("fields")
+            if not isinstance(fields, list):
+                continue
+            for index, field in enumerate(fields):
+                if not isinstance(field, dict) or not isinstance(field.get("field_key"), str):
+                    continue
+                current = projection.get(f"{module_key}.{field['field_key']}")
+                if isinstance(current, dict) and current.get("status") == "COLLECTED":
+                    fields[index] = copy.deepcopy(current)
+        return profile
+
+    def creator_library_contents(
+        self,
+        creator_id: str,
+        collection_type: Literal["excellent_reach", "excellent_seeding"],
+        *,
+        cursor: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """The 精选集合 of a creator's **latest** snapshot, for the library entry (CD-04).
+
+        The task entry already reads its own snapshot through `contents`.  The library entry owns no
+        task id, so this read-only query resolves the creator's latest snapshot and returns the same
+        card shape — including the stored cover object id and the platform share link — from the
+        same `featured_collections`/`featured_cards` rows.  Nothing is written and no task scope
+        leaks: the snapshot is selected by `douyin_xingtu_creator_current.latest_snapshot_id`.
+
+        Cards are streamed from the card payload persisted at collection time, so a stale or expired
+        platform CDN URL is never used as the cover source.
+        """
+        if not 1 <= limit <= 100:
+            raise CollectorError("INVALID_FORM", "INVALID_PAGE_SIZE")
+        creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
+        after = -1
+        if cursor:
+            try:
+                data = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
+                expected_scope = {"creator_id": creator_id, "collection_type": collection_type}
+                if any(data.get(key) != value for key, value in expected_scope.items()):
+                    raise ValueError("content cursor scope mismatch")
+                after = int(data["position"])
+            except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+                raise CollectorError("INVALID_FORM", "INVALID_CURSOR") from exc
+        with self.repository.connect() as conn:
+            creator = conn.execute(
+                "SELECT latest_snapshot_id FROM douyin_xingtu_creator_current WHERE creator_id=%s",
+                (creator_id,),
+            ).fetchone()
+            if not creator:
+                raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+            snapshot_id = creator["latest_snapshot_id"]
+            observation = conn.execute(
+                """SELECT f.collection_observation_id,f.status,f.observed_at,f.coverage_gaps
+                FROM snapshot_collections sc JOIN featured_collections f
+                ON f.collection_observation_id=sc.collection_observation_id
+                WHERE sc.creator_snapshot_id=%s AND sc.collection_type=%s""",
+                (snapshot_id, collection_type),
+            ).fetchone()
+            if not observation:
+                return {
+                    "view_kind": "published",
+                    "snapshot_id": str(snapshot_id),
+                    "collection_type": collection_type,
+                    "status": "NOT_ATTEMPTED",
+                    "cards": [],
+                    "next_cursor": None,
+                }
+            cards = conn.execute(
+                """SELECT card_id,position,cover_status,truncated_fields,payload
+                FROM featured_cards WHERE collection_observation_id=%s AND position>%s
+                ORDER BY position LIMIT %s""",
+                (observation["collection_observation_id"], after, limit + 1),
+            ).fetchall()
+        visible = cards[:limit]
+        return {
+            "view_kind": "published",
+            "snapshot_id": str(snapshot_id),
+            "collection_type": collection_type,
+            "status": observation["status"],
+            "observed_at": observation["observed_at"].isoformat(),
+            "coverage_gaps": observation["coverage_gaps"],
+            "cards": [dict(card) for card in visible],
+            "next_cursor": self._library_content_cursor(
+                creator_id, collection_type, int(visible[-1]["position"])
+            )
+            if len(cards) > limit and visible
+            else None,
+        }
+
+    @staticmethod
+    def _library_content_cursor(creator_id: str, collection_type: str, position: int) -> str:
+        raw = json.dumps(
+            {"creator_id": creator_id, "collection_type": collection_type, "position": position},
+            separators=(",", ":"),
+        ).encode()
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    def creator_library_cover_reference(
+        self, creator_id: str, object_id: str
+    ) -> dict[str, Any] | None:
+        """Authenticated cover access for the library entry: the object must belong to this creator.
+
+        Same shape as `Repository.cover_reference`, but scoped to a creator instead of a root task:
+        `media_objects` → `featured_cards` → `featured_collections.creator_id`.  Returns `None` for
+        any mismatch, so a caller cannot reach another creator's cover by guessing an object id.
+        """
+        creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
+        with self.repository.connect() as conn:
+            return conn.execute(
+                """SELECT m.object_id,m.checksum,m.kind,m.content_type,m.byte_size,
+                c.collection_observation_id,c.card_id
+                FROM media_objects m
+                JOIN featured_cards c ON c.cover_object_id=m.object_id
+                JOIN featured_collections f
+                ON f.collection_observation_id=c.collection_observation_id
+                WHERE m.object_id=%s AND m.kind='cover' AND f.creator_id=%s LIMIT 1""",
+                (object_id, creator_id),
+            ).fetchone()
+
+    def creator_library_history(self, creator_id: str) -> CreatorLibraryHistory:
+        creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
+        with self.repository.connect() as conn:
+            rows = conn.execute(
+                """SELECT * FROM douyin_xingtu_creator_snapshot_index WHERE creator_id=%s
+                ORDER BY captured_at DESC,snapshot_id DESC""",
+                (creator_id,),
+            ).fetchall()
+            # HISTORICAL_BACKFILL_PENDING: snapshots written before the library read model existed
+            # have no index row yet (measured: 58 indexed of 78 stored).  The page reports the gap
+            # rather than showing an incomplete timeline as complete.
+            stored = conn.execute(
+                "SELECT count(*) AS total FROM creator_snapshots WHERE creator_id=%s",
+                (creator_id,),
+            ).fetchone()
+            total_snapshots = int(stored["total"]) if stored else 0
+        if not rows:
+            raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+        metric_columns = (
+            "followers_count",
+            "monthly_deep_users_count",
+            "monthly_connected_users_count",
+            "monthly_follower_growth_rate_raw",
+            "interaction_rate_value_raw",
+            "completion_rate_value_raw",
+            "expected_cpm_21_60_raw",
+            "expected_cpm_60_plus_raw",
+            "expected_cpe_21_60_raw",
+            "expected_cpe_60_plus_raw",
+        )
+        return CreatorLibraryHistory(
+            items=[
+                CreatorLibraryHistoryPoint(
+                    snapshot_id=str(row["snapshot_id"]),
+                    captured_at=row["captured_at"],
+                    profile_complete=bool(row["profile_complete"]),
+                    pipeline_complete=bool(row["pipeline_complete"]),
+                    module_statuses=row["module_statuses"],
+                    metrics={key: row[key] for key in metric_columns},
+                )
+                for row in rows
+            ],
+            indexed_snapshots=len(rows),
+            total_snapshots=total_snapshots,
+        )
+
+    def creator_library_quotes(
+        self, creator_id: str, cooperation_form: str | None = None
+    ) -> list[CreatorLibraryQuote]:
+        creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
+        query = "SELECT * FROM douyin_xingtu_creator_quote_observations WHERE creator_id=%s"
+        params: list[Any] = [creator_id]
+        if cooperation_form:
+            query += " AND cooperation_form=%s"
+            params.append(cooperation_form)
+        query += " ORDER BY observed_at DESC,position ASC"
+        with self.repository.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            exists = conn.execute(
+                "SELECT 1 FROM douyin_xingtu_creator_current WHERE creator_id=%s", (creator_id,)
+            ).fetchone()
+        if not exists:
+            raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+        return [
+            CreatorLibraryQuote(
+                snapshot_id=str(row["snapshot_id"]),
+                position=int(row["position"]),
+                cooperation_form=row["cooperation_form"],
+                settlement_description=row["settlement_description"],
+                price_raw=row["price_raw"],
+                origin_price_raw=row["origin_price_raw"],
+                observed_at=row["observed_at"],
+                offer_raw=row["offer_raw"],
+            )
+            for row in rows
+        ]
 
     def contents(
         self,

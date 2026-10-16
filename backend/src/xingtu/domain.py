@@ -187,10 +187,72 @@ class NumberRange(Model):
         return self
 
 
+class RegionFilterSelection(Model):
+    province_code: str = Field(min_length=1)
+    city: str | None = None
+
+
+class RegionCompound(Model):
+    kind: Literal["region"] = "region"
+    selections: list[RegionFilterSelection] = Field(min_length=1)
+
+
+class ConnectionUsersCompound(Model):
+    kind: Literal["connection_users"] = "connection_users"
+    connected: NumberRange | None = None
+    aware: NumberRange | None = None
+    interested: NumberRange | None = None
+    liked: NumberRange | None = None
+    followed: NumberRange | None = None
+
+    @model_validator(mode="after")
+    def meaningful(self) -> Self:
+        if not any((self.connected, self.aware, self.interested, self.liked, self.followed)):
+            raise ValueError("connection_users compound is empty")
+        return self
+
+
+class AudienceProfileCompound(Model):
+    kind: Literal["viewer_profile", "fan_profile"]
+    age: list[str] = Field(default_factory=list)
+    gender: str | None = None
+    device_brand: list[str] = Field(default_factory=list)
+    city_level: list[str] = Field(default_factory=list)
+    crowd: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def meaningful_and_unique(self) -> Self:
+        groups = (self.age, self.device_brand, self.city_level, self.crowd)
+        if not any((*groups, self.gender is not None)):
+            raise ValueError("audience profile compound is empty")
+        if any(len(values) != len(set(values)) for values in groups):
+            raise ValueError("audience profile values must be unique")
+        return self
+
+
 class Filter(Model):
-    field: Literal["keyword", "creator_type", "followers", "gender", "region", "quote"]
-    operator: Literal["eq", "in", "range"]
-    value: str | list[str] | NumberRange
+    field: Literal[
+        "keyword",
+        "creator_type",
+        "followers",
+        "gender",
+        "region",
+        "quote",
+        "education",
+        "yellow_v",
+        "connection_users",
+        "viewer_profile",
+        "fan_profile",
+    ]
+    operator: Literal["eq", "in", "range", "compound"]
+    value: (
+        str
+        | list[str]
+        | NumberRange
+        | RegionCompound
+        | ConnectionUsersCompound
+        | AudienceProfileCompound
+    )
     source_fields: list[str] = Field(min_length=1)
     unit: str | None = None
     currency: str | None = None
@@ -202,7 +264,7 @@ class Sort(Model):
 
 
 class FilterPlan(Model):
-    schema_version: Literal["filter_plan.v1"] = "filter_plan.v1"
+    schema_version: Literal["filter_plan.v1", "filter_plan.v2"] = "filter_plan.v2"
     platform: Literal["douyin_xingtu"] = "douyin_xingtu"
     capability_version: str
     target_count: int = Field(default=20, ge=1, le=200, strict=True)
@@ -227,8 +289,34 @@ class FilterPlan(Model):
                 raise ValueError("eq requires text")
             if f.operator == "in" and not isinstance(f.value, list):
                 raise ValueError("in requires options")
+            compound = isinstance(
+                f.value, (RegionCompound, ConnectionUsersCompound, AudienceProfileCompound)
+            )
+            if (f.operator == "compound") != compound:
+                raise ValueError("compound operator/value mismatch")
             if f.field == "quote" and not (f.currency and f.cooperation_form and f.unit):
                 raise ValueError("quote requires currency, cooperation form and unit")
+        fields = {f.field for f in self.filters}
+        if self.schema_version == "filter_plan.v1":
+            if fields - {"keyword", "creator_type", "followers", "gender", "region", "quote"}:
+                raise ValueError("v2 fields are not valid in filter_plan.v1")
+            if any(f.operator == "compound" for f in self.filters):
+                raise ValueError("compound values are not valid in filter_plan.v1")
+        else:
+            if fields - {
+                "keyword",
+                "followers",
+                "gender",
+                "region",
+                "education",
+                "yellow_v",
+                "connection_users",
+                "viewer_profile",
+                "fan_profile",
+            }:
+                raise ValueError("legacy fields are not valid in filter_plan.v2")
+            if {"viewer_profile", "fan_profile"} <= fields:
+                raise ValueError("viewer_profile and fan_profile are mutually exclusive")
         return self
 
     def digest(self) -> str:
@@ -236,6 +324,33 @@ class FilterPlan(Model):
         data = self.model_dump(mode="json", exclude={"target_count", "validation_errors"})
         data["filters"] = sorted(data["filters"], key=lambda f: f["field"])
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+
+class CapabilityOption(Model):
+    value: str
+    label: str
+    request_value: str | int | None = None
+    range: NumberRange | None = None
+
+
+class RangeConstraint(Model):
+    min: Decimal = Decimal(0)
+    max: Decimal
+    unit: str
+
+
+class RegionNode(Model):
+    value: str
+    label: str
+    children: list[RegionNode] = Field(default_factory=list)
+
+
+class CapabilityDimension(Model):
+    key: str
+    label: str
+    control: Literal["single-select", "multi-select", "range"]
+    options: list[CapabilityOption] = Field(default_factory=list)
+    range_constraints: RangeConstraint | None = None
 
 
 class FilterCapability(Model):
@@ -246,6 +361,25 @@ class FilterCapability(Model):
     currencies: list[str] = Field(default_factory=list)
     cooperation_forms: list[str] = Field(default_factory=list)
     keyword_mode: Literal["content"] | None = None
+    label: str | None = None
+    group: str | None = None
+    control: (
+        Literal["text", "single-select", "cascader", "range", "range-group", "profile-group"] | None
+    ) = None
+    options: list[CapabilityOption] = Field(default_factory=list)
+    dimensions: list[CapabilityDimension] = Field(default_factory=list)
+    region_tree: list[RegionNode] = Field(default_factory=list)
+    range_constraints: RangeConstraint | None = None
+    incompatible_with: list[str] = Field(default_factory=list)
+    request_mapping: dict[str, JsonValue] = Field(default_factory=dict)
+    automation: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class CombinationPolicy(Model):
+    schema_version: Literal["combination_policy.v2"] = "combination_policy.v2"
+    mode: Literal["composable"] = "composable"
+    fields: list[str] = Field(min_length=1)
+    incompatible: list[list[str]] = Field(default_factory=list)
 
 
 class Capabilities(Model):
@@ -257,15 +391,30 @@ class Capabilities(Model):
     sorts: list[str] = Field(default_factory=lambda: ["platform_default"])
     # Each allowed combination is explicitly verified (subsets are not inferred).
     combinations: list[list[str]] = Field(default_factory=list)
+    combination_policy: CombinationPolicy | None = None
+    compatible_plan_versions: list[str] = Field(default_factory=list)
 
     def validate_plan(self, plan: FilterPlan, *, live: bool) -> None:
-        if self.status != "VERIFIED" or self.version != plan.capability_version:
+        compatible_legacy = (
+            plan.schema_version == "filter_plan.v1"
+            and plan.capability_version in self.compatible_plan_versions
+            and {item.field for item in plan.filters} == {"keyword"}
+        )
+        if self.status != "VERIFIED" or (
+            self.version != plan.capability_version and not compatible_legacy
+        ):
             raise CollectorError("UNSUPPORTED_FILTER", "capability version is not enabled")
         if live and (self.sample_kind != "live" or not self.evidence_refs):
             raise CollectorError("UNSUPPORTED_FILTER", "live evidence required")
         if plan.sort.key not in self.sorts:
             raise CollectorError("UNSUPPORTED_FILTER", "sort")
-        if sorted(f.field for f in plan.filters) not in [sorted(c) for c in self.combinations]:
+        plan_fields = {item.field for item in plan.filters}
+        if plan.schema_version == "filter_plan.v2" and self.combination_policy:
+            if not plan_fields <= set(self.combination_policy.fields):
+                raise CollectorError("UNSUPPORTED_FILTER", "unverified combination")
+            if any(set(pair) <= plan_fields for pair in self.combination_policy.incompatible):
+                raise CollectorError("INVALID_FORM", "incompatible filters")
+        elif sorted(plan_fields) not in [sorted(c) for c in self.combinations]:
             raise CollectorError("UNSUPPORTED_FILTER", "unverified combination")
         specs = {f.field: f for f in self.fields}
         for f in plan.filters:
@@ -277,7 +426,7 @@ class Capabilities(Model):
             vals = f.value if isinstance(f.value, list) else [f.value]
             if spec.enum and any(v not in spec.enum for v in vals):
                 raise CollectorError("UNSUPPORTED_FILTER", "enum")
-            if f.field == "followers" and isinstance(f.value, NumberRange):
+            if f.field == "followers" and isinstance(f.value, NumberRange) and f.unit == "count":
                 if any(v != v.to_integral() for v in (f.value.min, f.value.max) if v is not None):
                     raise CollectorError("INVALID_FORM", "fractional followers")
             if f.field == "quote" and (
@@ -285,6 +434,57 @@ class Capabilities(Model):
                 or f.cooperation_form not in spec.cooperation_forms
             ):
                 raise CollectorError("UNSUPPORTED_FILTER", "quote semantics")
+            if f.field == "region":
+                if not isinstance(f.value, RegionCompound):
+                    if plan.schema_version == "filter_plan.v2":
+                        raise CollectorError("INVALID_FORM", "region structure")
+                else:
+                    provinces = {node.value: node for node in spec.region_tree}
+                    for selection in f.value.selections:
+                        province = provinces.get(selection.province_code)
+                        if province is None:
+                            raise CollectorError("INVALID_FORM", "unknown province")
+                        if selection.city is not None and selection.city not in {
+                            child.label for child in province.children
+                        }:
+                            raise CollectorError("INVALID_FORM", "unknown city")
+            if f.field == "connection_users" and isinstance(f.value, ConnectionUsersCompound):
+                for value in (
+                    f.value.connected,
+                    f.value.aware,
+                    f.value.interested,
+                    f.value.liked,
+                    f.value.followed,
+                ):
+                    if value is not None and any(
+                        bound is not None and bound > 100 for bound in (value.min, value.max)
+                    ):
+                        raise CollectorError("INVALID_FORM", "connection users exceeds 100w")
+            if f.field == "followers" and isinstance(f.value, NumberRange):
+                if f.unit == "ten_thousand_count" and any(
+                    value is not None and value > 5000 for value in (f.value.min, f.value.max)
+                ):
+                    raise CollectorError("INVALID_FORM", "followers exceeds 5000w")
+            if f.field in {"viewer_profile", "fan_profile"}:
+                if not isinstance(f.value, AudienceProfileCompound):
+                    raise CollectorError("INVALID_FORM", "profile structure")
+                dimensions = {dimension.key: dimension for dimension in spec.dimensions}
+                profile_values = {
+                    "age": f.value.age,
+                    "gender": [f.value.gender] if f.value.gender else [],
+                    "device_brand": f.value.device_brand,
+                    "city_level": f.value.city_level,
+                    "crowd": f.value.crowd,
+                }
+                for key, values in profile_values.items():
+                    allowed = {
+                        option.value
+                        for option in dimensions.get(
+                            key, CapabilityDimension(key=key, label=key, control="multi-select")
+                        ).options
+                    }
+                    if any(value not in allowed for value in values):
+                        raise CollectorError("UNSUPPORTED_FILTER", f"{f.field}.{key}")
 
 
 class CreatorRef(Model):

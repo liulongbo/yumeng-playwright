@@ -13,6 +13,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from .creator_library import CreatorLibraryWriter
 from .domain import (
     Candidate,
     Checkpoint,
@@ -39,6 +40,25 @@ RUNNING = {
     TaskStatus.RETRY_WAIT,
     TaskStatus.WAITING_FOR_VERIFICATION,
 }
+
+# Statuses in which a task has stopped progressing. The set matches the product query layer's
+# `TERMINAL_STATES`; it is defined here as well so the task write path can stamp `completed_at`
+# without importing the query layer.
+TERMINAL_TASK_STATES = frozenset(
+    {
+        TaskStatus.CANCELLED,
+        TaskStatus.COMPLETED,
+        TaskStatus.PARTIAL_COMPLETED,
+        TaskStatus.FAILED_VALIDATION,
+        TaskStatus.FAILED,
+    }
+)
+
+# Appended to a root-task UPDATE: record the completion moment only on the transition into a
+# terminal state, and never overwrite a previously recorded one.
+TERMINAL_COMPLETED_AT_CLAUSE = (
+    ",completed_at=CASE WHEN %s AND completed_at IS NULL THEN now() ELSE completed_at END"
+)
 
 
 def scoped_contract_health_enabled() -> bool:
@@ -830,13 +850,18 @@ class Repository:
     def _save(self, conn: psycopg.Connection[dict[str, Any]], task: TaskRecord) -> None:
         task.version += 1
         task.checkpoint.revision += 1
+        # `updated_at` stays the last-write audit value. `completed_at` is written once, on the
+        # transition into a terminal state, and never overwritten afterwards (a retried task that
+        # reaches a terminal state again keeps its first completion moment).
         conn.execute(
-            "UPDATE root_tasks SET state=%s,version=%s,payload=%s,updated_at=now() "
-            "WHERE root_task_id=%s",
+            "UPDATE root_tasks SET state=%s,version=%s,payload=%s,updated_at=now()"
+            + TERMINAL_COMPLETED_AT_CLAUSE
+            + " WHERE root_task_id=%s",
             (
                 task.state,
                 task.version,
                 Jsonb(task.model_dump(mode="json", exclude={"checkpoint"})),
+                task.state in TERMINAL_TASK_STATES,
                 task.root_task_id,
             ),
         )
@@ -1039,9 +1064,9 @@ class Repository:
                     }
             for observation in candidate.collections.values():
                 self._persist_collection(conn, task, ref.creator_id, observation)
-            conn.execute(
+            snapshot_row = conn.execute(
                 "INSERT INTO creator_snapshots(snapshot_id,root_task_id,creator_id,"
-                "draft_revision,payload) VALUES(%s,%s,%s,%s,%s)",
+                "draft_revision,payload) VALUES(%s,%s,%s,%s,%s) RETURNING created_at",
                 (
                     snapshot_id,
                     task.root_task_id,
@@ -1049,7 +1074,8 @@ class Repository:
                     task.checkpoint.revision,
                     Jsonb(snapshot),
                 ),
-            )
+            ).fetchone()
+            assert snapshot_row is not None
             for observation in candidate.collections.values():
                 conn.execute(
                     """INSERT INTO snapshot_collections(creator_snapshot_id,collection_type,
@@ -1073,6 +1099,16 @@ class Repository:
                 "UPDATE platform_creators SET projection=%s WHERE creator_id=%s",
                 (Jsonb(fields), ref.creator_id),
             )
+            if ref.platform == "douyin_xingtu":
+                CreatorLibraryWriter().sync(
+                    conn,
+                    creator_id=ref.creator_id,
+                    platform_creator_id=ref.platform_creator_id,
+                    projection=fields,
+                    snapshot_id=snapshot_id,
+                    snapshot=snapshot,
+                    captured_at=snapshot_row["created_at"],
+                )
 
     def _persist_collection(
         self,

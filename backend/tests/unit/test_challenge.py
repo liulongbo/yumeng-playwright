@@ -78,7 +78,15 @@ async def test_stable_window_resets_after_challenge_flicker_without_page_actions
     )
     handler = ChallengeHandler(
         None,  # type: ignore[arg-type]
-        ChallengePolicy(stable_seconds=1, timeout_seconds=5, poll_seconds=0.25),
+        # A clear is only accepted after the protected surface has been continuously present,
+        # with the challenge absent, for the observation window as well as the stable window: an
+        # anti-bot iframe loads asynchronously, so "absent" alone is not evidence of "cleared".
+        ChallengePolicy(
+            stable_seconds=1,
+            challenge_observation_seconds=4,
+            timeout_seconds=8,
+            poll_seconds=0.25,
+        ),
         clock=clock,
         sleeper=clock.sleep,
     )
@@ -87,7 +95,9 @@ async def test_stable_window_resets_after_challenge_flicker_without_page_actions
 
     assert health.status == "VALID"
     assert health.evidence_reason == "CHALLENGE_CLEAR_STABLE_WINDOW"
-    assert clock.value >= 3.0
+    # The challenge is last visible until 2.0; the surface must then hold for the 4 s
+    # observation window plus the 1 s stable window before the clear is accepted.
+    assert clock.value >= 6.0
     assert page.locator_reads > 0
     assert not hasattr(page, "goto") and not hasattr(page, "click")
 

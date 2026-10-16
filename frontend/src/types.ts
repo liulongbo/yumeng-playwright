@@ -25,18 +25,42 @@ export interface CapabilityField {
   field: string;
   label: string;
   operators: string[];
-  options: string[];
+  group?: string | null;
+  control?: "text" | "single-select" | "cascader" | "range" | "range-group" | "profile-group" | null;
+  options: CapabilityOption[];
+  dimensions: CapabilityDimension[];
+  region_tree: RegionNode[];
+  range_constraints?: RangeConstraint | null;
+  incompatible_with: string[];
   unit?: string | null;
   currencies: string[];
   cooperation_forms: string[];
   keyword_mode?: string | null;
 }
 
+export interface RangeValue { min: number | null; max: number | null; unit: "ten_thousand_count" }
+export interface RangeConstraint { min: number; max: number; unit: string }
+export interface CapabilityOption {
+  value: string;
+  label: string;
+  request_value?: string | number | null;
+  range?: { min: number | string | null; max: number | string | null } | null;
+}
+export interface CapabilityDimension {
+  key: string;
+  label: string;
+  control: "single-select" | "multi-select" | "range";
+  options: CapabilityOption[];
+  range_constraints?: RangeConstraint | null;
+}
+export interface RegionNode { value: string; label: string; children: RegionNode[] }
+
 export interface Capabilities {
   platform: "douyin_xingtu";
   capability_version: string;
   fields: CapabilityField[];
   combinations: string[][];
+  combination_policy?: { schema_version: string; mode: "composable"; fields: string[]; incompatible: string[][] } | null;
   target_count_default: number;
   target_count_min: number;
   target_count_max: number;
@@ -44,7 +68,7 @@ export interface Capabilities {
   fixed_sort_label: string;
 }
 
-export interface RequirementForm {
+export interface RequirementFormV1 {
   schema_version: "requirement_form.v1";
   platform: "douyin_xingtu";
   keyword: string | null;
@@ -58,6 +82,34 @@ export interface RequirementForm {
   sort_key: string | null;
   target_count: number;
 }
+
+export interface AudienceProfile {
+  age: string[];
+  gender: string | null;
+  device_brand: string[];
+  city_level: string[];
+  crowd: string[];
+}
+
+export interface RequirementFormV2 {
+  schema_version: "requirement_form.v2";
+  platform: "douyin_xingtu";
+  keyword: string | null;
+  creator_types: [];
+  followers: RangeValue | null;
+  creator_gender: "male" | "female" | null;
+  creator_regions: Array<{ province_code: string; city?: string | null }>;
+  creator_education: "undergraduate" | "master" | "doctor" | "overseas" | null;
+  yellow_v_certification: "beauty" | "sports" | "media_host" | "technology" | "athlete" | null;
+  connection_users: Record<string, RangeValue | null> | null;
+  viewer_profile: AudienceProfile | null;
+  fan_profile: AudienceProfile | null;
+  quote: null;
+  sort_key: string | null;
+  target_count: number;
+}
+
+export type RequirementForm = RequirementFormV1 | RequirementFormV2;
 
 export interface TaskCounts {
   target_count: number;
@@ -74,7 +126,10 @@ export interface TaskSummary {
   stage: string;
   version: number;
   created_at: string;
+  /** Last write to the task record (any state or version change). Not a completion moment. */
   updated_at: string;
+  /** Moment the task first entered a terminal state; null while it is still progressing. */
+  completed_at: string | null;
   created_by: string | null;
   created_by_name: string | null;
   source: "product" | "internal_acceptance";
@@ -140,6 +195,83 @@ export interface CreatorSummary {
 
 export interface CreatorPage { items: CreatorSummary[]; next_cursor: string | null }
 
+export interface LibraryMetric {
+  value: string | number | null;
+  raw_value: string | null;
+  unit: string | null;
+  is_approximate: boolean;
+  status: string;
+  observed_at: string | null;
+}
+
+export interface CreatorLibrarySummary {
+  creator_id: string;
+  platform: "douyin_xingtu";
+  platform_creator_id: string;
+  display_name: string | null;
+  avatar_uri: string | null;
+  creator_type_label: string | null;
+  province: string | null;
+  city: string | null;
+  industry_labels: string[];
+  followers: LibraryMetric;
+  monthly_deep_users: LibraryMetric;
+  monthly_connected_users: LibraryMetric;
+  monthly_follower_growth_rate: LibraryMetric;
+  interaction_rate: LibraryMetric;
+  completion_rate: LibraryMetric;
+  expected_cpm_21_60: LibraryMetric;
+  expected_cpm_60_plus: LibraryMetric;
+  expected_cpe_21_60: LibraryMetric;
+  expected_cpe_60_plus: LibraryMetric;
+  profile_complete: boolean;
+  pipeline_complete: boolean;
+  data_updated_at: string | null;
+}
+
+export interface CreatorLibraryPage { items: CreatorLibrarySummary[]; next_cursor: string | null }
+
+export interface CreatorLibraryDetail extends CreatorLibrarySummary {
+  latest_snapshot_id: string | null;
+  mcn_name: string | null;
+  introduction: string | null;
+  /** `basic.gender` as the platform's own code; the display layer owns the label mapping. */
+  gender: string | null;
+  content_theme_labels: string[];
+  collected_field_count: number;
+  failed_field_count: number;
+  field_sources: Record<string, unknown>;
+  module_statuses: Record<string, string | null>;
+  profile_payload: Record<string, unknown>;
+}
+
+export interface CreatorLibraryHistoryPoint {
+  snapshot_id: string;
+  captured_at: string;
+  profile_complete: boolean;
+  pipeline_complete: boolean;
+  module_statuses: Record<string, string | null>;
+  metrics: Record<string, string | number | null>;
+}
+
+export interface CreatorLibraryHistory {
+  items: CreatorLibraryHistoryPoint[];
+  /** Snapshots with a library index row, against every stored snapshot for this creator. */
+  indexed_snapshots: number;
+  total_snapshots: number;
+}
+
+export interface CreatorLibraryQuote {
+  snapshot_id: string;
+  position: number;
+  cooperation_form: string | null;
+  settlement_description: string | null;
+  price_raw: string | number | null;
+  origin_price_raw: string | number | null;
+  observed_at: string;
+  offer_raw: Record<string, unknown>;
+}
+
 export interface ContentPage {
   view_kind: "draft" | "published";
   snapshot_id?: string;
@@ -149,4 +281,32 @@ export interface ContentPage {
   coverage_gaps?: string[];
   cards: Array<Record<string, unknown>>;
   next_cursor?: string | null;
+}
+
+/**
+ * Presentation metadata for one registered profile field. Served by
+ * `/api/platforms/douyin_xingtu/profile-field-catalog` from the verified platform registry; it
+ * carries no collected business value.
+ */
+export interface ProfileFieldCatalogEntry {
+  key: string;
+  name: string;
+  contract_name: string;
+  name_source: "contract" | "evidence_correction";
+  kind: string;
+  unit: string | null;
+  period_label: string | null;
+  empty_values: string[];
+  missing_source_status: string | null;
+}
+
+export interface ProfileModuleCatalog {
+  key: string;
+  fields: ProfileFieldCatalogEntry[];
+}
+
+export interface ProfileFieldCatalog {
+  platform: "douyin_xingtu";
+  contract_version: string;
+  modules: ProfileModuleCatalog[];
 }

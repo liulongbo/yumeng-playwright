@@ -1,7 +1,7 @@
 # SESSION-01：平台会话真实存活时长核验
 
 状态：进行中
-更新时间：2026-10-12T15:37:00+08:00（Asia/Shanghai）
+更新时间：2026-10-14T15:56:00+08:00（Asia/Shanghai）
 是否验收：否
 
 ## 目标与范围
@@ -53,6 +53,38 @@
 
 2026-09-29：本卡建立，仅登记背景与待验证假设，尚未开始核验。
 
+2026-10-13：用户报告执行单元的巨量星图账号态失效并请求人工重新登录。开始登录维护前只读核对发现专属 profile `unit-local-mac-02` 仍持有 Chrome `SingletonLock`（PID 10613，锁文件时间 08:43+08:00）；不会启动第二个实例或改动 profile，改为向该既有实例发送受保护业务页打开请求，交由用户完成验证码／登录操作。
+
+2026-10-13 15:41+08:00：已向该 profile 的现有 Chrome 实例发送 `https://www.xingtu.cn/ad/creator/index` 并将 Chrome 置前台；`SingletonLock`、`SingletonSocket`、`SingletonCookie` 均刷新到 15:41:15+08:00，证明请求已由该 profile 的实例接收。未读取 Cookie、未执行搜索／采集，也不会把“窗口打开”误记为登录成功；待用户完成交互后再做受控会话核验。
+
+2026-10-13 15:46+08:00：用户确认已在该窗口登录，并明确要求将会话长期复用。核对现有实现与运行态：`UnitConfig.capture_session_snapshot=true`，`BrowserRuntime` 会在受保护业务页与绑定账号验证后，将完整 `storage_state` 写入私有 `.runtime/profiles/storage-state/unit-local-mac-02.json`（目录 `0700`、文件 `0600`），下次启动首个导航前再注入；这是对会话型业务 Cookie 的正确持久化路径。当前 profile 的 `Default/Cookies` 与 `Local State` 已在 15:44+08:00 更新，但专用快照仍不存在。为不并发打开当前仍占用 profile 的 Chrome，不读取／复制 Cookie 数据库；需先正常关闭**该执行单元 Chrome 窗口**，然后以受控 `BrowserRuntime` 冷启动核验并导出快照。
+
+2026-10-13 15:49—15:51+08:00：用户关闭窗口后尝试受控 `xingtu session-diagnostics`。首次沙箱内启动被 macOS Mach/Crashpad 权限拒绝，未访问 profile；经授权重试时 Chrome 明确输出“正在现有的浏览器会话中打开”，且 `SingletonLock` 仍指向 PID 18738，说明窗口关闭并未使执行单元的 Chrome 进程退出。受控 Runtime 因而无法取得独占 profile、快照仍不存在；未尝试复制锁定的 Cookie 数据库或删除 Singleton 文件。需要用户以“退出 Chrome”（而非只关窗口）的方式释放该执行单元实例，再重试冷启动核验与快照导出。
+
+2026-10-13 15:57+08:00：受控核验产生脱敏报告，结果为 `INDETERMINATE / PROTECTED_PAGE_ACCOUNT_UNREADABLE`（受保护页可见、登录页与挑战均未见、绑定账号元素不可读），不满足快照导出的“受保护页 + 账号精确匹配”门槛，因此 `.runtime/storage-state/unit-local-mac-02.json` 仍不存在。按登记的准确登录入口 `https://sso.oceanengine.com/xingtu/login?role=1` 尝试重新打开专属 profile 时，Chrome 在创建 `SingletonLock` 阶段返回 `No space left on device` 并主动中止，以避免 profile 损坏；当时 Data 卷仅余 101 MiB。未写入、复制或泄露 Cookie／Storage 值。
+
+2026-10-13 15:59+08:00：用户已恢复本机空间；只读核对 Data 卷可用空间约 17 GiB、profile 未见 `Singleton*` 锁文件，先前磁盘阻断解除。开始按已登记 SSO 登录入口重新建立受控登录维护，完成后仍须以账号精确匹配为门槛才导出快照。
+
+2026-10-13 16:07—16:08+08:00：以专属 profile 成功打开并置前台已登记入口 `https://sso.oceanengine.com/xingtu/login?role=1`；新的 `SingletonLock` 指向 PID 20167，Cookies／Local State 均更新。当前仅等待用户在**该窗口**完成平台正常登录；不把窗口／文件更新时间视为登录成功，后续仍需安全交接、精确账号验证及私有 storage-state 导出。
+
+2026-10-13 16:14—16:16+08:00：用户确认已登录后，正常关闭专属 Chrome 并以受控 Runtime 冷启动核验。新脱敏报告 `unit-local-mac-02-20261013T081546Z.json` 显示 46 个 Cookie（其中 5 个会话型），但 `SessionHealth=INDETERMINATE / PROTECTED_PAGE_ACCOUNT_UNREADABLE`：受保护业务页可见，未见登录页或挑战页，**绑定账号 ID 仍不可读**。因此不满足“受保护页 + 账号精确匹配”的持久化门槛，`storage-state` 快照保持不存在；未执行搜索／采集，也未把 Cookie 值写入卡片或证据。需先恢复账号身份可读性／确认当前业务页面身份，才能安全导出长期复用快照。
+
+2026-10-13 16:17—16:20+08:00：用户确认该登录身份只有唯一子账号 `ID: 1807978499337419`，且手工 Chrome 显示已登录。为区分“登录无效”与“定位器失效”，在禁用快照导出的受控 Runtime 中执行三次只读 DOM 结构探针：① 业务页 `/ad/creator/index` 有 1 个受保护菜单标记，但旧账号选择器匹配 0，整页无绑定 ID 或 `ID:<数字>`；② 账户管理页 `/ad/user-center/user/account/auth` 亦无绑定 ID／登录表单；③ 页面仅一个同源 iframe，仍无 ID。结论：平台当前 UI 未提供可自动比对的账号 ID，旧定位器确已失效；不能以 CSS 更新修复。用户的“唯一子账号”人工确认可作为审计证据，但若改为自动放行／导出会话的替代身份门槛，将改变既有“精确账号验证”安全契约，等待用户明确授权该降级策略或提供平台可验证的身份入口。
+
+2026-10-13 16:39—16:48+08:00：用户明确授权唯一子账号人工确认后，实施 [DEC-016](../decisions/DEC-016-manual-identity-attestation.md)：仅 `local_development`、账号必须精确匹配、必须记录操作者／原因／批准与截止时间、最长 31 天；账号可读但不一致、登录页和安全挑战仍优先拒绝。随后三次真实 Chrome 冷启动诊断均不执行搜索或采集。最终报告 `unit-local-mac-02-20261013T084837Z.json` 为 `VALID / MANUALLY_ATTESTED_UNIQUE_ACCOUNT`，受保护页为真、登录页／挑战为假，且 `session_snapshot.restored_before_navigation=true`；说明上一次私有快照在本次首个导航前已注入并复用。快照路径 `.runtime/profiles/storage-state/unit-local-mac-02.json` 存在，目录 `0700`、文件 `0600`，未向文档、日志或前端写入 Cookie／Token 明文。完整脱敏证据见[本轮快照核验](../evidence/SESSION-01-manual-attestation-snapshot-2026-10-13.md)。
+
+### 2026-10-14 登录状态核验与“快速失效”根因复盘（未改代码）
+
+用户再次询问执行单元星图登录状态是否有效，并在失效时要求唤起 Chrome 人工登录，同时要求记录“为什么登录状态这么快失效”的原因备用。实际执行：
+
+1. **只读核验（有效）**：`xingtu session-diagnostics --config .runtime/units/local-dev-mac-02.json`，`2026-10-14T15:49:46 → 15:49:53+08:00`，exit `0`；报告 `unit-local-mac-02-20261014T074953Z.json` 为 `VALID`，`observed == expected == ID: 1807978499337419`、受保护页 `true`、登录页／挑战 `false`、`restored_before_navigation=true`、Chrome `155.0.8059.40`、`normal_close_confirmed=true`。**这是快照路径首次在账号 DOM 可读条件下的 `VALID`**（此前三次 `VALID` 均依赖 `MANUALLY_ATTESTED_UNIQUE_ACCOUNT`）。未搜索、未采集、未写业务库。
+2. **存活下界更新**：快照首写 `2026-10-13T16:48+08` → 本轮 `2026-10-14T15:49+08`，**约 29 小时、3 次冷启动**会话仍被平台接受且账号无漂移。上界仍未测。
+3. **“很快失效”的根因**：业务会话载体 `.xingtu.cn/star_sessionid` 是**会话级 Cookie**（`expires=-1`），进程退出后不会自行留在磁盘；登录态能否跨重启完全取决于私有 `storage-state` 快照。而 **2026-10-13 16:48 之前从未产出过快照**（当时报告均为 `PROTECTED_PAGE_ACCOUNT_UNREADABLE`，身份门槛不满足），所以那时每次关闭 Chrome 都真的丢掉会话，用户感知即“刚登录很快就失效”。次要放大器：Playwright 默认 `--use-mock-keychain` 与系统 Keychain 不兼容（已由 `macos_system_keychain` 缓解，绕过项目启动器仍会复现）、多子账号漂移导致 `ACCOUNT_MISMATCH`（已由单一子账号身份规避，根因 H-A/H-B 未区分）。**目前没有证据支持“平台会话本身只有几十分钟寿命”。**
+4. **记录的待优化缺口**（写在本轮证据第 3.4/4 节，不在本轮实施）：① 快照写入只在“导航事件 + 4 秒防抖 + 页面判定”兜底路径上，详情页结束或无导航的有效会话可能整轮不落盘；② 快照准入门槛与身份门槛耦合，`DEC-016` 人工确认 `2026-11-12T16:39:32+08:00` 到期后不可读仍会重现该循环；③ `_restore_session_snapshot` 失败静默、无“快照年龄/注入结果”可观测字段；④ 无阶段性巡检，只能在采集时才发现失效；⑤ H1 跨客户端互踢未排除。
+5. **Chrome 唤起**：核验后按用户要求以执行单元专属 profile 打开 `https://www.xingtu.cn/ad/creator/index`（PID 36251）供人工查看/登录。无需重新登录。注意：窗口开着时单元 profile 被占用，采集会以 `PROFILE_IN_USE` 失败，用完必须 `Command-Q` 完全退出。
+
+证据：[登录状态核验与快速失效根因记录](../evidence/SESSION-01-login-lifetime-root-cause-2026-10-14.md)。本卡状态与其余验收项不变。
+
 ### 2026-10-06 用户决策：舍弃旧登录身份，改用单子账号身份并显式改绑
 
 本节之后（同日 18:01）追加：**混合持久化修复 + 冷启动引导修复**，使"同一 profile 有时在登录态、有时被踢回登录页"的问题不再阻塞采集。两处改动及对照实验见[宠物 22 位采集效果测试报告](../evidence/pet22-crawl-test-2026-10-06.md)第 3 节。
@@ -96,6 +128,8 @@
 - `recover-unit` 的历史 `/bin/ps` 依赖和两步协议已经修复；真实开发单元尚未用新路径执行回收，当前只有自动测试证据。
 
 ## 验证证据
+
+2026-10-13：本轮实现与真实冷启动结果见[唯一子账号人工确认与会话快照核验](../evidence/SESSION-01-manual-attestation-snapshot-2026-10-13.md)。离线验证：定向 `ruff check`、`mypy backend/src/xingtu` 通过，`backend/tests/unit/test_session_snapshot.py` **7 passed**；全量 `make check` exit 0（ruff／format／mypy、后端单元 **189 passed**、前端 typecheck／Vitest **3 passed**／build）。新增浏览器契约覆盖人工确认仅在身份不可读时生效、错误账号／登录页／挑战页必定优先拒绝。本机 Playwright bundled Chromium 未安装，故 `backend/tests/contract/test_session_recovery.py` 的 3 项（含该新增用例）均在启动阶段因可执行文件缺失失败，非断言失败；真实绑定 Chrome 的三次冷启动已经覆盖当前配置的正向复用路径，负向分支保留待具备测试浏览器后复跑。
 
 2026-09-29 结构性修复实现与自动验证见 [实施证据](../evidence/SESSION-01-implementation-2026-09-29.md)。代码和离线/合成检查已完成；单账号清理、真实 5/10/20 和 30 天长测仍未执行，故状态为待验收而非已完成。
 
@@ -213,8 +247,8 @@
 
 ## 交接信息
 
-- 阻塞项：**已解除**。2026-10-06 用户直接给出决策——不再定位/纠正旧身份的子账号选择入口，改为清除旧登录身份并改用**只含单一子账号**的新账号，改绑后两次独立冷启动判定 `STABLE`。原先"需要操作者提供人工切换路径才能继续自动选号"的阻塞因此不再挡住后续功能验收；**自动选号本身仍未实现**，只是不再作为本条验收路径的前提。
-- 遗留问题：① 账号漂移根因未定（H-A/H-B 优先，本轮仅规避未区分）；② 会话存活上界未测；③ 真实平台 5/10/20 与新恢复路径尚未验收；④ 本分支既有集成失败 `test_browser_host_promotes_and_collects_with_the_exact_same_context`（`session.entry_url` 多一次导航断言，HEAD `bc74e27` 上同样失败，非本次改动引入，归"翻页+全字段"进行中改动）；⑤ 改绑后尚无一次**真实业务采集**在新身份下跑通；⑥ **`xingtu research` 冷启动引导缺陷**：只导航一次，首跳被平台重定向到 `/?redirect_uri=...` 时不会再进业务页，`verify_account` 必然 `ACCOUNT_LOCATOR_UNREADABLE`（同期 Cookie 完整、探针复跑 `STABLE`），需按 BrowserHost 已实现的"业务页优先 + 有界重试"补齐。
+- 阻塞项：本轮身份不可读阻塞已解除：用户明确授权的、最长 31 天人工确认已受限启用，并完成私有快照的跨冷启动复用验证。不会自动延长或静默替代可读账号校验。
+- 遗留问题：① 账号漂移根因未定（H-A/H-B 优先，本轮仅规避未区分）；② 会话存活上界未测，平台仍可随时使会话失效；③ 人工确认于 `2026-11-12T16:39:32+08:00` 到期；④ 浏览器契约 3 项因本机 Playwright bundled Chromium 缺失未执行到断言；⑤ 真实平台 5/10/20 与新恢复路径尚未验收；⑥ 改绑后尚无一次**真实业务采集**在新身份下跑通。
 - 下一步（按优先级）：
   1. **在新绑定下跑一次真实小规模采集**（如 `target_count ≤ 3`）并观察是否仍出现账号相关维护窗口；这是 F04/F05 后续验收的前置。
   2. **区分 H-A 与 H-B**：本次已证明"生效账号改变"并收敛载体到 `star_sessionid`，下一步需对照实验区分"平台侧重新绑定"与"profile 内多账号声明导致解析不稳定"。
@@ -249,3 +283,13 @@
 - 2026-10-06T16:35:00+08:00：进行中 → 进行中。用户决策**舍弃旧登录身份**并改用只含单一子账号的新巨量星图账号：备份 `.runtime/profiles/unit-local-mac-02.bak-20261006T161500`（200 MiB）后清空重建 profile，用项目真实 Chrome 完成人工登录，冷启动读到新账号 `ID: 1807978499337419`（受保护页可见）。新增**显式审计改绑**能力（迁移 007 `unit_account_rebindings`、`Repository.rebind_unit_account`、CLI `xingtu rebind-account`；宿主占用时拒绝、`register_unit` 与 `ACCOUNT_MISMATCH` 仍禁止自动改绑），改绑后单元为 `SESSION_UNVERIFIED`/`ACCOUNT_BINDING_CHANGED`。**规避有效性验证通过**：改绑后两次独立冷启动（间隔 10 秒）判定 `STABLE`，实测账号恒为新身份、跨轮身份 Cookie 零变化，与改绑前"重启即回退 `1832740070238347`"对照成立。`ruff`/`format`/`mypy` 通过、单元 108 passed、集成 53 passed / 1 failed（该失败在 HEAD `bc74e27` 上同样失败，属本分支"翻页+全字段"进行中改动的既有失败，与本轮无关，已登记遗留）。证据见[改绑与漂移规避证据](../evidence/SESSION-01-account-rebinding-2026-10-06.md)。漂移根因与存活上界仍未闭合，整卡保持进行中／未验收。
 - 2026-10-06T18:01:11+08:00：进行中 → 进行中。用户要求"先修复账号不稳定问题"，并按**混合持久化（持久目录 + 显式 storage-state 注入）**方案实施。① 定位业务会话载体 `.xingtu.cn/star_sessionid` 为**会话级 Cookie**（`is_persistent=0`、`has_expires=0`），落盘不确定正是"有时登录、有时未登录"的直接机制；② 实现会话有效时导出 `context.storage_state()`（`.runtime/storage-state/<unit>.json`，`0600`）并在下次启动**首次导航前**注入全部 Cookie 与 localStorage，仅在页面出现契约保护页标志时才覆盖快照；③ **对照实验决定性**：同一 profile，注入快照 → 账号可读、后台可进；移走快照 → 被打回 `/?redirect_uri=...`。④ 同时修复冷启动引导缺陷：worker 路径下 `inspect_session` 会在已被重定向的页面上耗尽 `session_boot_timeout_seconds=180s`，改为有界重试（≤4 次，轮流使用新登记的 `session.business_urls`）+ 每次 15s 短探测。⑤ 效果：宠物 22 位采集**首次端到端跑通**（40 候选 / 22 有效 / 67 快照 / 两页翻页），全程未再因"被踢回登录页"空转。`ruff`/`format`/`mypy` 通过、单元 114 项通过、契约 22 项通过。存活上界仍未测，快照注入属凭证复用、平台若收紧需重评，整卡保持进行中／未验收。
 - 2026-10-12T15:37:00+08:00：进行中 → 进行中（不变）。用户要求检查当前执行单元的星图登录状态是否失效，显式授权后执行**只读实时核验** `xingtu session-diagnostics`（`2026-10-12T15:36:53 → 15:37:01+08:00`，exit 0）：结果 `SessionHealthStatus.VALID`，`protected_page_verified=true`、`login_page_verified=false`、`challenge_verified=false`，`observed_account_id == expected_account_id == ID: 1807978499337419`（**漂移规避继续成立**），Chrome 154.0.8037.98、`normal_close_confirmed=true`。据此新增**存活时长下界**数据点：上次进程内确证（01:12:41+08）之后，**14.4 小时**且跨越新的冷启动仍被平台接受。**存活上界与失效诱因（H1/H2/H3、H-A/H-B）仍未闭合**，本卡保持进行中／未验收。证据见[会话实时只读核验证据](../evidence/UNIT-01-session-live-check-2026-10-12.md)。
+- 2026-10-13T15:39:54+08:00：进行中 → 进行中（登录维护开始）。用户报告账号态失效并要求打开当前执行单元 Chrome 以人工重新登录。只读核对专属 profile 的 `SingletonLock` 显示既有 Chrome 实例（PID 10613，锁文件 08:43+08:00）仍在持有 profile；为保持「人工维护与采集互斥、同一 profile 不并发打开」约束，不启动第二个浏览器，改向既有实例发送巨量星图受保护业务页打开请求。登录结果及后续会话核验待用户完成交互后记录。
+- 2026-10-13T15:42:09+08:00：进行中 → 进行中（登录窗口已就绪）。已向专属 profile 的现有 Chrome 实例发送受保护业务页并置前台；三个 Chromium Singleton 文件均更新为 `15:41:15+08:00`，表明该实例已接收本次打开请求。未触碰凭据、未执行采集；人工登录／验证码及随后账号精确匹配、受保护页和挑战状态核验仍待完成。
+- 2026-10-13T15:46:39+08:00：进行中 → 进行中（等待安全交接）。用户已完成手工登录并要求长期复用会话。运行态证据：profile 的 Cookies／Local State 已更新，但显式私有 storage-state 快照尚不存在；现有 Chrome 仍持有 profile。既有实现会在受控 Runtime 的“受保护页 + 精确账号”核验通过后导出快照，并在后续采集启动前注入。为遵守同一 profile 不并发打开的约束，等待用户关闭刚才的执行单元 Chrome 窗口后再执行冷启动验证和快照导出；不读取或复制明文 Cookie。
+- 2026-10-13T15:51:06+08:00：进行中 → 进行中（等待进程完全退出）。用户关闭了窗口，但两次冷启动均不能接管 profile：沙箱尝试被 macOS 运行权限拒绝；授权重试中 Chrome 返回“正在现有的浏览器会话中打开”，`SingletonLock` 仍指向 PID 18738，快照保持不存在。未并发访问、复制或导出 Cookie；待用户**完全退出执行单元 Chrome 进程**后，继续执行既有受控核验及 `storage-state` 导出。
+- 2026-10-13T16:08:35+08:00：进行中 → 进行中（准确登录入口已打开）。用户恢复磁盘空间后，Data 卷可用约 17 GiB，profile 无旧锁；已重新打开并置前台登记 SSO 入口，PID 20167 正持有专属 profile。等待用户在该窗口完成登录，之后执行受控交接、绑定账号精确核验与 storage-state 导出。
+- 2026-10-13T16:16:36+08:00：进行中 → 进行中（登录后身份不可读）。用户确认登录后完成受控冷启动核验；报告 `unit-local-mac-02-20261013T081546Z.json` 为 `INDETERMINATE / PROTECTED_PAGE_ACCOUNT_UNREADABLE`，虽有 46 个 Cookie／5 个会话 Cookie，仍无法验证绑定账号。快照未导出，避免把错误账号或不完整会话持久化；下一步是定位当前业务页的账号身份可读性，再重新核验与保存。
+- 2026-10-13T16:20:44+08:00：进行中 → 阻塞。用户确认唯一子账号为绑定 ID 且手工页面已登录；三次禁用快照的受控 DOM 探针分别覆盖业务页、账户管理页和所有 iframe，均未见绑定 ID 或任何 `ID:<数字>` 节点，旧选择器零匹配。无法在不降低“精确账号验证”契约的前提下保存长期会话；等待用户授权带审计的人工确认兜底，或提供可验证身份的官方页面入口／证据。
+- 2026-10-13T16:49:05+08:00：阻塞 → 进行中。用户明确授权受审计的唯一子账号人工确认；配置限制为本机开发单元、精确绑定 ID、最长 31 天且可撤销。真实 Chrome 三次冷启动后，最终脱敏报告确认 `VALID / MANUALLY_ATTESTED_UNIQUE_ACCOUNT`、私有 snapshot 在首个导航前已恢复、正常关闭确认；会话长期存活上界及其他历史验收项仍未完成。
+- 2026-10-13T16:53:20+08:00：进行中 → 进行中。`make check` exit 0（后端单元 189 passed、前端 3 passed、构建通过）；浏览器契约仍因 Playwright bundled Chromium 未安装而未运行到断言，长期会话与历史实机验收项仍待完成。
+- 2026-10-14T15:56:00+08:00：进行中 → 进行中。用户再次要求核验登录状态并在失效时唤起 Chrome 登录，同时要求记录“登录态快速失效”的原因。只读核验**有效**：`VALID`、账号精确匹配、受保护页 `true`、快照在首个导航前恢复、Chrome 155.0.8059.40 正常关闭（本轮为快照路径首次在账号可读条件下的 `VALID`）；存活下界更新为**约 29 小时 / 3 次冷启动**。根因复盘结论：`star_sessionid` 为会话级 Cookie，登录态跨重启完全依赖私有快照，而 **2026-10-13 16:48 之前从未产出过快照**（身份门槛不满足），故那时“登录很快失效”是会话无法落盘所致；`--use-mock-keychain` 与子账号漂移为次级放大器。登记 5 项待优化缺口（快照写入触发过窄、门槛耦合、恢复失败不可观测、无巡检、H1 未排除）。已按用户要求以专属 profile 打开受保护业务页供人工查看/登录，无采集、无业务写入。证据：[登录状态核验与快速失效根因记录](../evidence/SESSION-01-login-lifetime-root-cause-2026-10-14.md)。存活上界、漂移根因与长期验收项保持未勾选。

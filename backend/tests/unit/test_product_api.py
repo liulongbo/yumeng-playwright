@@ -149,7 +149,19 @@ def test_capabilities_and_task_submission_require_session_and_csrf():
     csrf = auth.json()["csrf_token"]
     capability = client.get("/api/platforms/douyin_xingtu/capabilities")
     assert capability.status_code == 200
-    assert [field["field"] for field in capability.json()["fields"]] == ["keyword"]
+    assert [field["field"] for field in capability.json()["fields"]] == [
+        "keyword",
+        "gender",
+        "region",
+        "education",
+        "yellow_v",
+        "connection_users",
+        "followers",
+        "viewer_profile",
+        "fan_profile",
+    ]
+    region = next(field for field in capability.json()["fields"] if field["field"] == "region")
+    assert len(region["region_tree"]) == 34
     body = {"keyword": "宠物", "target_count": 20}
     assert (
         client.post(
@@ -170,6 +182,7 @@ def test_capabilities_and_task_submission_require_session_and_csrf():
     )
     assert response.status_code == 202
     assert len(products.calls) == 1
+    assert products.calls[0][0].schema_version == "requirement_form.v2"
 
 
 def test_api_validation_uses_unified_error_and_strict_target_count():

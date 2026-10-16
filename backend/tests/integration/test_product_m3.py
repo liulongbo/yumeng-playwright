@@ -13,6 +13,7 @@ from xingtu.product_covers import ProductCoverConfig
 from xingtu.product_models import RequirementForm
 from xingtu.product_queries import ProductQueries
 from xingtu.product_repository import ProductRepository
+from xingtu.repository import TERMINAL_COMPLETED_AT_CLAUSE
 
 
 def product_user(products):
@@ -39,7 +40,7 @@ def test_product_submit_idempotency_and_same_root_promotion(repo):
             user_id=user_id,
             idempotency_key="same-key",
             model_config_id="deepseek-flash",
-            prompt_version="m3-filter-plan-v1",
+            prompt_version="m3-filter-plan-v2",
         )
 
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -92,6 +93,43 @@ def test_product_submit_conflict_rolls_back_without_duplicate(repo):
         products.create_product_task(RequirementForm(keyword="母婴"), **kwargs)
     with repo.connect() as conn:
         assert conn.execute("SELECT count(*) AS n FROM requirements").fetchone()["n"] == 1
+
+
+def test_requirement_discriminator_persists_v2_and_keeps_v1_readable(repo):
+    products = ProductRepository(repo)
+    user_id = product_user(products)
+    products.create_product_task(
+        RequirementForm(schema_version="requirement_form.v1", keyword="历史关键词"),
+        capability_version="xingtu-ad-creator-square-v1",
+        user_id=user_id,
+        idempotency_key="requirement-v1",
+        model_config_id="synthetic-flash",
+        prompt_version="m3-filter-plan-v1",
+    )
+    products.create_product_task(
+        RequirementForm(keyword="新关键词", creator_gender="female"),
+        capability_version="xingtu-ad-creator-square-v2",
+        user_id=user_id,
+        idempotency_key="requirement-v2",
+        model_config_id="synthetic-flash",
+        prompt_version="m3-filter-plan-v2",
+    )
+
+    with repo.connect() as conn:
+        rows = conn.execute(
+            "SELECT root_task_id,schema_version,payload FROM requirements ORDER BY schema_version"
+        ).fetchall()
+
+    assert [row["schema_version"] for row in rows] == [
+        "requirement_form.v1",
+        "requirement_form.v2",
+    ]
+    assert (
+        RequirementForm.model_validate(rows[0]["payload"]).schema_version == "requirement_form.v1"
+    )
+    restored_v2 = RequirementForm.model_validate(rows[1]["payload"])
+    assert restored_v2.schema_version == "requirement_form.v2"
+    assert restored_v2.creator_gender == "female"
 
 
 def test_product_queries_show_intake_and_cancel_before_browser_allocation(repo):
@@ -389,7 +427,7 @@ def create_intake(products, user_id, registry, key):
         user_id=user_id,
         idempotency_key=key,
         model_config_id="synthetic-flash",
-        prompt_version="m3-filter-plan-v1",
+        prompt_version="m3-filter-plan-v2",
     )
 
 
@@ -806,3 +844,63 @@ def test_origin_root_task_id_is_validated_before_the_foreign_key(repo):
             "SELECT origin_root_task_id FROM root_tasks WHERE root_task_id=%s", (linked_root,)
         ).fetchone()
     assert row and str(row["origin_root_task_id"]) == source_root
+
+
+def test_completed_at_is_recorded_once_a_task_reaches_a_terminal_state(repo):
+    """UI-01 R4: `updated_at` is a last-write audit value, so completion needs its own column.
+
+    A progressing task must report no completion moment; a terminal one must report exactly the
+    transition into its terminal state, and a later rewrite of the same row must not move it.
+    """
+
+    products = ProductRepository(repo)
+    user_id = product_user(products)
+    created = products.create_product_task(
+        RequirementForm(keyword="宠物"),
+        capability_version="cap-v1",
+        user_id=user_id,
+        idempotency_key="completed-at-create",
+        model_config_id="deepseek-flash",
+        prompt_version="v1",
+    )
+    queries = ProductQueries(repo)
+    waiting = queries.get_task(created.root_task_id)
+    assert waiting.status == "RECEIVED"
+    assert waiting.completed_at is None
+    with repo.connect() as conn:
+        assert (
+            conn.execute(
+                "SELECT completed_at FROM root_tasks WHERE root_task_id=%s",
+                (created.root_task_id,),
+            ).fetchone()["completed_at"]
+            is None
+        )
+
+    cancelled = queries.command(
+        created.root_task_id,
+        "cancel",
+        expected_version=waiting.version,
+        user_id=user_id,
+        idempotency_key="completed-at-cancel",
+    )
+    assert cancelled.status == "CANCELLED"
+    assert cancelled.completed_at is not None
+    with repo.connect() as conn:
+        stored = conn.execute(
+            "SELECT completed_at FROM root_tasks WHERE root_task_id=%s",
+            (created.root_task_id,),
+        ).fetchone()["completed_at"]
+    assert stored == cancelled.completed_at
+
+    # A later write to the same task refreshes `updated_at` but must never overwrite the recorded
+    # completion moment. This mirrors the runtime write path's CASE expression.
+    with repo.connect() as conn:
+        conn.execute(
+            "UPDATE root_tasks SET version=version+1,updated_at=now()"
+            + TERMINAL_COMPLETED_AT_CLAUSE
+            + " WHERE root_task_id=%s",
+            (True, created.root_task_id),
+        )
+    after = queries.get_task(created.root_task_id)
+    assert after.completed_at == cancelled.completed_at
+    assert after.updated_at > cancelled.updated_at

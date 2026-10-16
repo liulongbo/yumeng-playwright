@@ -56,6 +56,7 @@ class RequestSpec(Model):
     repeat_result_mode: Literal["all", "latest"] | None = None
     cursor_invalid_codes: list[str] = Field(default_factory=list)
     error_codes: dict[str, str] = Field(default_factory=dict)
+    attribute_filter_match: AttributeFilterMatchSpec | None = None
 
     @model_validator(mode="after")
     def success_contract_is_paired(self) -> RequestSpec:
@@ -66,6 +67,17 @@ class RequestSpec(Model):
         if self.repeats != (self.repeat_result_mode is not None):
             raise ValueError("repeats and repeat_result_mode must be configured together")
         return self
+
+
+class AttributeFilterEntry(Model):
+    field_name: str
+    field_value: str
+    rel_id: str | None = None
+
+
+class AttributeFilterMatchSpec(Model):
+    path: str = "attribute_filter"
+    allowed_static: list[AttributeFilterEntry] = Field(default_factory=list)
 
 
 class SourceSpec(Model):
@@ -219,6 +231,10 @@ class SearchSpec(Model):
     default_bindings: dict[str, str] = Field(default_factory=dict)
     reset_actions: list[Action]
     apply_actions: list[Action]
+    final_actions: list[Action] = Field(default_factory=list)
+    dynamic_filter_executor: Literal["xingtu-market-v2"] | None = None
+    clear_selected: LocatorSpec | None = None
+    selected_condition_chips: LocatorSpec | None = None
     next_actions: list[Action] = Field(default_factory=list)
     ready: LocatorSpec
     ready_hidden: list[LocatorSpec] = Field(default_factory=list)
@@ -520,8 +536,12 @@ class PlatformRegistry(Model):
         if module.basic and module.entry:
             # The basic module is entered through the verified homepage, never a separate path.
             raise CollectorError("PLATFORM_PAGE_CHANGED", "BASIC_MODULE_ENTRY_UNSUPPORTED")
-        if module.capture_on_profile_load and (module.entry or module.actions):
-            raise CollectorError("PLATFORM_PAGE_CHANGED", "PROFILE_LOAD_MODULE_HAS_ACTIONS")
+        if module.capture_on_profile_load and module.entry:
+            # A profile-load module is read from the creator homepage window and never navigates
+            # away from it. Registered actions are allowed: the adapter runs a profile-load
+            # module's own actions inside that same pre-registered window, and only when the bare
+            # load did not deliver the module's required responses.
+            raise CollectorError("PLATFORM_PAGE_CHANGED", "PROFILE_LOAD_MODULE_HAS_ENTRY")
         self._check_locator(module.ready)
         for locator in module.ready_hidden:
             self._check_locator(locator)

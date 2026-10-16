@@ -76,3 +76,46 @@ async def test_session_health_distinguishes_valid_mismatch_login_and_indetermina
             await adapter.check_session(page)
         assert error.value.code == "SESSION_INDETERMINATE"
         await browser.close()
+
+
+async def test_manual_identity_attestation_is_a_narrow_fallback_for_an_unreadable_locator():
+    spec = registry(search())
+    spec.operation_timeout_seconds = 0.1
+    spec.session.error_selectors = {
+        "ACCOUNT_LOGIN_REQUIRED": LocatorSpec(selector="#login"),
+        "PLATFORM_SECURITY_CHALLENGE": LocatorSpec(selector="#challenge"),
+    }
+
+    async def guard():
+        pass
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch()
+        context = await browser.new_context()
+        page = await context.new_page()
+        adapter = BrowserAdapter(
+            context,
+            spec,
+            "expected",
+            guard,
+            live=False,
+            manually_attested_account_id="expected",
+        )
+
+        # A proven protected business surface may use the attestation only when its account
+        # locator is absent/unreadable.
+        await page.set_content('<div id="ready">ready</div>')
+        health = await adapter.inspect_session(page)
+        assert health.status == SessionHealthStatus.VALID
+        assert health.evidence_reason == "MANUALLY_ATTESTED_UNIQUE_ACCOUNT"
+
+        # A readable wrong account, login page, or challenge always defeats the fallback.
+        await page.set_content('<div id="ready">ready</div><div id="account">other</div>')
+        assert (await adapter.inspect_session(page)).status == SessionHealthStatus.ACCOUNT_MISMATCH
+        await page.set_content('<div id="login">login</div><div id="ready">ready</div>')
+        assert (await adapter.inspect_session(page)).status == SessionHealthStatus.LOGIN_REQUIRED
+        await page.set_content('<div id="challenge">challenge</div><div id="ready">ready</div>')
+        assert (
+            await adapter.inspect_session(page)
+        ).status == SessionHealthStatus.SECURITY_CHALLENGE
+        await browser.close()

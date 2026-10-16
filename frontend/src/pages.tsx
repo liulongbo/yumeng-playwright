@@ -1,17 +1,25 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   AlertCircle, ArrowLeft, ArrowRight, Check, ChevronRight, CircleStop, Clock3,
-  ExternalLink, FileCheck2, ImageOff, ListFilter, LoaderCircle, LockKeyhole,
-  PauseCircle, Play, Plus, RefreshCcw, RotateCcw, Search, ShieldCheck, Sparkles,
+  ExternalLink, Eye, EyeOff, FileCheck2, ImageOff, ListFilter, LoaderCircle, LockKeyhole,
+  Play, Plus, RefreshCcw, RotateCcw, Search, ShieldCheck, Sparkles,
   UserRound, UsersRound, WandSparkles,
 } from "lucide-react";
 import { api, ApiError } from "./api";
 import { useAuth } from "./AuthContext";
+import { snapshotCreatorView } from "./snapshotCreator";
+import { CreatorProfile } from "./profile/CreatorProfile";
+import { QuoteTable } from "./profile/panels";
+import type { FeaturedCardView, FeaturedCollectionView, FeaturedContent } from "./profile/commercial";
+import { ProvenanceDrawer } from "./profile/audience";
+import { indexCatalog, useFieldCatalog } from "./fieldCatalog";
 import { formatDate, shortId, statusLabel, terminalStatuses, waitingStatuses } from "./status";
 import type {
-  CapabilityField, ContentPage, CreatorSummary, IntakeProgress, RequirementForm, TaskDetail, TaskStatus,
+  AudienceProfile, CapabilityDimension, CapabilityField, ContentPage,
+  CreatorLibraryDetail, CreatorLibraryQuote, CreatorLibrarySummary, CreatorSummary, IntakeProgress,
+  RangeValue, RequirementForm, RequirementFormV2, TaskDetail, TaskStatus,
 } from "./types";
 import { BrandMark, EmptyState, ErrorState, LoadingState, PageHeader, SkeletonRows, StatusBadge } from "./ui";
 
@@ -38,6 +46,7 @@ export function LoginPage() {
   const location = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const destination = (location.state as { from?: string } | null)?.from || "/tasks";
@@ -67,7 +76,15 @@ export function LoginPage() {
         <h2>欢迎回来</h2>
         <p>登录后查看公司共享任务与采集结果。</p>
         <label>产品账号<input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="请输入账号" required /></label>
-        <label>密码<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="请输入密码" required /></label>
+        <label>密码
+          {/* 默认保持隐藏；切换只改 input 的 type，受控 value 不参与，因此已输入内容不会被清空。 */}
+          <div className="password-field">
+            <input type={passwordVisible ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="请输入密码" required />
+            <button type="button" className="password-toggle" aria-label={passwordVisible ? "隐藏密码" : "显示密码"} aria-pressed={passwordVisible} title={passwordVisible ? "隐藏密码" : "显示密码"} onClick={() => setPasswordVisible((visible) => !visible)}>
+              {passwordVisible ? <EyeOff size={17} /> : <Eye size={17} />}
+            </button>
+          </div>
+        </label>
         {error && <div className="form-error" role="alert"><AlertCircle size={16} />{error}</div>}
         <button className="button primary login-button" disabled={busy}>{busy ? <><LoaderCircle className="spin" size={18} />正在验证</> : <>安全登录<ArrowRight size={18} /></>}</button>
         <div className="security-note"><LockKeyhole size={15} />独立产品会话 · 操作身份可审计</div>
@@ -135,8 +152,26 @@ function Metric({ label, value, detail, accent = "" }: { label: string; value: n
   return <div className={`metric ${accent}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>;
 }
 
-function emptyRequirement(target = 20): RequirementForm {
-  return { schema_version: "requirement_form.v1", platform: "douyin_xingtu", keyword: null, creator_types: [], followers: null, creator_gender: null, creator_regions: [], quote: null, sort_key: null, target_count: target };
+function emptyRequirement(target = 20): RequirementFormV2 {
+  return { schema_version: "requirement_form.v2", platform: "douyin_xingtu", keyword: null, creator_types: [], followers: null, creator_gender: null, creator_regions: [], creator_education: null, yellow_v_certification: null, connection_users: null, viewer_profile: null, fan_profile: null, quote: null, sort_key: null, target_count: target };
+}
+
+function upgradeRequirement(form: RequirementForm): RequirementFormV2 {
+  if (form.schema_version === "requirement_form.v2") return form;
+  const upgraded = emptyRequirement(form.target_count);
+  upgraded.keyword = form.keyword;
+  if (form.creator_gender === "male" || form.creator_gender === "female") upgraded.creator_gender = form.creator_gender;
+  if (form.followers) upgraded.followers = { min: form.followers.min === null ? null : form.followers.min / 10_000, max: form.followers.max === null ? null : form.followers.max / 10_000, unit: "ten_thousand_count" };
+  upgraded.sort_key = form.sort_key;
+  return upgraded;
+}
+
+function emptyProfile(): AudienceProfile {
+  return { age: [], gender: null, device_brand: [], city_level: [], crowd: [] };
+}
+
+function hasBusinessFilter(form: RequirementFormV2) {
+  return Boolean(form.keyword?.trim() || form.creator_gender || form.creator_regions.length || form.creator_education || form.yellow_v_certification || form.connection_users || form.followers || form.viewer_profile || form.fan_profile);
 }
 
 export function NewTaskPage() {
@@ -145,21 +180,25 @@ export function NewTaskPage() {
   const origin = search.get("origin");
   const capabilities = useQuery({ queryKey: ["capabilities"], queryFn: api.capabilities });
   const original = useQuery({ queryKey: ["task", origin], queryFn: () => api.task(origin!), enabled: Boolean(origin) });
-  const [form, setForm] = useState<RequirementForm>(emptyRequirement());
+  const [form, setForm] = useState<RequirementFormV2>(emptyRequirement());
   const [clientError, setClientError] = useState("");
   const keyRef = useRef(crypto.randomUUID());
   useEffect(() => { if (capabilities.data && !origin) setForm(emptyRequirement(capabilities.data.target_count_default)); }, [capabilities.data, origin]);
-  useEffect(() => { if (original.data?.requirement) setForm(original.data.requirement); }, [original.data]);
+  useEffect(() => { if (original.data?.requirement) setForm(upgradeRequirement(original.data.requirement)); }, [original.data]);
   const submit = useMutation({ mutationFn: () => api.createTask(form, keyRef.current, origin), onSuccess: (result) => navigate(`/tasks/${result.root_task_id}`) });
-  function update<K extends keyof RequirementForm>(key: K, value: RequirementForm[K]) { setForm((current) => ({ ...current, [key]: value })); }
+  function update<K extends keyof RequirementFormV2>(key: K, value: RequirementFormV2[K]) { setForm((current) => ({ ...current, [key]: value })); }
   function submitForm(event: FormEvent) {
     event.preventDefault(); setClientError("");
-    if (!form.keyword?.trim() && !form.creator_types.length && !form.followers && !form.creator_gender && !form.creator_regions.length && !form.quote) { setClientError("请至少设置一项业务筛选条件。"); return; }
+    if (!hasBusinessFilter(form)) { setClientError("请至少设置一项业务筛选条件。"); return; }
     submit.mutate();
   }
   if (capabilities.isLoading || (origin && original.isLoading)) return <div className="page-wrap"><LoadingState label="正在读取可用筛选能力" /></div>;
   if (capabilities.isError) return <div className="page-wrap"><ErrorState error={capabilities.error} retry={() => capabilities.refetch()} /></div>;
   const cap = capabilities.data!;
+  const keywordField = cap.fields.find((field) => field.field === "keyword");
+  const backgroundFields = cap.fields.filter((field) => field.group === "背景信息");
+  const audienceFields = cap.fields.filter((field) => field.group === "受众画像");
+  const summary = selectedConditionSummary(form, cap.fields);
   return <div className="page-wrap narrow-page">
     <PageHeader eyebrow={origin ? "MODIFY & RESUBMIT" : "NEW COLLECTION TASK"} title={origin ? "修改并重新提交" : "创建采集任务"} description={origin ? "旧任务与原始需求保持不变，本次提交会创建一个新任务。" : "只展示当前真实核验通过的星图筛选能力。"} actions={<Link className="button ghost" to={origin ? `/tasks/${origin}` : "/tasks"}><ArrowLeft size={17} />返回</Link>} />
     <form className="intake-layout" onSubmit={submitForm}>
@@ -167,7 +206,9 @@ export function NewTaskPage() {
         <div className="section-heading"><span className="step-index">01</span><div><h2>达人筛选条件</h2><p>系统会先转换并校验需求，合法后才申请浏览器资源。</p></div></div>
         <div className="capability-banner"><ShieldCheck size={18} /><div><strong>已核验能力版本</strong><span>{cap.capability_version}</span></div><em>{cap.fields.length} 项条件可用</em></div>
         <div className="field-grid">
-          {cap.fields.map((field) => <CapabilityInput key={field.field} field={field} form={form} update={update} />)}
+          {keywordField && <CapabilityInput field={keywordField} form={form} update={update} setForm={setForm} />}
+          <fieldset className="capability-group"><legend>背景信息</legend><p>达人自身属性</p><div className="field-grid">{backgroundFields.map((field) => <CapabilityInput key={field.field} field={field} form={form} update={update} setForm={setForm} />)}</div></fieldset>
+          <fieldset className="capability-group"><legend>受众画像</legend><p>连接深度、粉丝量与唯一一种画像</p><div className="field-grid">{audienceFields.map((field) => <CapabilityInput key={field.field} field={field} form={form} update={update} setForm={setForm} />)}</div><div className="profile-exclusion"><ShieldCheck size={15} />巨量星图仅允许观众画像与粉丝画像二选一；选择一侧会清空另一侧。</div></fieldset>
           <label className="field"><span>目标达人数量 <i>必填</i></span><div className="number-field"><input type="number" min={cap.target_count_min} max={cap.target_count_max} step={1} value={form.target_count} onChange={(e) => update("target_count", Number(e.target.value))} required /><b>位</b></div><small>允许 {cap.target_count_min}—{cap.target_count_max}，默认 {cap.target_count_default}。平台实际可发现数量受当前搜索能力边界限制。</small></label>
         </div>
         <div className="fixed-setting"><span>排序方式</span><strong>{cap.fixed_sort_label}</strong><small>固定由当前平台能力决定</small></div>
@@ -175,7 +216,8 @@ export function NewTaskPage() {
       </section>
       <aside className="submit-card">
         <div className="section-heading compact"><span className="step-index">02</span><div><h2>确认提交</h2><p>提交后立即获得任务编号。</p></div></div>
-        <dl><div><dt>平台</dt><dd>巨量星图</dd></div><div><dt>业务条件</dt><dd>{form.keyword?.trim() ? `内容关键词“${form.keyword.trim()}”` : "待填写"}</dd></div><div><dt>目标数量</dt><dd>{form.target_count} 位</dd></div><div><dt>排序</dt><dd>{cap.fixed_sort_label}</dd></div></dl>
+        <dl><div><dt>平台</dt><dd>巨量星图</dd></div><div><dt>已选条件</dt><dd>{summary.length ? `${summary.length} 项` : "待填写"}</dd></div><div><dt>目标数量</dt><dd>{form.target_count} 位</dd></div><div><dt>排序</dt><dd>{cap.fixed_sort_label}</dd></div></dl>
+        {summary.length > 0 && <ul className="condition-summary">{summary.map((item) => <li key={item}>{item}</li>)}</ul>}
         <div className="submit-assurance"><Check size={16} /><span>重复点击或网络重试不会创建第二个任务</span></div>
         <button className="button primary submit-button" disabled={submit.isPending}>{submit.isPending ? <><LoaderCircle className="spin" size={18} />正在可靠提交</> : <><WandSparkles size={18} />提交采集任务</>}</button>
         <p className="submit-note">提交不代表立即访问平台。需求将经过模型转换、Schema 校验和确定性业务校验。</p>
@@ -184,12 +226,73 @@ export function NewTaskPage() {
   </div>;
 }
 
-function CapabilityInput({ field, form, update }: { field: CapabilityField; form: RequirementForm; update: <K extends keyof RequirementForm>(key: K, value: RequirementForm[K]) => void }) {
+type FormUpdate = <K extends keyof RequirementFormV2>(key: K, value: RequirementFormV2[K]) => void;
+
+function CapabilityInput({ field, form, update, setForm }: { field: CapabilityField; form: RequirementFormV2; update: FormUpdate; setForm: Dispatch<SetStateAction<RequirementFormV2>> }) {
   if (field.field === "keyword") return <label className="field full"><span>{field.label} <i>已核验</i></span><div className="input-with-icon"><Search size={18} /><input value={form.keyword ?? ""} onChange={(e) => update("keyword", e.target.value || null)} placeholder="例如：宠物、母婴辅食、户外露营" /></div><small>按达人内容关键词查找。关键词原文不会被模型改写。</small></label>;
-  if (field.field === "followers") return <div className="field full"><span>{field.label} <i>已核验</i></span><div className="range-fields"><input type="number" min="0" placeholder="最小值" onChange={(e) => update("followers", { min: e.target.value ? Number(e.target.value) : null, max: form.followers?.max ?? null, unit: "count" })} /><b>—</b><input type="number" min="0" placeholder="最大值" onChange={(e) => update("followers", { min: form.followers?.min ?? null, max: e.target.value ? Number(e.target.value) : null, unit: "count" })} /></div></div>;
-  const key = field.field === "creator_type" ? "creator_types" : field.field === "region" ? "creator_regions" : field.field === "gender" ? "creator_gender" : null;
-  if (key && field.options.length) return <label className="field"><span>{field.label} <i>已核验</i></span><select value={key === "creator_gender" ? form.creator_gender ?? "" : ""} onChange={(e) => { if (key === "creator_gender") update(key, e.target.value || null); else update(key, e.target.value ? [e.target.value] : []); }}><option value="">请选择</option>{field.options.map((option) => <option key={option}>{option}</option>)}</select></label>;
+  if (field.field === "gender") return <SelectField field={field} value={form.creator_gender} onChange={(value) => update("creator_gender", value as RequirementFormV2["creator_gender"])} />;
+  if (field.field === "education") return <SelectField field={field} value={form.creator_education} onChange={(value) => update("creator_education", value as RequirementFormV2["creator_education"])} />;
+  if (field.field === "yellow_v") return <SelectField field={field} value={form.yellow_v_certification} onChange={(value) => update("yellow_v_certification", value as RequirementFormV2["yellow_v_certification"])} />;
+  if (field.field === "region") return <RegionField field={field} form={form} update={update} />;
+  if (field.field === "connection_users") return <ConnectionField field={field} value={form.connection_users} onChange={(value) => update("connection_users", value)} />;
+  if (field.field === "followers") return <FollowersField field={field} value={form.followers} onChange={(value) => update("followers", value)} />;
+  if (field.field === "viewer_profile" || field.field === "fan_profile") return <ProfileField field={field} value={form[field.field]} onChange={(value) => setForm((current) => ({ ...current, [field.field]: value, [field.field === "viewer_profile" ? "fan_profile" : "viewer_profile"]: value ? null : current[field.field === "viewer_profile" ? "fan_profile" : "viewer_profile"] }))} />;
   return null;
+}
+
+function SelectField({ field, value, onChange }: { field: CapabilityField; value: string | null; onChange: (value: string | null) => void }) {
+  return <label className="field"><span>{field.label} <i>已核验</i></span><select value={value ?? ""} onChange={(event) => onChange(event.target.value || null)}><option value="">全部／不限</option>{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+}
+
+function RegionField({ field, form, update }: { field: CapabilityField; form: RequirementFormV2; update: FormUpdate }) {
+  const [province, setProvince] = useState("");
+  const [city, setCity] = useState("");
+  const node = field.region_tree.find((item) => item.value === province);
+  function add() {
+    if (!province) return;
+    let next = form.creator_regions.filter((item) => item.province_code !== province || (city ? item.city : false));
+    if (city) next = next.filter((item) => !(item.province_code === province && !item.city));
+    const candidate = { province_code: province, ...(city ? { city } : {}) };
+    if (!next.some((item) => item.province_code === province && (item.city ?? null) === (city || null))) next.push(candidate);
+    update("creator_regions", next);
+  }
+  return <div className="field full"><span>{field.label} <i>已核验</i></span><div className="region-picker"><select aria-label="省级地域" value={province} onChange={(event) => { setProvince(event.target.value); setCity(""); }}><option value="">选择省份</option>{field.region_tree.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select><select aria-label="二级地域" value={city} onChange={(event) => setCity(event.target.value)} disabled={!node?.children.length}><option value="">整省</option>{node?.children.map((item) => <option value={item.label} key={item.value}>{item.label}</option>)}</select><button type="button" className="button secondary" onClick={add}>添加</button></div><div className="selection-chips">{form.creator_regions.map((item) => { const provinceLabel = field.region_tree.find((nodeItem) => nodeItem.value === item.province_code)?.label ?? item.province_code; const label = item.city ? `${provinceLabel} / ${item.city}` : provinceLabel; return <button type="button" key={`${item.province_code}:${item.city ?? ""}`} onClick={() => update("creator_regions", form.creator_regions.filter((current) => current !== item))}>{label} ×</button>; })}</div></div>;
+}
+
+function RangeInputs({ value, constraint, onChange }: { value: RangeValue | null; constraint?: { min: number; max: number } | null; onChange: (value: RangeValue | null) => void }) {
+  function bound(key: "min" | "max", raw: string) { const next = { min: value?.min ?? null, max: value?.max ?? null, unit: "ten_thousand_count" as const, [key]: raw === "" ? null : Number(raw) }; onChange(next.min === null && next.max === null ? null : next); }
+  return <div className="range-fields"><input aria-label="下限" type="number" min={constraint?.min ?? 0} max={constraint?.max} value={value?.min ?? ""} placeholder="下限" onChange={(event) => bound("min", event.target.value)} /><b>—</b><input aria-label="上限" type="number" min={constraint?.min ?? 0} max={constraint?.max} value={value?.max ?? ""} placeholder="上限" onChange={(event) => bound("max", event.target.value)} /><em>w</em></div>;
+}
+
+function ConnectionField({ field, value, onChange }: { field: CapabilityField; value: Record<string, RangeValue | null> | null; onChange: (value: Record<string, RangeValue | null> | null) => void }) {
+  function change(dimension: CapabilityDimension, range: RangeValue | null) { const next = { ...(value ?? {}), [dimension.key]: range }; if (!range) delete next[dimension.key]; onChange(Object.keys(next).length ? next : null); }
+  return <div className="field full"><span>{field.label} <i>已核验</i></span><div className="dimension-ranges">{field.dimensions.map((dimension) => <label key={dimension.key}><span>{dimension.label}</span><RangeInputs value={value?.[dimension.key] ?? null} constraint={dimension.range_constraints} onChange={(range) => change(dimension, range)} /></label>)}</div></div>;
+}
+
+function FollowersField({ field, value, onChange }: { field: CapabilityField; value: RangeValue | null; onChange: (value: RangeValue | null) => void }) {
+  const preset = field.options.find((option) => option.range && Number(option.range.min) === value?.min && (option.range.max === null ? value?.max === null : Number(option.range.max) === value?.max));
+  return <div className="field full"><span>{field.label} <i>已核验</i></span><select aria-label={field.label} value={preset?.value ?? (value ? "custom" : "")} onChange={(event) => { const option = field.options.find((item) => item.value === event.target.value); if (!option) onChange(null); else if (option.range) onChange({ min: option.range.min === null ? null : Number(option.range.min), max: option.range.max === null ? null : Number(option.range.max), unit: "ten_thousand_count" }); else if (option.value === "custom" && !value) onChange({ min: 0, max: null, unit: "ten_thousand_count" }); }}><option value="">全部／不限</option>{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{(value && !preset) && <RangeInputs value={value} constraint={field.range_constraints} onChange={onChange} />}</div>;
+}
+
+function ProfileField({ field, value, onChange }: { field: CapabilityField; value: AudienceProfile | null; onChange: (value: AudienceProfile | null) => void }) {
+  function change(dimension: CapabilityDimension, option: string, selected: boolean) { const next = value ? { ...value } : emptyProfile(); if (dimension.control === "single-select") next.gender = option || null; else { const key = dimension.key as "age" | "device_brand" | "city_level" | "crowd"; const current = next[key]; next[key] = selected ? [...current, option] : current.filter((item) => item !== option); } onChange(next.age.length || next.gender || next.device_brand.length || next.city_level.length || next.crowd.length ? next : null); }
+  return <div className="field full profile-field"><span>{field.label} <i>已核验</i></span>{field.dimensions.map((dimension) => <div className="profile-dimension" key={dimension.key}><strong>{dimension.label}</strong>{dimension.control === "single-select" ? <select value={value?.gender ?? ""} onChange={(event) => change(dimension, event.target.value, true)}><option value="">不限</option>{dimension.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <div className="option-grid">{dimension.options.map((option) => { const key = dimension.key as "age" | "device_brand" | "city_level" | "crowd"; const checked = value?.[key].includes(option.value) ?? false; return <label key={option.value}><input type="checkbox" checked={checked} onChange={(event) => change(dimension, option.value, event.target.checked)} />{option.label}</label>; })}</div>}</div>)}</div>;
+}
+
+function selectedConditionSummary(form: RequirementFormV2, fields: CapabilityField[]) {
+  const result: string[] = [];
+  const field = (name: string) => fields.find((item) => item.field === name);
+  const label = (name: string, value: string | null) => field(name)?.options.find((item) => item.value === value)?.label ?? value;
+  if (form.keyword?.trim()) result.push(`关键词：${form.keyword.trim()}`);
+  if (form.creator_gender) result.push(`达人性别：${label("gender", form.creator_gender)}`);
+  if (form.creator_regions.length) result.push(`所在地域：${form.creator_regions.length} 项`);
+  if (form.creator_education) result.push(`学历：${label("education", form.creator_education)}`);
+  if (form.yellow_v_certification) result.push(`黄v：${label("yellow_v", form.yellow_v_certification)}`);
+  if (form.connection_users) result.push(`连接用户：${Object.keys(form.connection_users).length} 个区间`);
+  if (form.followers) result.push(`粉丝量：${form.followers.min ?? "0"}—${form.followers.max ?? "不限"}w`);
+  if (form.viewer_profile) result.push("观众画像：已设置");
+  if (form.fan_profile) result.push("粉丝画像：已设置");
+  return result;
 }
 
 export function TaskDetailPage() {
@@ -230,7 +333,7 @@ export function TaskDetailPage() {
     <section className="task-hero panel">
       <div className="hero-status"><StatusBadge status={item.status} pulse={!terminalStatuses.has(item.status)} /><h2>{item.stage}</h2><p>{taskMessage(item)}</p></div>
       <ProgressRail status={item.status} />
-      <div className="hero-meta"><div><span>创建人</span><strong>{item.created_by_name || "系统"}</strong></div><div><span>创建时间</span><strong>{formatDate(item.created_at)}</strong></div><div><span>最近更新</span><strong>{formatDate(item.updated_at)}</strong></div><div><span>能力版本</span><strong>{item.capability_version || "历史任务"}</strong></div></div>
+      <div className="hero-meta"><div><span>创建人</span><strong>{item.created_by_name || "系统"}</strong></div><div><span>创建时间</span><strong>{formatDate(item.created_at)}</strong></div><div><span>最近更新</span><strong title="服务端最后一次改动这条任务记录的时间（状态推进、进度保存或人工操作），不代表任务完成时刻">{formatDate(item.updated_at)}</strong></div>{/* 只在任务真正进入终态后展示完成时间，进行中的任务不显示该字段，避免误读为已完成。 */}{item.completed_at && <div><span>完成时间</span><strong>{formatDate(item.completed_at)}</strong></div>}<div><span>能力版本</span><strong>{item.capability_version || "历史任务"}</strong></div></div>
     </section>
     {item.challenge && <ChallengePanel task={item} />}
     {item.intake && <IntakePanel intake={item.intake} />}
@@ -377,57 +480,392 @@ function ProgressRail({ status }: { status: TaskStatus }) {
   return <div className="progress-rail">{stages.map((stage, index) => <div className={`${index < current ? "done" : index === current ? "current" : ""}`} key={stage.label}><span>{index < current ? <Check size={14} /> : index + 1}</span><b>{stage.label}</b></div>)}</div>;
 }
 
-function getText(payload: Record<string, unknown>, keys: string[]): string | null {
-  const queue: unknown[] = [payload]; let inspected = 0;
-  while (queue.length && inspected < 200) { const value = queue.shift(); inspected += 1; if (!value || typeof value !== "object") continue; for (const [key, child] of Object.entries(value)) { if (keys.includes(key) && ["string", "number"].includes(typeof child)) return String(child); if (child && typeof child === "object") queue.push(child); } }
-  return null;
+// 「任务内达人」与「达人库」共用同一套指标名称、取值与格式化规则：字段都从快照 JSONB 按达人库
+// 读模型使用的同名字段键读取，缺失即显示“暂无数据”，不推测数值。CPM/CPE 与达人库列表行一致地
+// 并列展示 21–60 秒与 60 秒以上两档平台原始值。
+function CreatorRow({ taskId, creator }: { taskId: string; creator: CreatorSummary }) {
+  const view = snapshotCreatorView(creator.payload, {
+    creator_id: creator.creator_id,
+    platform_creator_id: creator.platform_creator_id,
+    snapshot_id: creator.snapshot_id,
+    observed_at: creator.observed_at,
+  });
+  const name = view.display_name || `达人 ${creator.first_position + 1}`;
+  return <Link className="creator-row" to={`/tasks/${taskId}/creators/${creator.creator_id}`} aria-label={`查看达人 ${name} 详情`}>
+    <div className="creator-rank">{String(creator.first_position + 1).padStart(2, "0")}</div>
+    <div className="creator-avatar">{view.avatar_uri ? <img src={view.avatar_uri} alt="" /> : <UserRound size={20} />}</div>
+    <div className="creator-copy">
+      <strong>{name}</strong>
+      <span>{creatorTags(view) || "标签暂无数据"}</span>
+      <em>平台 ID {creator.platform_creator_id}</em>
+    </div>
+    <div className="creator-stat"><span>粉丝</span><strong>{numberText(view.followers.value)}</strong></div>
+    <div className="creator-stat"><span>月深度用户</span><strong>{rawMetric(view.monthly_deep_users)}</strong></div>
+    <div className="creator-stat engagement"><span>互动 / 完播原始值</span><strong>{rawMetric(view.interaction_rate)} / {rawMetric(view.completion_rate)}</strong></div>
+    <div className="creator-stat commercial"><span>CPM / CPE 原始值</span><strong>{rawMetric(view.expected_cpm_21_60)} / {rawMetric(view.expected_cpe_21_60)}</strong><small>21–60 秒 · 60 秒以上 {rawMetric(view.expected_cpm_60_plus)} / {rawMetric(view.expected_cpe_60_plus)}</small></div>
+    <span className={`view-label ${creator.view_kind}`}>{creator.view_kind === "draft" ? "执行中草稿" : "已发布快照"}</span>
+    <ChevronRight size={18} />
+  </Link>;
 }
 
-function CreatorRow({ taskId, creator }: { taskId: string; creator: CreatorSummary }) {
-  const name = getText(creator.payload, ["nickname", "name", "display_name"]) || `达人 ${creator.first_position + 1}`;
-  const followers = getText(creator.payload, ["follower_count", "followers", "fans_count"]);
-  return <Link className="creator-row" to={`/tasks/${taskId}/creators/${creator.creator_id}`}><div className="creator-rank">{String(creator.first_position + 1).padStart(2, "0")}</div><div className="creator-avatar"><UserRound size={20} /></div><div className="creator-copy"><strong>{name}</strong><span>平台 ID {creator.platform_creator_id}</span></div>{followers && <div className="creator-stat"><span>粉丝</span><strong>{followers}</strong></div>}<span className={`view-label ${creator.view_kind}`}>{creator.view_kind === "draft" ? "执行中草稿" : "已发布快照"}</span><ChevronRight size={18} /></Link>;
+/** 达人标签：达人类型与行业标签，缺失的维度直接省略，不使用占位词。 */
+function creatorTags(creator: Pick<CreatorLibrarySummary, "creator_type_label" | "industry_labels">) {
+  return [creator.creator_type_label, ...creator.industry_labels].filter(Boolean).join(" · ");
+}
+
+/**
+ * 统一的达人详情视图（CD-02）。
+ *
+ * 「任务中心 → 任务详情 → 达人详情」与「达人库 → 达人详情」共用 `CreatorProfile`：左侧身份资料卡
+ * 与 5 个业务分区完全一致，两个入口各自负责取数：
+ * - 任务入口读任务自己的不可变快照（`/api/tasks/{id}/creators/{cid}`），因此展示的是该任务当时
+ *   采集到的观测值，并额外保留任务快照特有的「精选作品」与草稿提示。
+ * - 达人库入口读达人库当前投影（`/api/creator-library/{cid}`），额外展示该入口独有的合作报价与
+ *   历史快照；任务快照里不存在这两类数据，因此任务入口不渲染，而不是用空值伪造。
+ */
+/**
+ * 字段来源抽屉（`数据质量与字段来源`）。
+ *
+ * CD-03 需求 4.10 移除了左栏的「数据来源」入口，字段来源、单位、周期与观测时间数据本身并未删除；
+ * 抽屉由本组件作为左栏以外的覆层挂载，任务入口与达人库入口都能打开，`open` 由父级控制。
+ */
+function ProvenancePanel({ creator, payload }: { creator: CreatorLibraryDetail; payload: Record<string, unknown> }) {
+  const [open, setOpen] = useState(false);
+  const catalog = useFieldCatalog();
+  const index = useMemo(() => indexCatalog(catalog), [catalog]);
+  return <>
+    <p className="rail-snapshot-note">
+      平台字段的状态、单位、周期与观测时间见
+      <button className="link-button" type="button" onClick={() => setOpen(true)}>字段来源</button>
+      {creator.latest_snapshot_id ? `（最新不可变快照 ${creator.latest_snapshot_id}）` : ""}。
+    </p>
+    <ProvenanceDrawer
+      open={open}
+      onClose={() => setOpen(false)}
+      payload={payload}
+      index={index}
+      moduleStatuses={creator.module_statuses}
+      fieldSources={creator.field_sources}
+      collectedCount={creator.collected_field_count}
+      failedCount={creator.failed_field_count}
+    />
+  </>;
+}
+
+function CreatorDetailView({ creator, profilePayload, backTo, backLabel, scopeLabel, description, badgeLabel, badgeTone, notice, contents, historyChapter }: {
+  creator: CreatorLibraryDetail;
+  profilePayload: Record<string, unknown>;
+  backTo: string;
+  backLabel: string;
+  scopeLabel: string;
+  description?: string;
+  badgeLabel: string;
+  badgeTone: string;
+  notice?: ReactNode;
+  /** 两组精选视频集合的真实数据源；由各入口按自己的快照范围提供。 */
+  contents?: FeaturedContent;
+  historyChapter?: ReactNode;
+}) {
+  return <CreatorProfile
+    creator={creator}
+    payload={profilePayload}
+    backTo={backTo}
+    backLabel={backLabel}
+    scopeLabel={scopeLabel}
+    description={description}
+    badgeLabel={badgeLabel}
+    badgeTone={badgeTone}
+    notice={notice}
+    contents={contents}
+    historyChapter={historyChapter}
+    overlay={<ProvenancePanel creator={creator} payload={profilePayload} />}
+  />;
+}
+
+/**
+ * 精选视频集合（CD-04）的取数适配。
+ *
+ * 两个入口的数据范围不同、形状相同：任务入口读**本任务快照**的集合，达人库入口读该达人**最新快照**
+ * 的集合。卡片字段是 `FieldObservation` 封套（数字为 `{kind, amount, bound}`），这里只做解包与
+ * 归一化，不推测缺失值、不构造作品链接：作品链接只取平台返回的 `canonical_link` / `link`。
+ */
+function featuredCardView(outer: Record<string, unknown>, position: number): FeaturedCardView {
+  // The task endpoint returns the card payload at the top level; the library endpoint returns the
+  // `featured_cards` row shape (`{card_id, position, cover_status, truncated_fields, payload}`).
+  // Reading through `payload` here gives both entries exactly one card shape.
+  const card = (
+    outer.payload && typeof outer.payload === "object" && !Array.isArray(outer.payload)
+      ? outer.payload
+      : outer
+  ) as Record<string, unknown>;
+  const cover = (card.cover && typeof card.cover === "object" ? card.cover : {}) as Record<string, unknown>;
+  const asText = (value: unknown) => (typeof value === "string" && value.trim() ? value : null);
+  return {
+    card_id: asText(card.card_id) ?? asText(outer.card_id),
+    position: Number.isFinite(Number(outer.position))
+      ? Number(outer.position)
+      : Number.isFinite(Number(card.position))
+        ? Number(card.position)
+        : position,
+    platform_content_id: asText(card.platform_content_id),
+    local_key: asText(card.local_key),
+    canonical_link: asText(card.canonical_link),
+    link_from_fields: asText(cardFieldValue(card, "link")),
+    cover_object_id: asText(cover.object_id) ?? asText(card.cover_object_id) ?? asText(outer.cover_object_id),
+    cover_status: String(card.cover_status ?? cover.status ?? outer.cover_status ?? "NOT_ATTEMPTED"),
+    title: asText(cardFieldValue(card, "title")),
+    subtitle: asText(cardFieldValue(card, "subtitle")),
+    truncated_fields: Array.isArray(outer.truncated_fields)
+      ? outer.truncated_fields.map(String)
+      : Array.isArray(card.truncated_fields)
+        ? card.truncated_fields.map(String)
+        : [],
+    play: cardFieldValue(card, "play"),
+    like: cardFieldValue(card, "like"),
+    comment: cardFieldValue(card, "comment"),
+  };
+}
+
+function featuredCollectionView(
+  type: "excellent_reach" | "excellent_seeding",
+  page: ContentPage | undefined,
+): FeaturedCollectionView | null {
+  if (!page) return null;
+  return {
+    collection_type: type,
+    status: page.status,
+    view_kind: page.view_kind,
+    observed_at: page.observed_at ?? null,
+    coverage_gaps: page.coverage_gaps ?? [],
+    // A partial or malformed response must degrade to an empty grid, never break the chapter.
+    cards: Array.isArray(page.cards)
+      ? page.cards.map((card, index) => featuredCardView(card, index))
+      : [],
+  };
+}
+
+/**
+ * 两组精选集合 + 每个入口各自的封面地址构造器。
+ *
+ * 封面统一走本项目对象存储的授权端点（任务按 root_task_id 授权，达人库按 creator_id 授权），
+ * 因此不使用平台签名外链——那些 URL 会过期。
+ */
+function useFeaturedContent(
+  scope: { kind: "task"; taskId: string; creatorId: string } | { kind: "library"; creatorId: string },
+): FeaturedContent {
+  const taskScoped = scope.kind === "task";
+  const fetchType = (type: "excellent_reach" | "excellent_seeding") =>
+    taskScoped
+      ? api.contents((scope as { taskId: string }).taskId, scope.creatorId, type)
+      : api.creatorLibraryContents(scope.creatorId, type);
+  const reach = useQuery({
+    queryKey: ["featured", scope.kind, scope.creatorId, (scope as { taskId?: string }).taskId ?? "", "excellent_reach"],
+    queryFn: () => fetchType("excellent_reach"),
+  });
+  const seeding = useQuery({
+    queryKey: ["featured", scope.kind, scope.creatorId, (scope as { taskId?: string }).taskId ?? "", "excellent_seeding"],
+    queryFn: () => fetchType("excellent_seeding"),
+  });
+  const coverUrl = taskScoped
+    ? (objectId: string) =>
+        `/api/tasks/${(scope as { taskId: string }).taskId}/covers/${encodeURIComponent(objectId)}`
+    : (objectId: string) => api.creatorLibraryCover(scope.creatorId, objectId);
+  return {
+    reach: featuredCollectionView("excellent_reach", reach.data),
+    seeding: featuredCollectionView("excellent_seeding", seeding.data),
+    coverUrl,
+    loading: reach.isLoading || seeding.isLoading,
+    error: reach.error ?? seeding.error ?? null,
+    onRetry: () => {
+      void reach.refetch();
+      void seeding.refetch();
+    },
+  };
+}
+
+/**
+ * 报价与历史（CD-04 调整）：报价数据本身不在「商业能力」内展示，改由本入口的独立章节承载。
+ *
+ * 任务入口只有本任务的不可变快照，报价来自快照内 `commercial.cooperation_offers` 的平台原值；
+ * 这与达人库入口读 `douyin_xingtu_creator_quote_observations`（跨任务、按合作形式取最新）是**两个
+ * 不同数据范围**，因此不把任务的快照报价与达人库的当前报价混为一谈。
+ */
+function taskSnapshotQuotes(payload: Record<string, unknown>): CreatorLibraryQuote[] {
+  const modules = (payload.modules && typeof payload.modules === "object" ? payload.modules : {}) as Record<string, unknown>;
+  const commercial = (modules.commercial && typeof modules.commercial === "object" ? modules.commercial : {}) as Record<string, unknown>;
+  const fields = Array.isArray(commercial.fields) ? commercial.fields : [];
+  const offer = fields.find(
+    (entry) => entry && typeof entry === "object" && (entry as Record<string, unknown>).field_key === "cooperation_offers",
+  ) as Record<string, unknown> | undefined;
+  if (!offer || offer.status !== "COLLECTED") return [];
+  const value = (offer.value && typeof offer.value === "object" ? offer.value : {}) as Record<string, unknown>;
+  const rows = Array.isArray(value.data) ? value.data : [];
+  const asText = (input: unknown) => (typeof input === "string" && input.trim() ? input : null);
+  const observedAt = asText(offer.observed_at) ?? new Date(0).toISOString();
+  return rows
+    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
+    .map((row, position) => ({
+      snapshot_id: "",
+      position,
+      cooperation_form: asText(row.desc) ?? asText(row.field),
+      settlement_description: asText(row.settlement_desc),
+      price_raw: (row.price ?? null) as string | number | null,
+      origin_price_raw: (row.origin_price ?? null) as string | number | null,
+      observed_at: observedAt,
+      offer_raw: row,
+    }));
 }
 
 export function CreatorDetailPage() {
   const { taskId = "", creatorId = "" } = useParams();
-  const [tab, setTab] = useState<"excellent_reach" | "excellent_seeding">("excellent_reach");
   const creator = useQuery({ queryKey: ["creator", taskId, creatorId], queryFn: () => api.creator(taskId, creatorId) });
-  const contents = useInfiniteQuery({ queryKey: ["contents", taskId, creatorId, tab], queryFn: ({ pageParam }) => api.contents(taskId, creatorId, tab, pageParam), initialPageParam: null as string | null, getNextPageParam: (page) => page.next_cursor ?? undefined, enabled: Boolean(creator.data) });
+  const contents = useFeaturedContent({ kind: "task", taskId, creatorId });
+  const catalog = useFieldCatalog();
+  const index = useMemo(() => indexCatalog(catalog), [catalog]);
   if (creator.isLoading) return <div className="page-wrap"><LoadingState label="正在读取达人快照" /></div>;
   if (creator.isError || !creator.data) return <div className="page-wrap"><ErrorState error={creator.error} retry={() => creator.refetch()} /></div>;
-  const item = creator.data; const name = getText(item.payload, ["nickname", "name", "display_name"]) || `达人 ${item.first_position + 1}`;
-  return <div className="page-wrap">
-    <div className="detail-topline"><Link to={`/tasks/${taskId}`} className="back-link"><ArrowLeft size={17} />返回任务</Link><span>/</span><span>{name}</span></div>
-    <PageHeader eyebrow="CREATOR SNAPSHOT" title={name} description={`平台 ID ${item.platform_creator_id}`} actions={<span className={`view-label large ${item.view_kind}`}>{item.view_kind === "draft" ? "执行中草稿" : "不可变任务快照"}</span>} />
-    {item.view_kind === "draft" && <div className="draft-banner"><Clock3 size={18} /><div><strong>这是执行中的持久草稿</strong><span>字段与作品仍可能补齐；任务发布后将切换到不可变快照。</span></div></div>}
-    <div className="creator-detail-grid">
-      <section className="panel profile-panel"><div className="panel-heading"><div><h2>达人资料模块</h2><p>{item.observed_at ? `观测于 ${formatDate(item.observed_at)}` : "仅展示已持久数据"}</p></div><FileCheck2 size={20} /></div><ProfileModules payload={item.payload} /></section>
-      <section className="panel content-panel"><div className="panel-heading"><div><h2>精选作品</h2><p>两组集合独立呈现，跨组重复作品保留。</p></div></div><div className="tabs" role="tablist"><button role="tab" aria-selected={tab === "excellent_reach"} className={tab === "excellent_reach" ? "active" : ""} onClick={() => setTab("excellent_reach")}>优秀传播视频</button><button role="tab" aria-selected={tab === "excellent_seeding"} className={tab === "excellent_seeding" ? "active" : ""} onClick={() => setTab("excellent_seeding")}>优秀种草视频</button></div>{contents.isLoading ? <SkeletonRows rows={3} /> : contents.isError ? <ErrorState error={contents.error} retry={() => contents.refetch()} /> : <><ContentCards page={{ ...contents.data!.pages[0], cards: contents.data!.pages.flatMap((page) => page.cards) }} taskId={taskId} />{contents.hasNextPage && <div className="pagination"><button className="button secondary" disabled={contents.isFetchingNextPage} onClick={() => contents.fetchNextPage()}>{contents.isFetchingNextPage ? "正在读取" : "查看更多作品"}<ArrowRight size={16} /></button></div>}</>}</section>
-    </div>
+  const item = creator.data;
+  const view = snapshotCreatorView(item.payload, {
+    creator_id: item.creator_id,
+    platform_creator_id: item.platform_creator_id,
+    snapshot_id: item.snapshot_id,
+    observed_at: item.observed_at,
+  });
+  const snapshotQuotes = taskSnapshotQuotes(item.payload);
+  return <CreatorDetailView
+    creator={view}
+    profilePayload={item.payload}
+    backTo={`/tasks/${taskId}`}
+    backLabel="返回任务"
+    scopeLabel="本任务采集快照"
+    description="指标取自本任务采集的不可变快照，与达人库当前投影可能不同步；字段口径均为平台原始值。"
+    badgeLabel={item.view_kind === "draft" ? "执行中草稿" : completeLabel(view)}
+    badgeTone={item.view_kind === "draft" || !(view.profile_complete && view.pipeline_complete) ? "draft" : "published"}
+    notice={item.view_kind === "draft" ? <div className="draft-banner"><Clock3 size={18} /><div><strong>这是执行中的持久草稿</strong><span>字段与作品仍可能补齐；任务发布后将切换到不可变快照。</span></div></div> : undefined}
+    contents={contents}
+    historyChapter={snapshotQuotes.length ? <div className="profile-sections">
+      <QuoteTable payload={item.payload} index={index} />
+      <section className="panel library-detail-panel"><div className="panel-heading"><div><h2>报价观察</h2><p>本任务快照内每次采集到的报价观察，保留原始报价与合作形式。</p></div><span>{snapshotQuotes.length} 条</span></div><div className="quote-list">{snapshotQuotes.map((quote) => <div key={`${quote.position}-${quote.cooperation_form ?? ""}`}><strong>{quote.cooperation_form || "未标记合作形式"}</strong><span>{quote.settlement_description || "结算说明暂无数据"}</span><b>{quote.price_raw === null ? "暂无报价" : String(quote.price_raw)}</b>{quote.origin_price_raw !== null && quote.origin_price_raw !== quote.price_raw && <em>原价 {String(quote.origin_price_raw)}</em>}<small>{formatDate(quote.observed_at)}</small></div>)}</div></section>
+    </div> : undefined}
+  />;
+}
+
+function completeLabel(creator: CreatorLibraryDetail) {
+  return creator.profile_complete && creator.pipeline_complete ? "采集完整" : "数据不完整";
+}
+
+/**
+ * The platform value a featured card carries for `fieldKey`.
+ *
+ * Card fields are `FieldObservation` envelopes, so a number arrives as `{kind, amount, bound}` and a
+ * title as a plain string; both shapes are unwrapped here.
+ */
+function cardFieldValue(card: Record<string, unknown>, fieldKey: string): unknown {
+  const fields = card.fields;
+  if (!Array.isArray(fields)) return null;
+  for (const entry of fields) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    if (record.field_key !== fieldKey) continue;
+    return record.value;
+  }
+  return null;
+}
+
+function rawMetric(metric: { raw_value: string | null; value: string | number | null; is_approximate: boolean }) {
+  const value = metric.raw_value ?? (metric.value === null ? "暂无数据" : String(metric.value));
+  return metric.is_approximate && value !== "暂无数据" ? `≈${value}` : value;
+}
+
+function numberText(value: string | number | null) { return value === null ? "—" : Number(value).toLocaleString("zh-CN"); }
+
+export function CreatorLibraryPage() {
+  const [search, setSearch] = useSearchParams();
+  const params = useMemo(() => new URLSearchParams(search), [search]);
+  const library = useInfiniteQuery({
+    queryKey: ["creator-library", params.toString()],
+    queryFn: ({ pageParam }) => {
+      const value = new URLSearchParams(params);
+      value.set("limit", "20");
+      if (pageParam) value.set("cursor", pageParam);
+      return api.creatorLibrary(value);
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
+  });
+  const setFilter = (key: string, value: string) => {
+    const next = new URLSearchParams(search);
+    if (value) next.set(key, value); else next.delete(key);
+    next.delete("cursor"); setSearch(next);
+  };
+  const items = library.data?.pages.flatMap((page) => page.items) ?? [];
+  return <div className="page-wrap creator-library-page">
+    <PageHeader eyebrow="CREATOR LIBRARY" title="达人库" description="独立于任务结果的巨量星图当前达人资料；所有商业和表现指标保持平台原始口径。" />
+    <section className="panel library-filters">
+      <div className="panel-heading"><div><h2>筛选与排序</h2><p>缺失数据仍保留；数值筛选仅作用于已成功采集的原始值。</p></div><label className="library-check"><input type="checkbox" checked={search.get("complete_only") === "true"} onChange={(event) => setFilter("complete_only", event.target.checked ? "true" : "")} />仅看数据完整</label></div>
+      <div className="library-filter-grid">
+        <label>行业<input aria-label="按行业筛选" value={search.get("industry") ?? ""} onChange={(event) => setFilter("industry", event.target.value)} placeholder="例如：食品饮料" /></label>
+        <label>达人类型<input aria-label="按达人类型筛选" value={search.get("creator_type") ?? ""} onChange={(event) => setFilter("creator_type", event.target.value)} placeholder="例如：生活" /></label>
+        <label>省份<input aria-label="按省份筛选" value={search.get("province") ?? ""} onChange={(event) => setFilter("province", event.target.value)} placeholder="例如：北京市" /></label>
+        <label>城市<input aria-label="按城市筛选" value={search.get("city") ?? ""} onChange={(event) => setFilter("city", event.target.value)} placeholder="例如：朝阳区" /></label>
+        <label>粉丝数下限<input type="number" min="0" value={search.get("followers_min") ?? ""} onChange={(event) => setFilter("followers_min", event.target.value)} /></label>
+        <label>粉丝数上限<input type="number" min="0" value={search.get("followers_max") ?? ""} onChange={(event) => setFilter("followers_max", event.target.value)} /></label>
+        <label>互动原始值下限<input type="number" min="0" value={search.get("interaction_min") ?? ""} onChange={(event) => setFilter("interaction_min", event.target.value)} /></label>
+        <label>完播原始值下限<input type="number" min="0" value={search.get("completion_min") ?? ""} onChange={(event) => setFilter("completion_min", event.target.value)} /></label>
+        <label>预期 CPM 下限<input type="number" min="0" value={search.get("expected_cpm_min") ?? ""} onChange={(event) => setFilter("expected_cpm_min", event.target.value)} /></label>
+        <label>预期 CPE 下限<input type="number" min="0" value={search.get("expected_cpe_min") ?? ""} onChange={(event) => setFilter("expected_cpe_min", event.target.value)} /></label>
+        <label>合作形式<input aria-label="按合作形式筛选" value={search.get("cooperation_form") ?? ""} onChange={(event) => setFilter("cooperation_form", event.target.value)} placeholder="例如：植入视频" /></label>
+        <label>排序<select aria-label="达人库排序" value={search.get("sort") ?? "updated_at"} onChange={(event) => setFilter("sort", event.target.value)}><option value="updated_at">最近更新时间</option><option value="followers">粉丝数</option><option value="monthly_growth">月涨粉原始值</option><option value="interaction">互动原始值</option><option value="completion">完播原始值</option><option value="expected_cpm">预期 CPM 原始值</option><option value="expected_cpe">预期 CPE 原始值</option></select></label>
+      </div>
+    </section>
+    <section className="panel library-results"><div className="panel-heading"><div><h2>巨量星图达人</h2><p>默认按最近更新时间倒序；“原始值”不代表统一百分比、币种或跨平台指标。</p></div><span>{items.length} 位已加载</span></div>
+      {library.isLoading ? <SkeletonRows rows={7} /> : library.isError ? <ErrorState error={library.error} retry={() => library.refetch()} /> : !items.length ? <EmptyState title="暂无匹配达人" description="调整筛选条件后重试；系统不会用空值补造数据。" /> : <div className="library-rows">{items.map((creator) => <CreatorLibraryRow key={creator.creator_id} creator={creator} />)}</div>}
+      {library.hasNextPage && <div className="pagination"><button className="button secondary" disabled={library.isFetchingNextPage} onClick={() => library.fetchNextPage()}>{library.isFetchingNextPage ? "正在读取" : "查看更多达人"}<ArrowRight size={16} /></button></div>}
+    </section>
   </div>;
 }
 
-function ProfileModules({ payload }: { payload: Record<string, unknown> }) {
-  const raw = payload.modules;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    const entries = Object.entries(payload).filter(([, value]) => ["string", "number", "boolean"].includes(typeof value)).slice(0, 12);
-    if (!entries.length) return <EmptyState title="资料模块尚未形成" description="执行中只展示已持久字段，不使用空值替代失败或未采集状态。" />;
-    return <div className="field-list">{entries.map(([key, value]) => <div key={key}><span>{key}</span><strong>{String(value)}</strong></div>)}</div>;
-  }
-  return <div className="module-list">{Object.entries(raw as Record<string, unknown>).map(([key, value]) => <details key={key} open><summary><span>{key}</span><em>{moduleState(value)}</em></summary><ModuleFields value={value} /></details>)}</div>;
+function CreatorLibraryRow({ creator }: { creator: CreatorLibrarySummary }) {
+  const complete = creator.profile_complete && creator.pipeline_complete;
+  return <Link className="library-row" to={`/creators/${creator.creator_id}`}>
+    <div className="creator-avatar">{creator.avatar_uri ? <img src={creator.avatar_uri} alt="" /> : <UserRound size={20} />}</div>
+    <div className="library-identity"><strong>{creator.display_name || "未提供昵称"}</strong><span>{creator.creator_type_label || "类型暂无数据"} · {[creator.province, creator.city].filter(Boolean).join(" / ") || "地区暂无数据"}</span><em>{creator.industry_labels.length ? creator.industry_labels.join(" / ") : "行业暂无数据"}</em></div>
+    <div className="library-stat"><span>粉丝</span><strong>{numberText(creator.followers.value)}</strong></div>
+    <div className="library-stat"><span>月深度用户</span><strong>{rawMetric(creator.monthly_deep_users)}</strong></div>
+    <div className="library-stat"><span>互动 / 完播原始值</span><strong>{rawMetric(creator.interaction_rate)} / {rawMetric(creator.completion_rate)}</strong></div>
+    <div className="library-stat"><span>CPM / CPE 原始值</span><strong>{rawMetric(creator.expected_cpm_21_60)} / {rawMetric(creator.expected_cpe_21_60)}</strong></div>
+    <div className={`library-quality ${complete ? "complete" : "incomplete"}`}><span>{complete ? "采集完整" : "数据不完整"}</span><small>{creator.data_updated_at ? formatDate(creator.data_updated_at) : "暂无更新时间"}</small></div><ChevronRight size={18} />
+  </Link>;
 }
 
-function moduleState(value: unknown) { if (value && typeof value === "object" && "status" in value) return String((value as Record<string, unknown>).status); return "已记录"; }
-function ModuleFields({ value }: { value: unknown }) {
-  if (!value || typeof value !== "object") return <p className="muted">{String(value ?? "未提供")}</p>;
-  const record = value as Record<string, unknown>; const fields = Array.isArray(record.fields) ? record.fields : Object.entries(record).filter(([key]) => !["status", "failure_reason", "complete"].includes(key)).map(([field_key, fieldValue]) => ({ field_key, value: fieldValue }));
-  if (!fields.length) return <p className="muted">{String(record.failure_reason || "当前模块没有可展示字段")}</p>;
-  return <div className="field-list">{fields.slice(0, 30).map((raw, index) => { const field = raw as Record<string, unknown>; return <div key={String(field.field_key || index)}><span>{String(field.field_key || field.key || `字段 ${index + 1}`)}{Boolean(field.status) && <i className={`field-status ${String(field.status).toLowerCase()}`}>{String(field.status)}</i>}</span><strong>{displayValue(field.value ?? field.normalized_value ?? field)}</strong></div>; })}</div>;
-}
-function displayValue(value: unknown) { if (value === null || value === undefined || value === "") return "—"; if (typeof value === "object") return JSON.stringify(value); return String(value); }
-
-function ContentCards({ page, taskId }: { page: ContentPage; taskId: string }) {
-  if (!page.cards.length) return <EmptyState title="该集合暂无作品" description={page.status === "COMPLETE" ? "平台已确认该集合为空。" : `当前集合状态：${page.status}`} />;
-  return <div className="content-cards">{page.cards.map((outer, index) => { const payload = ((outer.payload && typeof outer.payload === "object") ? outer.payload : outer) as Record<string, unknown>; const cover = (payload.cover && typeof payload.cover === "object" ? payload.cover : {}) as Record<string, unknown>; const objectId = String(cover.object_id || outer.cover_object_id || ""); const link = String(payload.canonical_link || payload.share_url || ""); const title = String(payload.title || payload.description || `精选作品 ${index + 1}`); const coverStatus = String(outer.cover_status || cover.status || "NOT_ATTEMPTED"); return <article className="content-card" key={String(outer.card_id || payload.card_id || index)}><div className="cover-box">{objectId && coverStatus === "STORED" ? <img src={`/api/tasks/${taskId}/covers/${encodeURIComponent(objectId)}`} alt="" /> : <div className="cover-missing"><ImageOff size={20} /><span>{coverStatus === "FAILED" ? "封面失败" : "暂无封面"}</span></div>}<span>{String(Number(outer.position ?? payload.position ?? index) + 1).padStart(2, "0")}</span></div><div className="content-copy"><strong>{title}</strong><p>{String(payload.platform_content_id || "平台作品")}</p><div className="content-meta"><span>{page.view_kind === "draft" ? "草稿" : "快照"}</span>{Array.isArray(outer.truncated_fields) && outer.truncated_fields.length > 0 && <span>部分字段截断</span>}</div></div>{link && link !== "null" ? <a href={link} target="_blank" rel="noreferrer" aria-label="打开平台作品"><ExternalLink size={17} /></a> : <span className="no-link">无链接</span>}</article>; })}</div>;
+export function CreatorLibraryDetailPage() {
+  const { creatorId = "" } = useParams();
+  const detail = useQuery({ queryKey: ["creator-library", creatorId], queryFn: () => api.creatorLibraryDetail(creatorId) });
+  const quotes = useQuery({ queryKey: ["creator-library-quotes", creatorId], queryFn: () => api.creatorLibraryQuotes(creatorId), enabled: Boolean(detail.data) });
+  const contents = useFeaturedContent({ kind: "library", creatorId });
+  if (detail.isLoading) return <div className="page-wrap"><LoadingState label="正在读取达人库资料" /></div>;
+  if (detail.isError || !detail.data) return <div className="page-wrap"><ErrorState error={detail.error} retry={() => detail.refetch()} /></div>;
+  const creator = detail.data;
+  const quoteRows = quotes.data ?? [];
+  const seenForms = new Set<string>();
+  const currentQuotes = quoteRows.filter((quote) => {
+    const form = quote.cooperation_form || "__unmarked__";
+    if (seenForms.has(form)) return false;
+    seenForms.add(form);
+    return true;
+  });
+  const quoteHistory = quoteRows.filter((quote) => !currentQuotes.includes(quote));
+  return <CreatorDetailView
+    creator={creator}
+    profilePayload={creator.profile_payload || {}}
+    backTo="/creators"
+    backLabel="返回达人库"
+    scopeLabel="当前达人资料"
+    badgeLabel={completeLabel(creator)}
+    badgeTone={creator.profile_complete && creator.pipeline_complete ? "published" : "draft"}
+    contents={contents}
+    historyChapter={<div className="profile-sections">
+      <section className="panel library-detail-panel"><div className="panel-heading"><div><h2>报价历史</h2><p>同一合作形式的较早观察，保留原始报价与观测时间。</p></div><span>{quoteHistory.length} 条</span></div>{quotes.isLoading ? <SkeletonRows rows={3} /> : quotes.isError ? <ErrorState error={quotes.error} retry={() => quotes.refetch()} /> : <div className="quote-list">{quoteHistory.length ? quoteHistory.map((quote) => <div key={`${quote.snapshot_id}-${quote.position}`}><strong>{quote.cooperation_form || "未标记合作形式"}</strong><span>{quote.settlement_description || "结算说明暂无数据"}</span><b>{quote.price_raw === null ? "暂无报价" : String(quote.price_raw)}</b><small>{formatDate(quote.observed_at)}</small></div>) : <p className="muted">暂无更早报价观察。</p>}</div>}</section>
+    </div>}
+  />;
 }

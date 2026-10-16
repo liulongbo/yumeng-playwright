@@ -14,6 +14,7 @@ from playwright.async_api import Error as BrowserError
 
 from .contracts import (
     Action,
+    AttributeFilterEntry,
     CoverSpec,
     FeaturedCollectionSpec,
     LocatorSpec,
@@ -24,10 +25,13 @@ from .contracts import (
 )
 from .covers import FetchedCover
 from .domain import (
+    AudienceProfileCompound,
     CandidateDiagnostic,
+    Capabilities,
     Checkpoint,
     CollectionStatus,
     CollectorError,
+    ConnectionUsersCompound,
     CoverRef,
     CoverStatus,
     CreatorRef,
@@ -41,6 +45,7 @@ from .domain import (
     ModuleObservation,
     NumberRange,
     NumericValue,
+    RegionCompound,
     SearchPage,
     SessionHealth,
     SessionHealthStatus,
@@ -187,6 +192,148 @@ def resolve_homepage(spec: SearchSpec, row: Any) -> str | None:
     return homepage
 
 
+def _scaled_count(value: Any, scale: int) -> str:
+    scaled = value * scale
+    if scaled == scaled.to_integral():
+        return str(int(scaled))
+    return format(scaled, "f").rstrip("0").rstrip(".")
+
+
+def _json_array(values: list[Any]) -> str:
+    return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
+
+
+def build_expected_attribute_filters(
+    plan: FilterPlan, capabilities: Capabilities
+) -> list[AttributeFilterEntry]:
+    """Build the exact final Xingtu request multiset from registered mappings only."""
+
+    specs = {item.field: item for item in capabilities.fields}
+    result: list[AttributeFilterEntry] = []
+    for item in plan.filters:
+        if item.field == "keyword":
+            continue
+        spec = specs.get(item.field)
+        if spec is None:
+            raise CollectorError("UNSUPPORTED_FILTER", item.field)
+        mapping = spec.request_mapping
+        options = {option.value: option.request_value for option in spec.options}
+        if item.field in {"gender", "education", "yellow_v"}:
+            if not isinstance(item.value, str) or item.value not in options:
+                raise CollectorError("UNSUPPORTED_FILTER", item.field)
+            request_value = options[item.value]
+            if request_value is None:
+                raise CollectorError("PLATFORM_PAGE_CHANGED", "MISSING_REQUEST_MAPPING")
+            value = str(request_value)
+            if item.field in {"education", "yellow_v"}:
+                value = _json_array([value])
+            result.append(
+                AttributeFilterEntry(field_name=str(mapping["field_name"]), field_value=value)
+            )
+        elif item.field == "region" and isinstance(item.value, RegionCompound):
+            provinces = {node.value: node for node in spec.region_tree}
+            province_values: list[str] = []
+            city_values: list[str] = []
+            for selection in item.value.selections:
+                province = provinces.get(selection.province_code)
+                if province is None:
+                    raise CollectorError("INVALID_FORM", "unknown province")
+                if selection.city is None:
+                    province_values.append(province.label)
+                else:
+                    city_values.append(selection.city)
+            if province_values:
+                result.append(
+                    AttributeFilterEntry(
+                        field_name=str(mapping["province_field"]),
+                        field_value=_json_array(province_values),
+                    )
+                )
+            if city_values:
+                result.append(
+                    AttributeFilterEntry(
+                        field_name=str(mapping["city_field"]),
+                        field_value=_json_array(city_values),
+                    )
+                )
+        elif item.field == "connection_users" and isinstance(item.value, ConnectionUsersCompound):
+            scale_value = mapping.get("scale")
+            if isinstance(scale_value, bool) or not isinstance(scale_value, (int, str)):
+                raise CollectorError("PLATFORM_PAGE_CHANGED", "INVALID_REQUEST_SCALE")
+            scale = int(scale_value)
+            for key in ("connected", "aware", "interested", "liked", "followed"):
+                value = getattr(item.value, key)
+                if value is None:
+                    continue
+                prefix = str(mapping[key])
+                if value.min is not None:
+                    result.append(
+                        AttributeFilterEntry(
+                            field_name=prefix + "__ge",
+                            field_value=_scaled_count(value.min, scale),
+                        )
+                    )
+                if value.max is not None:
+                    result.append(
+                        AttributeFilterEntry(
+                            field_name=prefix + "__le",
+                            field_value=_scaled_count(value.max, scale),
+                        )
+                    )
+        elif item.field == "followers" and isinstance(item.value, NumberRange):
+            scale_value = mapping.get("scale")
+            if isinstance(scale_value, bool) or not isinstance(scale_value, (int, str)):
+                raise CollectorError("PLATFORM_PAGE_CHANGED", "INVALID_REQUEST_SCALE")
+            scale = int(scale_value)
+            if item.value.min is not None:
+                result.append(
+                    AttributeFilterEntry(
+                        field_name=str(mapping["min_field"]),
+                        field_value=_scaled_count(item.value.min, scale),
+                    )
+                )
+            if item.value.max is not None:
+                result.append(
+                    AttributeFilterEntry(
+                        field_name=str(mapping["max_field"]),
+                        field_value=_scaled_count(item.value.max, scale),
+                    )
+                )
+        elif item.field in {"viewer_profile", "fan_profile"} and isinstance(
+            item.value, AudienceProfileCompound
+        ):
+            dimensions = {dimension.key: dimension for dimension in spec.dimensions}
+            for key in ("age", "device_brand", "city_level", "crowd"):
+                values = getattr(item.value, key)
+                if not values:
+                    continue
+                option_values = {
+                    option.value: option.request_value for option in dimensions[key].options
+                }
+                result.append(
+                    AttributeFilterEntry(
+                        field_name=str(mapping[key]),
+                        field_value=_json_array([option_values[value] for value in values]),
+                    )
+                )
+            if item.value.gender:
+                gender_option = next(
+                    option
+                    for option in dimensions["gender"].options
+                    if option.value == item.value.gender
+                )
+                sex, threshold = str(gender_option.request_value).split(":", 1)
+                result.append(
+                    AttributeFilterEntry(
+                        field_name=str(mapping[f"gender_{sex}"]),
+                        field_value=threshold,
+                    )
+                )
+        else:
+            raise CollectorError("UNSUPPORTED_FILTER", item.field)
+    return result
+
+
 class BrowserAdapter:
     def __init__(
         self,
@@ -197,11 +344,13 @@ class BrowserAdapter:
         *,
         live: bool = True,
         on_session_health: Callable[[SessionHealth], None] | None = None,
+        manually_attested_account_id: str | None = None,
     ):
         registry.require_enabled(live=live)
         self.browser, self.registry = browser, registry
         self.account, self.guard, self.live = account, guard, live
         self.on_session_health = on_session_health
+        self.manually_attested_account_id = manually_attested_account_id
         self.module_keys = [m.key for m in registry.modules]
         self.module_fields = {m.key: [f.key for f in m.fields] for m in registry.modules}
         self.module_checkpoint_versions = {m.key: m.checkpoint_version for m in registry.modules}
@@ -219,12 +368,20 @@ class BrowserAdapter:
         # `session_boot_timeout_seconds` stays the timeout for a session already on the protected
         # surface; using it per attempt lets a single redirected hop consume the whole window.
         self.bootstrap_probe_seconds = 15.0
+        # Bounded confirmation window for the bound identity.  After a same-URL reload the platform
+        # renders the identity node with EMPTY text for a few tens of milliseconds while the SPA
+        # hydrates, so a single read can legitimately see "present but blank".  The cap bounds the
+        # whole read-and-confirm process, never a single read in isolation.
+        self.identity_read_cap_seconds = 5.0
+        self.identity_poll_seconds = 0.1
         self.bindings: dict[str, str] = {}
         self.prepared_result: SearchPage | None = None
         self.search_replay: ReplayRequest | None = None
         self.initial_observations: dict[str, ModuleObservation] = {}
         self.operation_metrics: dict[str, int] = {}
         self.creator_interval_seconds = 0.0
+        self.required_readbacks: set[str] = set()
+        self.attribute_filters: list[AttributeFilterEntry] = []
 
     def metric(self, key: str, amount: int = 1) -> None:
         self.operation_metrics[key] = self.operation_metrics.get(key, 0) + amount
@@ -268,7 +425,9 @@ class BrowserAdapter:
             if await self.locator(page, locator).is_visible():
                 raise CollectorError(code, "REGISTERED_PAGE_STATE")
 
-    async def read_locator(self, page: Page, spec: LocatorSpec) -> str | list[str]:
+    async def read_locator(
+        self, page: Page, spec: LocatorSpec, *, require_non_empty: bool = False
+    ) -> str | list[str]:
         locator = self.locator(page, spec)
         if spec.multiple:
             values = [value.strip() for value in await locator.all_inner_texts() if value.strip()]
@@ -295,6 +454,13 @@ class BrowserAdapter:
             value = await locator.inner_text()
         if value is None:
             raise CollectorError("MODULE_COLLECTION_FAILED", f"UNREADABLE_VALUE:{spec.selector}")
+        if require_non_empty and not value.strip():
+            # The node exists but carries no content yet.  The platform renders the identity node
+            # blank for a few tens of milliseconds while the SPA hydrates after a same-URL reload,
+            # so a caller that needs a real value - the bound identity - must not accept it.
+            # Default stays False: optional fields keep their existing "empty is a value" contract
+            # and the multi-value branch already drops blanks above.
+            raise CollectorError("MODULE_COLLECTION_FAILED", f"UNREADABLE_VALUE:{spec.selector}")
         return spec.value_map.get(value.strip(), value.strip())
 
     async def actions(self, page: Page, actions: list[Action]) -> None:
@@ -311,6 +477,216 @@ class BrowserAdapter:
                 await target.evaluate("(el) => { el.scrollTop += el.clientHeight; }")
             # Pacing is separate from explicit readiness and registered response evidence.
             await asyncio.sleep(self.registry.action_interval_seconds or 0)
+
+    async def _paced_click(self, locator: Locator, *, force: bool = False) -> None:
+        await self.guard()
+        await locator.click(force=force)
+        await asyncio.sleep(self.registry.action_interval_seconds or 0)
+
+    async def _selected_text(self, page: Page) -> str:
+        spec = self.registry.search
+        assert spec and spec.selected_condition_chips
+        locator = self.locator(page, spec.selected_condition_chips)
+        if await locator.count() != 1:
+            raise CollectorError("PLATFORM_CONDITION_MISMATCH", "SELECTED_FILTERS_MISSING")
+        return " ".join((await locator.inner_text()).split())
+
+    async def _assert_selected(self, page: Page, expected: str) -> None:
+        if expected not in await self._selected_text(page):
+            raise CollectorError("PLATFORM_CONDITION_MISMATCH", expected)
+
+    async def apply_xingtu_filters(self, page: Page, plan: FilterPlan) -> None:
+        try:
+            await self._apply_xingtu_filters(page, plan)
+        except BrowserError as exc:
+            # A registered filter locator becoming unavailable is a platform-contract drift, not
+            # an unclassified Playwright failure and never a reason to submit a partial plan.
+            raise CollectorError(
+                "PLATFORM_PAGE_CHANGED", "REGISTERED_FILTER_CONTROL_UNAVAILABLE"
+            ) from exc
+
+    async def _apply_xingtu_filters(self, page: Page, plan: FilterPlan) -> None:
+        specs = {item.field: item for item in self.registry.capabilities.fields}
+        filters = {item.field: item for item in plan.filters}
+        for field_name in (
+            "gender",
+            "region",
+            "education",
+            "yellow_v",
+            "connection_users",
+            "followers",
+            "viewer_profile",
+            "fan_profile",
+        ):
+            item = filters.get(field_name)
+            if item is None:
+                continue
+            capability = specs[field_name]
+            automation = capability.automation
+            opener_selector = automation.get("opener_selector")
+            if not isinstance(opener_selector, str):
+                raise CollectorError("PLATFORM_PAGE_CHANGED", f"MISSING_AUTOMATION:{field_name}")
+            if field_name in {"gender", "education", "yellow_v"}:
+                assert isinstance(item.value, str)
+                option = next(
+                    (option for option in capability.options if option.value == item.value), None
+                )
+                if option is None:
+                    raise CollectorError("UNSUPPORTED_FILTER", field_name)
+                await self._paced_click(page.locator(opener_selector).first)
+                await self._paced_click(
+                    page.locator("ul.el-dropdown-menu:visible")
+                    .last.get_by_text(option.label, exact=True)
+                    .first
+                )
+                await self._assert_selected(page, option.label)
+            elif field_name == "region" and isinstance(item.value, RegionCompound):
+                provinces = {node.value: node for node in capability.region_tree}
+                await self._paced_click(page.locator(opener_selector).first)
+                for selection in item.value.selections:
+                    province = provinces[selection.province_code]
+                    province_menu = page.locator("ul.el-dropdown-menu:visible").first
+                    province_row = (
+                        province_menu.locator("li.xt-cascader-option")
+                        .filter(has_text=province.label)
+                        .first
+                    )
+                    if selection.city is None:
+                        checkbox = province_row.locator(".xt-checkbox").first
+                    else:
+                        await self._paced_click(
+                            province_row.locator(".xt-cascader-option__suffix").first
+                        )
+                        city_menu = page.locator("ul.el-dropdown-menu:visible").last
+                        city_row = (
+                            city_menu.locator("li.xt-cascader-option")
+                            .filter(has_text=selection.city)
+                            .first
+                        )
+                        checkbox = city_row.locator(".xt-checkbox").first
+                    await self._paced_click(checkbox)
+                    if "is-checked" not in (await checkbox.get_attribute("class") or ""):
+                        raise CollectorError("PLATFORM_CONDITION_MISMATCH", "region")
+                await page.keyboard.press("Escape")
+                await self._assert_selected(page, "所在地域")
+            elif field_name == "connection_users" and isinstance(
+                item.value, ConnectionUsersCompound
+            ):
+                await self._paced_click(page.locator(opener_selector).first)
+                outer_selector = str(automation["outer_selector"])
+                outer = page.locator(outer_selector)
+                for index, dimension in enumerate(capability.dimensions):
+                    value = getattr(item.value, dimension.key)
+                    if value is None:
+                        continue
+                    await self._paced_click(outer.locator('[role="button"]').nth(index))
+                    child = page.locator(".el-popper:visible").last
+                    inputs = child.locator("input")
+                    await inputs.nth(0).fill(str(value.min) if value.min is not None else "")
+                    await inputs.nth(1).fill(str(value.max) if value.max is not None else "")
+                    await self._paced_click(
+                        child.locator(str(automation["inner_confirm_selector"])).first
+                    )
+                await self._paced_click(
+                    outer.locator(str(automation["outer_confirm_selector"])).first
+                )
+                await self._assert_selected(page, capability.label or "连接用户数")
+            elif field_name == "followers" and isinstance(item.value, NumberRange):
+                preset = next(
+                    (
+                        option
+                        for option in capability.options
+                        if option.range
+                        and option.range.min == item.value.min
+                        and option.range.max == item.value.max
+                    ),
+                    None,
+                )
+                await self._paced_click(page.locator(opener_selector).first)
+                menu = page.locator("ul.el-dropdown-menu:visible").last
+                if preset:
+                    await self._paced_click(menu.get_by_text(preset.label, exact=True).first)
+                    await self._assert_selected(page, preset.label)
+                else:
+                    input_selector = automation.get("custom_input_selector")
+                    confirm_selector = automation.get("custom_confirm_selector")
+                    if not isinstance(input_selector, str) or not isinstance(confirm_selector, str):
+                        raise CollectorError(
+                            "PLATFORM_PAGE_CHANGED", "FOLLOWERS_CUSTOM_AUTOMATION_MISSING"
+                        )
+                    inputs = menu.locator(input_selector)
+                    await inputs.nth(0).fill(
+                        str(item.value.min) if item.value.min is not None else ""
+                    )
+                    await inputs.nth(1).fill(
+                        str(item.value.max) if item.value.max is not None else ""
+                    )
+                    await self._paced_click(menu.locator(confirm_selector).first)
+                    await self._assert_selected(page, "粉丝数量")
+            elif field_name in {"viewer_profile", "fan_profile"} and isinstance(
+                item.value, AudienceProfileCompound
+            ):
+                await self._paced_click(page.locator(opener_selector).first)
+                label_prefix = "观众" if field_name == "viewer_profile" else "粉丝"
+                outer = (
+                    page.locator(".el-popper:visible").filter(has_text=label_prefix + "年龄").first
+                )
+                values_by_key = {
+                    "age": item.value.age,
+                    "gender": [item.value.gender] if item.value.gender else [],
+                    "device_brand": item.value.device_brand,
+                    "city_level": item.value.city_level,
+                    "crowd": item.value.crowd,
+                }
+                selected_labels: list[str] = []
+                dimension_selector = automation.get("dimension_selector")
+                if not isinstance(dimension_selector, str):
+                    raise CollectorError(
+                        "PLATFORM_PAGE_CHANGED", "PROFILE_DIMENSION_AUTOMATION_MISSING"
+                    )
+                dimension_controls = outer.locator(dimension_selector)
+                if await dimension_controls.count() != len(capability.dimensions):
+                    raise CollectorError("PLATFORM_PAGE_CHANGED", "PROFILE_DIMENSION_COUNT_CHANGED")
+                for index, dimension in enumerate(capability.dimensions):
+                    dimension_values = values_by_key[dimension.key]
+                    if dimension_values:
+                        # Selected multi-value inputs lose their placeholder and would shift an
+                        # input-based index.  The five registered .el-select containers remain
+                        # stable across those re-renders.
+                        await self._paced_click(dimension_controls.nth(index), force=True)
+                    for value in dimension_values:
+                        option = next(
+                            option for option in dimension.options if option.value == value
+                        )
+                        await self._paced_click(
+                            page.locator(".el-select-dropdown:visible")
+                            .last.get_by_text(option.label, exact=True)
+                            .first
+                        )
+                        selected_labels.append(option.label)
+                    if await page.locator(".el-select-dropdown:visible").count():
+                        # Multi-select menus intentionally remain open after a choice.  Clicking
+                        # the registered dimension label is the component's normal outside-click
+                        # close path while keeping the surrounding profile popup open.
+                        await self._paced_click(
+                            outer.get_by_text(label_prefix + dimension.label, exact=True).first,
+                            force=True,
+                        )
+                        if await page.locator(".el-select-dropdown:visible").count():
+                            raise CollectorError(
+                                "PLATFORM_PAGE_CHANGED", "PROFILE_DIMENSION_DID_NOT_CLOSE"
+                            )
+                    await asyncio.sleep(0)
+                await self._paced_click(
+                    outer.get_by_role(
+                        "button", name=str(automation["outer_confirm_text"]), exact=True
+                    ),
+                    force=True,
+                )
+                for label in selected_labels:
+                    await self._assert_selected(page, label)
+            else:
+                raise CollectorError("UNSUPPORTED_FILTER", field_name)
 
     async def read_account(self, page: Page) -> str:
         """Bounded wait for the account identity; the nav renders after the app shell boots."""
@@ -406,6 +782,27 @@ class BrowserAdapter:
                 except BrowserError:
                     pass
             if asyncio.get_running_loop().time() >= deadline:
+                # The attestation is a last resort, never a fast path.  It is granted only after
+                # the bounded window has actually elapsed with the protected surface continuously
+                # visible and the identity locator still unreadable -- a UI that no longer renders
+                # the account at all.  Returning it as soon as the protected marker appeared used
+                # to certify the session while the app shell was still booting, so the caller
+                # started driving the page before it was ready: the platform then navigated the
+                # business surface away mid-action (observed: `Locator.fill` timing out while the
+                # page sat on `https://www.xingtu.cn/?redirect_uri=/ad/creator/market`), and the
+                # task parked in WAITING_FOR_RESOURCE with zero candidates.
+                # A readable identity always wins over the attestation, so genuine wrong-account
+                # detection is unaffected.
+                if protected_seen and self.manually_attested_account_id == self.account:
+                    return self.publish_session_health(
+                        SessionHealth(
+                            status=SessionHealthStatus.VALID,
+                            expected_account_id=self.account,
+                            observed_account_id=self.account,
+                            protected_page_verified=True,
+                            evidence_reason="MANUALLY_ATTESTED_UNIQUE_ACCOUNT",
+                        )
+                    )
                 return self.publish_session_health(
                     SessionHealth(
                         status=SessionHealthStatus.INDETERMINATE,
@@ -462,8 +859,15 @@ class BrowserAdapter:
                 self.bindings[f"{f.field}.max"] = (
                     str(f.value.max) if f.value.max is not None else ""
                 )
+        self.attribute_filters = (
+            build_expected_attribute_filters(plan, self.registry.capabilities)
+            if any(request.attribute_filter_match for request in spec.requests)
+            else []
+        )
         required = set() if spec.fixed_sort else {"sort"}
         for f in plan.filters:
+            if spec.dynamic_filter_executor and f.field != "keyword":
+                continue
             required.update(
                 {f"{f.field}.min", f"{f.field}.max"}
                 if isinstance(f.value, NumberRange)
@@ -474,6 +878,7 @@ class BrowserAdapter:
             if f.field == "keyword":
                 self.bindings["keyword_mode"] = "content"
                 required.add("keyword_mode")
+        self.required_readbacks = required
         # Plan values become the platform's own literals only after every binding exists.
         self.bindings = map_bindings(self.bindings, spec.binding_values)
         if not required <= set(spec.readback):
@@ -507,9 +912,25 @@ class BrowserAdapter:
         assert session
         await self._bootstrap_session(page, spec.entry_url, session.entry_url)
         await self.check_session(page)
-        # Ignore intermediate reset responses; capture must surround final condition actions.
+        # Reset and v2 component actions intentionally stay outside the response collector: each
+        # selection auto-searches and is legitimate intermediate traffic.
+        if spec.dynamic_filter_executor and spec.clear_selected:
+            clear = self.locator(page, spec.clear_selected)
+            if await clear.count() == 1 and await clear.is_visible():
+                await self._paced_click(clear)
         await self.actions(page, spec.reset_actions)
-        self.prepared_result = await self._search_operation(page, spec.apply_actions, plan, cp, ctx)
+        if spec.dynamic_filter_executor == "xingtu-market-v2":
+            await self.actions(page, spec.apply_actions)
+            await self.apply_xingtu_filters(page, plan)
+            if not spec.final_actions:
+                raise CollectorError("PLATFORM_PAGE_CHANGED", "FINAL_SEARCH_ACTION_MISSING")
+            self.prepared_result = await self._search_operation(
+                page, spec.final_actions, plan, cp, ctx
+            )
+        else:
+            self.prepared_result = await self._search_operation(
+                page, spec.apply_actions, plan, cp, ctx
+            )
         return True
 
     async def _bootstrap_session(
@@ -552,8 +973,9 @@ class BrowserAdapter:
     async def readback(self, page: Page) -> None:
         spec = self.registry.search
         assert spec
-        for key, locator in spec.readback.items():
-            if key not in self.bindings:
+        for key in self.required_readbacks:
+            locator = spec.readback.get(key)
+            if locator is None or key not in self.bindings:
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "MISSING_READBACK_BINDING")
             if await self.read_locator(page, locator) != self.bindings[key]:
                 raise CollectorError("PLATFORM_CONDITION_MISMATCH", key)
@@ -578,6 +1000,7 @@ class BrowserAdapter:
             self.timeout_seconds(),
             self.registry.response_body_max_bytes or 1,
             metrics=self.operation_metrics,
+            attribute_filters=self.attribute_filters,
         ) as capture:
             if replay:
                 await self.replay_search_page(page, replay, spec)
@@ -778,6 +1201,7 @@ class BrowserAdapter:
                 await self.verify_identity(page, creator)
                 await self.actions(page, spec.actions)
                 await self.wait_ready(page, spec.ready, spec.ready_hidden)
+                await self._wake_unresolved_modules(page, capture, initial_specs, spec)
                 data, failures = await capture.read()
                 self.initial_observations = {
                     module.key: await self.parse_module(
@@ -791,14 +1215,80 @@ class BrowserAdapter:
             self.initial_observations = {}
             await page.close()
 
+    async def _wake_unresolved_modules(
+        self,
+        page: Page,
+        capture: ResponseCollector,
+        modules: list[ProfileModuleSpec],
+        shared: ProfileModuleSpec,
+    ) -> None:
+        """Trigger a module's own registered actions when the page load did not emit its responses.
+
+        ``profile`` collects every homepage module from one registered window. A module that
+        declares ``capture_on_profile_load`` is expected to be emitted by the bare page load; the
+        SPA only emits some of them after the registered tab interaction, so those modules declare
+        that interaction as their own ``actions`` and it runs here, still inside the same window and
+        after the observers were registered.
+
+        The gate is what keeps this additive: a module whose required responses already arrived is
+        left untouched, so a creator whose homepage prefetches the endpoint gets no extra click and
+        no duplicated request. Readiness stays evidence-based - ``wait_ready`` re-asserts the
+        module's registered ready selector and ``read`` still performs the bounded settle wait.
+        """
+
+        for module in modules:
+            if module is shared or not module.actions:
+                continue
+            if not any(
+                spec.required and spec.key not in capture.results for spec in module.requests
+            ):
+                continue
+            await self.actions(page, module.actions)
+            await self.wait_ready(page, module.ready, module.ready_hidden)
+
     async def verify_identity(self, page: Page, creator: CreatorRef) -> None:
-        assert self.registry.session
+        """Require the page's identity to be a non-empty, confirmed value. Bounded, fail closed.
+
+        The whole read-and-confirm process is bounded by ``identity_read_cap_seconds``: a page that
+        never exposes a usable identity still ends in ``IDENTITY_UNREADABLE`` rather than looping.
+        A stable value that differs from the expected creator stays ``IDENTITY_MISMATCH``.
+        """
+
         try:
-            identity = await self.read_locator(page, self.registry.session.identity)
-        except CollectorError as exc:
+            await asyncio.wait_for(
+                self._confirm_identity(page, creator),
+                timeout=self.identity_read_cap_seconds,
+            )
+        except TimeoutError as exc:
+            # Bounded expiry, not a swallowed error: the identity never became usable in time.
             raise CollectorError("PLATFORM_PAGE_CHANGED", "IDENTITY_UNREADABLE") from exc
-        if identity != creator.platform_creator_id:
-            raise CollectorError("CREATOR_INVALID", "IDENTITY_MISMATCH")
+
+    async def _confirm_identity(self, page: Page, creator: CreatorRef) -> None:
+        """Read the bound identity until it is non-empty and confirmed; the caller bounds time.
+
+        The expected id is a known constant, so a read that equals it cannot be a hydration
+        transient and is accepted immediately - the common path costs exactly one read.  Only a
+        non-empty *unexpected* value pays for a second, confirming read, which prevents a transient
+        wrong value from being reported as a wrong creator.  Blank reads are never a value and are
+        retried until the caller's deadline expires.
+        """
+
+        session = self.registry.session
+        assert session
+        expected = creator.platform_creator_id
+        unexpected: str | None = None
+        while True:
+            try:
+                identity = await self.read_locator(page, session.identity, require_non_empty=True)
+            except CollectorError:
+                identity = None
+            if isinstance(identity, str):
+                if identity == expected:
+                    return
+                if identity == unexpected:
+                    raise CollectorError("CREATOR_INVALID", "IDENTITY_MISMATCH")
+                unexpected = identity
+            await asyncio.sleep(self.identity_poll_seconds)
 
     async def source(
         self, page: Page, source: SourceSpec, responses: dict[str, Any], failures: dict[str, str]
@@ -896,6 +1386,29 @@ class BrowserAdapter:
         FieldStatus.NOT_PROVIDED: CollectionStatus.NOT_PROVIDED,
     }
 
+    @staticmethod
+    def featured_spec_local_reason(error: CollectorError) -> str | None:
+        """Return a reason when a featured-collection failure is provably THIS collection's.
+
+        Only two cases qualify, and nothing else is ever downgraded:
+
+        * ``MODULE_COLLECTION_FAILED`` - the registered module's own response/schema/read failed,
+          which is scoped to the collection that declared those requests.
+        * ``PLATFORM_PAGE_CHANGED: PAGE_READY_TIMEOUT`` - ``PAGE_READY_TIMEOUT`` has exactly one
+          producer (``wait_ready``) and it fires only when the caller's own ``ready`` selector did
+          not appear, so inside a featured iteration it cannot describe any surface other than this
+          collection's.
+
+        Session loss, verification challenges, lease loss and creator-identity failures are
+        deliberately absent: they are global and must keep aborting the whole creator.
+        """
+
+        if error.code == "MODULE_COLLECTION_FAILED":
+            return error.reason or "MODULE_COLLECTION_FAILED"
+        if error.code == "PLATFORM_PAGE_CHANGED" and error.reason == "PAGE_READY_TIMEOUT":
+            return "PAGE_READY_TIMEOUT"
+        return None
+
     async def collect_featured_collections(
         self, creator: CreatorRef, cp: Checkpoint, ctx: ExecutionContext
     ) -> list[FeaturedCollectionObservation]:
@@ -920,10 +1433,13 @@ class BrowserAdapter:
                 self.metric("featured_loads")
                 observations.append(await self._collect_featured(page, spec, creator, ctx))
             except CollectorError as exc:
-                # One module failing must never drop the other module's committed result.
-                if exc.code != "MODULE_COLLECTION_FAILED":
+                # One module failing must never drop the other module's committed result. Only a
+                # failure provably scoped to this collection becomes a recorded failure here; every
+                # other code (session, challenge, lease, identity) stays fatal and is re-raised.
+                reason = self.featured_spec_local_reason(exc)
+                if reason is None:
                     raise
-                observations.append(self._featured_failure(spec, creator, ctx, exc.reason))
+                observations.append(self._featured_failure(spec, creator, ctx, reason))
         return observations
 
     def _featured_failure(

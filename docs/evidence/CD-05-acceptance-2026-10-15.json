@@ -1,0 +1,252 @@
+{
+  "round": "CD-05",
+  "run_at": "2026-10-15T16:33:36+0800",
+  "base": "http://127.0.0.1:5173",
+  "entry_points": {
+    "library": "http://127.0.0.1:5173/creators/700ca5b0-f0c8-4436-86fe-624dfeb0f151",
+    "task": "http://127.0.0.1:5173/tasks/efb257a6-476b-47ee-aff4-807795bb61a0/creators/700ca5b0-f0c8-4436-86fe-624dfeb0f151"
+  },
+  "creator": "甄选聊车",
+  "mcp": "project Playwright MCP server over MCP stdio (mcp_client.py); tool direct-call not exposed",
+  "checks": [
+    {
+      "check": "CD05-MCP",
+      "passed": true,
+      "detail": "Playwright MCP 1.62.0-alpha-2026-06-29 over stdio, 23 tools (tool direct-call not exposed in this session; see the evidence file)"
+    },
+    {
+      "check": "CRE-01-library-five-tabs",
+      "passed": true,
+      "detail": "达人库入口 tabs=['商业能力', '创作能力', '履约能力', '连接用户', '报价与历史']"
+    },
+    {
+      "check": "CRE-02-overview-removed",
+      "passed": true,
+      "detail": "containsOverview=False"
+    },
+    {
+      "check": "CRE-03-default-commercial",
+      "passed": true,
+      "detail": "active='商业能力' aria-selected='true'"
+    },
+    {
+      "check": "CRE-04-chapter-商业能力",
+      "passed": true,
+      "detail": "active='商业能力' textLength=1596 headings=['内容数据', '性价比/效果预估', '种草价值', '转化价值']"
+    },
+    {
+      "check": "CRE-04-chapter-创作能力",
+      "passed": true,
+      "detail": "active='创作能力' textLength=1471 headings=['最新视频表现', '视频内容类型分布', '评论热词']"
+    },
+    {
+      "check": "CRE-04-chapter-履约能力",
+      "passed": true,
+      "detail": "active='履约能力' textLength=86 headings=['履约与合作表现']"
+    },
+    {
+      "check": "CRE-04-chapter-连接用户",
+      "passed": true,
+      "detail": "active='连接用户' textLength=744 headings=['连接用户分层与同行业对比', '近 30 日连接用户与粉丝趋势', '连接用户画像']"
+    },
+    {
+      "check": "CRE-04-chapter-报价与历史",
+      "passed": true,
+      "detail": "active='报价与历史' textLength=223 headings=[]"
+    },
+    {
+      "check": "CRE-05-legacy-anchor-full-load",
+      "passed": true,
+      "detail": "整页加载 #overview: active='商业能力' bodyLength=1596 overviewPanel=False tabs=['商业能力', '创作能力', '履约能力', '连接用户', '报价与历史']"
+    },
+    {
+      "check": "CRE-05-legacy-anchor-same-document",
+      "passed": true,
+      "detail": "页内改 hash 到 #overview: active='商业能力' bodyLength=1596 url='http://127.0.0.1:5173/creators/700ca5b0-f0c8-4436-86fe-624dfeb0f151#commercial'"
+    },
+    {
+      "check": "CRE-06-chart-loads",
+      "passed": true,
+      "detail": "bars=15 apiRecords=15 (apiStatus=200)"
+    },
+    {
+      "check": "CRE-07-every-bar-shows-its-play-count",
+      "passed": true,
+      "detail": "rendered=['91.6万', '87.0万', '67.0万', '99.1万', '271.9万', '334.3万', '168.6万', '174.9万', '241.1万', '308.7万', '181.5万', '100.9万', '575.4万', '416.0万', '577.5万'] expectedFromApi=['91.6万', '87.0万', '67.0万', '99.1万', '271.9万', '334.3万', '168.6万', '174.9万', '241.1万', '308.7万', '181.5万', '100.9万', '575.4万', '416.0万', '577.5万']"
+    },
+    {
+      "check": "CRE-08-play-unit-wan",
+      "passed": true,
+      "detail": "labels=['91.6万', '87.0万', '67.0万', '99.1万', '271.9万', '334.3万', '168.6万', '174.9万', '241.1万', '308.7万', '181.5万', '100.9万', '575.4万', '416.0万', '577.5万'] (≥1万→万, 1千–1万→k, <1千 原数；仅展示层换算)"
+    },
+    {
+      "check": "CRE-09-x-axis-publish-date",
+      "passed": true,
+      "detail": "xAxis=['2026-10-12', '2026-10-11', '2026-10-10', '2026-10-09', '2026-10-06', '2026-10-04', '2026-10-03', '2026-09-30', '2026-09-29', '2026-09-28', '2026-09-27', '2026-09-25', '2026-09-23', '2026-09-21', '2026-09-19']"
+    },
+    {
+      "check": "CRE-10-date-matches-video-record",
+      "passed": true,
+      "detail": "xAxis matches platform item_date for all 15 records: ['2026-10-12', '2026-10-11', '2026-10-10', '2026-10-09']…"
+    },
+    {
+      "check": "CRE-19-chart-and-list-consistent",
+      "passed": true,
+      "detail": "barLinks=15 cardLinks=15 identical order+targets"
+    },
+    {
+      "check": "CRE-11-hover-shows-cover-title-play",
+      "passed": true,
+      "detail": "title='雨刮器为什么不好用 #汽车知识#说车聊车#行车安全#汽车保养#汽车' play=915520 text='平台未提供封面地址雨刮器为什么不好用 #汽车知识#说车聊车#行车安全#汽车保养#汽车播放量 915,5202026-10-12在抖音打开作品' cover=empty-state"
+    },
+    {
+      "check": "CRE-12-hover-not-clipped",
+      "passed": true,
+      "detail": "position='fixed' tip={'x': 517, 'y': 66, 'w': 236, 'h': 216.875} bar={'x': 606, 'y': 290, 'w': 58, 'h': 92} withinViewport=True"
+    },
+    {
+      "check": "CRE-12-hover-survives-move-to-layer",
+      "passed": true,
+      "detail": "{'hadTip': True, 'stillOpen': True}"
+    },
+    {
+      "check": "CRE-13-bar-click-opens-real-work",
+      "passed": true,
+      "detail": "href=https://www.iesdouyin.com/share/video/7695691295523966970/?region=CN&mid=7695691224875010843&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=NH41JEbN51BsauUJZcgnuOeOQio_Mk7JwaSVCYlhMZ4-&share_version=260800&ts=1791940025&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D matches apiUrl=https://www.iesdouyin.com/share/video/7695691295523966970/?region=CN&mid=7695691224875010843&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=NH41JEbN51BsauUJZcgnuOeOQio_Mk7JwaSVCYlhMZ4-&share_version=260800&ts=1791940025&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D target='_blank' stayedOnDetail=True opened=[]"
+    },
+    {
+      "check": "CRE-13-tooltip-link-real-work",
+      "passed": true,
+      "detail": "tooltipLink=https://www.iesdouyin.com/share/video/7695691295523966970/?region=CN&mid=7695691224875010843&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=NH41JEbN51BsauUJZcgnuOeOQio_Mk7JwaSVCYlhMZ4-&share_version=260800&ts=1791940025&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D (same record as the hovered bar)"
+    },
+    {
+      "check": "CRE-14-cards-render-cover-or-degrade",
+      "passed": true,
+      "detail": "cards=15 withRealCoverImg=0 emptyCoverState=15"
+    },
+    {
+      "check": "CRE-14-cover-gap-is-real-not-faked",
+      "passed": true,
+      "detail": "JSONB item_cover 是不透明对象存储 key（非 http 地址），故按现有占位降级，未构造未经验证的 CDN 链接"
+    },
+    {
+      "check": "CRE-15-card-click-opens-real-work",
+      "passed": true,
+      "detail": "cardHref=https://www.iesdouyin.com/share/video/7695691295523966970/?region=CN&mid=7695691224875010843&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=NH41JEbN51BsauUJZcgnuOeOQio_Mk7JwaSVCYlhMZ4-&share_version=260800&ts=1791940025&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D matches apiUrl=https://www.iesdouyin.com/share/video/7695691295523966970/?region=CN&mid=7695691224875010843&u_code=i9kc3gk0a68&did=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&share_sign=NH41JEbN51BsauUJZcgnuOeOQio_Mk7JwaSVCYlhMZ4-&share_version=260800&ts=1791940025&from_aid=1128&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D target='_blank'"
+    },
+    {
+      "check": "CRE-15-real-link-unique-per-record",
+      "passed": true,
+      "detail": "each href carries its own item_id: ['tion_type%22%3A%22%22%7D', 'tion_type%22%3A%22%22%7D', 'tion_type%22%3A%22%22%7D']…"
+    },
+    {
+      "check": "CRE-16-compare-module-removed",
+      "passed": true,
+      "detail": "compareTable=False titleVisible=False"
+    },
+    {
+      "check": "CRE-17-empty-or-degraded-state",
+      "passed": true,
+      "detail": "最新星图视频 切换后：bars=6 emptyState=None （有数据则正常渲染，无数据则走既有空态，不出现空白页）"
+    },
+    {
+      "check": "CRE-18-narrow-no-overflow",
+      "passed": true,
+      "detail": "390px: overflow=False doc=390px viewport=390px bar=58 card=152"
+    },
+    {
+      "check": "CRE-20-refresh-restores-data",
+      "passed": true,
+      "detail": "刷新后默认章节='商业能力'，创作能力 bars=15 labels identical=True"
+    },
+    {
+      "check": "CRE-01-task-tabs",
+      "passed": true,
+      "detail": "任务入口 tabs=['商业能力', '创作能力', '履约能力', '连接用户', '报价与历史']（前四个固定；报价与历史沿用既有数据条件，未修改）"
+    },
+    {
+      "check": "CRE-03-task-default-commercial",
+      "passed": true,
+      "detail": "task active='商业能力'"
+    },
+    {
+      "check": "CRE-22-task-entry-no-overview",
+      "passed": true,
+      "detail": "containsOverview=False"
+    },
+    {
+      "check": "CRE-22-entry-parity",
+      "passed": true,
+      "detail": "任务入口与达人库入口一致：bars=15 labelsIdentical=True datesIdentical=True linksIdentical=True"
+    },
+    {
+      "check": "CRE-22-regression-履约能力",
+      "passed": true,
+      "detail": "active='履约能力' containsMarker=True length=86"
+    },
+    {
+      "check": "CRE-22-regression-连接用户",
+      "passed": true,
+      "detail": "active='连接用户' containsMarker=True length=744"
+    },
+    {
+      "check": "CRE-22-no-console-errors",
+      "passed": true,
+      "detail": "console error lines=0: []"
+    },
+    {
+      "check": "CRE-22-no-failed-api-calls",
+      "passed": true,
+      "detail": "failed API lines=0: []"
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "CD05-library-default-tab",
+      "path": "docs/evidence/assets/cd05/CD05-library-default-tab.png",
+      "note": null
+    },
+    {
+      "name": "CD05-library-five-chapters",
+      "path": "docs/evidence/assets/cd05/CD05-library-five-chapters.png",
+      "note": null
+    },
+    {
+      "name": "CD05-library-latest-video-chart",
+      "path": "docs/evidence/assets/cd05/CD05-library-latest-video-chart.png",
+      "note": null
+    },
+    {
+      "name": "CD05-library-hover-tooltip",
+      "path": "docs/evidence/assets/cd05/CD05-library-hover-tooltip.png",
+      "note": null
+    },
+    {
+      "name": "CD05-library-work-cards",
+      "path": "docs/evidence/assets/cd05/CD05-library-work-cards.png",
+      "note": null
+    },
+    {
+      "name": "CD05-library-creative-390",
+      "path": "docs/evidence/assets/cd05/CD05-library-creative-390.png",
+      "note": null
+    },
+    {
+      "name": "CD05-task-latest-video-chart",
+      "path": "docs/evidence/assets/cd05/CD05-task-latest-video-chart.png",
+      "note": null
+    }
+  ],
+  "console": [
+    {
+      "raw": "### Result\nTotal messages: 3 (Errors: 0, Warnings: 0)\nReturning 1 messages for level \"info\"\n\n[INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=1e9a3433:22162"
+    }
+  ],
+  "network": [
+    {
+      "raw": "### Result\n32. [GET] http://127.0.0.1:5173/api/auth/me => [200] OK\n33. [GET] http://127.0.0.1:5173/api/tasks/efb257a6-476b-47ee-aff4-807795bb61a0/creators/700ca5b0-f0c8-4436-86fe-624dfeb0f151 => [200] OK\n34. [GET] http://127.0.0.1:5173/api/tasks/efb257a6-476b-47ee-aff4-807795bb61a0/creators/700ca5b0-f0c8-4436-86fe-624dfeb0f151/contents?collection_type=excellent_reach&limit=20 => [200] OK\n35. [GET] http://127.0.0.1:5173/api/tasks/efb257a6-476b-47ee-aff4-807795bb61a0/creators/700ca5b0-f0c8-4436-86fe-624dfeb0f151/contents?collection_type=excellent_seeding&limit=20 => [200] OK\n36. [GET] http://127.0.0.1:5173/api/platforms/douyin_xingtu/profile-field-catalog => [200] OK\n\nNote: 38 static requests not shown, run with \"static\" option to see them."
+    }
+  ],
+  "passed": 38,
+  "failed": 0
+}

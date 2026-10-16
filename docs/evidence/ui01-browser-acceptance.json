@@ -1,0 +1,248 @@
+{
+  "task_id": "efb257a6-476b-47ee-aff4-807795bb61a0",
+  "creator_id": "700ca5b0-f0c8-4436-86fe-624dfeb0f151",
+  "checks": [
+    {
+      "check": "MCP-TRANSPORT",
+      "passed": true,
+      "detail": "Playwright MCP 1.62.0-alpha-2026-06-29 over stdio, 23 tools"
+    },
+    {
+      "check": "T02-no-duplicate-entry",
+      "passed": true,
+      "detail": "nav links = ['任务中心', '达人库']"
+    },
+    {
+      "check": "T02-kept-entries",
+      "passed": true,
+      "detail": "nav links = ['任务中心', '达人库']"
+    },
+    {
+      "check": "T02-spacing",
+      "passed": true,
+      "detail": "vertical gap between entries = 4px, section label='工作台'"
+    },
+    {
+      "check": "T02-in-page-create",
+      "passed": true,
+      "detail": "in-page create links = ['/tasks/new']"
+    },
+    {
+      "check": "T03-row-present",
+      "passed": true,
+      "detail": "5 creator rows, target '甄选聊车' found=True"
+    },
+    {
+      "check": "T03-metrics-labelled",
+      "passed": true,
+      "detail": "metric labels = ['粉丝', '月深度用户', '互动 / 完播原始值', 'CPM / CPE 原始值']"
+    },
+    {
+      "check": "T03-followers",
+      "passed": true,
+      "detail": "粉丝 = '1,351,784' (DB followers_count=1351784)"
+    },
+    {
+      "check": "T03-deep-users",
+      "passed": true,
+      "detail": "月深度用户 = '≈1,158w' (DB raw='1,158w', approximate=true)"
+    },
+    {
+      "check": "T03-interaction-completion",
+      "passed": true,
+      "detail": "互动/完播 = '112 / 551' (DB 112 / 551)"
+    },
+    {
+      "check": "T03-cpm-cpe",
+      "passed": true,
+      "detail": "CPM/CPE = '2969 / 246' (DB 21-60: 2969 / 246)"
+    },
+    {
+      "check": "T03-second-cpm-band",
+      "passed": true,
+      "detail": "second band note = {'text': '21–60 秒 · 60 秒以上 2969 / 246', 'height': 35, 'lineHeight': 12, 'clipped': False, 'hidden': False}"
+    },
+    {
+      "check": "T03-tags",
+      "passed": true,
+      "detail": "tags = '汽车 · 金融业 · 美妆 · 游戏' (snapshot creator_type_label=汽车, industry=金融业/美妆/游戏)"
+    },
+    {
+      "check": "T03-avatar",
+      "passed": true,
+      "detail": "avatar rendered from snapshot basic.avatar_uri"
+    },
+    {
+      "check": "T03-no-overflow",
+      "passed": true,
+      "detail": "row scrollWidth=579 clientWidth=579 viewport={'width': 1200, 'scrollWidth': 1200}"
+    },
+    {
+      "check": "T03-detail-nav",
+      "passed": true,
+      "detail": "task entry opened '/tasks/efb257a6-476b-47ee-aff4-807795bb61a0/creators/700ca5b0-f0c8-4436-86fe-624dfeb0f151', heading='甄选聊车', error=False"
+    },
+    {
+      "check": "T04-completion-label",
+      "passed": true,
+      "detail": "hero facts labels = ['创建人', '创建时间', '最近更新', '完成时间', '能力版本']"
+    },
+    {
+      "check": "T04-update-label",
+      "passed": true,
+      "detail": "the last-write field keeps its own distinct label"
+    },
+    {
+      "check": "T04-completion-value",
+      "passed": true,
+      "detail": "完成时间 = '10/14 10:02' (DB completed_at = 2026-10-14T02:02:10Z == UTC+8 10:02)"
+    },
+    {
+      "check": "T04-tooltip",
+      "passed": true,
+      "detail": "最近更新 explains it is the last write, not completion"
+    },
+    {
+      "check": "T05-library-entry",
+      "passed": true,
+      "detail": "library entry opened '/creators/700ca5b0-f0c8-4436-86fe-624dfeb0f151', heading='甄选聊车', error=False"
+    },
+    {
+      "check": "T05-same-heading",
+      "passed": true,
+      "detail": "headings: library='甄选聊车' task='甄选聊车'"
+    },
+    {
+      "check": "T05-same-field-labels",
+      "passed": true,
+      "detail": "library fields=['达人类型', '行业', '地区', 'MCN', '粉丝', '月深度用户', '月连接用户', '月粉丝增长原始值', '互动原始值', '完播原始值', '预期 CPM（21–60 秒）', '预期 CPM（60 秒以上）', '预期 CPE（21–60 秒）', '预期 CPE（60 秒以上）', '简介'] / task fields=['达人类型', '行业', '地区', 'MCN', '粉丝', '月深度用户', '月连接用户', '月粉丝增长原始值', '互动原始值', '完播原始值', '预期 CPM（21–60 秒）', '预期 CPM（60 秒以上）', '预期 CPE（21–60 秒）', '预期 CPE（60 秒以上）', '简介']"
+    },
+    {
+      "check": "T05-same-field-values",
+      "passed": true,
+      "detail": "library values=['汽车', '金融业 / 美妆 / 游戏', '内蒙古自治区 / 赤峰市', '暂无数据', '1351784', '≈1,158w', '23439854', '0.01969004266000137', '112', '551', '2969', '2969', '246', '246', '关注我，带你每日了解一个汽车知识🚗'] / task values=['汽车', '金融业 / 美妆 / 游戏', '内蒙古自治区 / 赤峰市', '暂无数据', '1351784', '≈1,158w', '23439854', '0.01969004266000137', '112', '551', '2969', '2969', '246', '246', '关注我，带你每日了解一个汽车知识🚗']"
+    },
+    {
+      "check": "T05-same-metrics",
+      "passed": true,
+      "detail": "library KPIs=[{'label': '粉丝', 'value': '1,351,784'}, {'label': '预期 CPM（21–60 秒）', 'value': '2969'}, {'label': '预期 CPE（21–60 秒）', 'value': '246'}, {'label': '互动原始值', 'value': '112'}, {'label': '完播原始值', 'value': '551'}, {'label': '月连接用户', 'value': '23439854'}] / task KPIs=[{'label': '粉丝', 'value': '1,351,784'}, {'label': '预期 CPM（21–60 秒）', 'value': '2969'}, {'label': '预期 CPE（21–60 秒）', 'value': '246'}, {'label': '互动原始值', 'value': '112'}, {'label': '完播原始值', 'value': '551'}, {'label': '月连接用户', 'value': '23439854'}]"
+    },
+    {
+      "check": "T05-same-base-sections",
+      "passed": true,
+      "detail": "library sections=['基础与传播表现', '数据质量与来源', '当前合作报价', '报价历史', '系统采集历史'] / task sections=['基础与传播表现', '数据质量与来源']"
+    },
+    {
+      "check": "T05-id-not-mixed-up",
+      "passed": true,
+      "detail": "both entries resolved the same creator id to the same creator name"
+    },
+    {
+      "check": "REG-task-centre",
+      "passed": true,
+      "detail": "/tasks rows=20, error=False"
+    },
+    {
+      "check": "REG-creator-library",
+      "passed": true,
+      "detail": "/creators rows=20, error=False"
+    },
+    {
+      "check": "REG-create-task-entry",
+      "passed": true,
+      "detail": "/tasks/new heading='创建采集任务', error=False"
+    },
+    {
+      "check": "T01-logout",
+      "passed": true,
+      "detail": "logout reached '/login'"
+    },
+    {
+      "check": "T01-on-login-page",
+      "passed": true,
+      "detail": "landed on {'onLogin': True, 'type': 'password', 'label': '显示密码', 'pressed': 'false'}"
+    },
+    {
+      "check": "T01-default-hidden",
+      "passed": true,
+      "detail": "password input type='password', toggle label='显示密码'"
+    },
+    {
+      "check": "T01-typed",
+      "passed": true,
+      "detail": "typed username='media-a', password length=24"
+    },
+    {
+      "check": "T01-reveal",
+      "passed": true,
+      "detail": "after first click type='text', aria-label='隐藏密码'"
+    },
+    {
+      "check": "T01-restore",
+      "passed": true,
+      "detail": "after second click type='password', aria-label='显示密码'"
+    },
+    {
+      "check": "T01-value-kept",
+      "passed": true,
+      "detail": "password length after reveal/hide: 24 / 24"
+    },
+    {
+      "check": "T01-login-works",
+      "passed": true,
+      "detail": "redirected to '/tasks', heading='任务中心'"
+    }
+  ],
+  "screenshots": [
+    {
+      "name": "T02-sidebar-navigation",
+      "path": "docs/evidence/assets/ui01/T02-sidebar-navigation.png",
+      "note": null
+    },
+    {
+      "name": "T03-task-creator-metrics",
+      "path": "docs/evidence/assets/ui01/T03-task-creator-metrics.png",
+      "note": null
+    },
+    {
+      "name": "T05-task-entry-creator-detail",
+      "path": "docs/evidence/assets/ui01/T05-task-entry-creator-detail.png",
+      "note": null
+    },
+    {
+      "name": "T04-task-completion-time",
+      "path": "docs/evidence/assets/ui01/T04-task-completion-time.png",
+      "note": null
+    },
+    {
+      "name": "T05-library-entry-creator-detail",
+      "path": "docs/evidence/assets/ui01/T05-library-entry-creator-detail.png",
+      "note": null
+    },
+    {
+      "name": "REG-creator-library-list",
+      "path": "docs/evidence/assets/ui01/REG-creator-library-list.png",
+      "note": null
+    },
+    {
+      "name": "REG-create-task-entry",
+      "path": "docs/evidence/assets/ui01/REG-create-task-entry.png",
+      "note": null
+    },
+    {
+      "name": "T01-login-password-toggle",
+      "path": "docs/evidence/assets/ui01/T01-login-password-toggle.png",
+      "note": null
+    }
+  ],
+  "console_messages": [
+    {
+      "raw": "### Result\nTotal messages: 4 (Errors: 1, Warnings: 0)\nReturning 2 messages for level \"info\"\n\n[INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=1e9a3433:22162\n[ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.0.0.1:5173/api/auth/me:0"
+    }
+  ],
+  "network_requests": [
+    {
+      "raw": "### Result\n24. [GET] http://127.0.0.1:5173/api/auth/me => [401] Unauthorized\n25. [POST] http://127.0.0.1:5173/api/auth/login => [200] OK\n26. [GET] http://127.0.0.1:5173/api/tasks?limit=20 => [200] OK\n\nNote: 23 static requests not shown, run with \"static\" option to see them."
+    }
+  ]
+}

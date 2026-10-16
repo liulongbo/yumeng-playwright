@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from playwright.async_api import Error as BrowserError
+
 from .adapter import BrowserAdapter
 from .contracts import PlatformRegistry
 from .domain import CollectorError
@@ -151,9 +153,12 @@ async def run_session_diagnostics(
             config.expected_account_id,
             lambda: _noop_guard(),
             live=True,
+            manually_attested_account_id=config.manually_attested_account_id,
         )
         try:
             health = await adapter.inspect_session(page)
+            if health.status.value == "VALID":
+                await runtime.export_session_snapshot(browser)
             for cookie in await browser.cookies():
                 cookies.append(
                     {
@@ -169,7 +174,14 @@ async def run_session_diagnostics(
                         "value_hmac": value_hmac(secret, cookie["value"]),
                     }
                 )
-            storage = await browser_storage_summary(page, secret)
+            try:
+                storage = await browser_storage_summary(page, secret)
+            except BrowserError:
+                # Session health and the cookie inventory have already been observed.  A
+                # platform-driven navigation can replace the execution context while the
+                # optional storage summary is iterating IndexedDB; it must not discard the
+                # whole diagnostic (or the snapshot already safely exported above).
+                storage = {"unavailable_reason": "PAGE_CONTEXT_CHANGED"}
         finally:
             await adapter.close()
     assert health
@@ -199,6 +211,10 @@ async def run_session_diagnostics(
         "profile": {
             "path": str(config.profile_directory.resolve()),
             "files": profile_file_metadata(config.profile_directory.resolve()),
+        },
+        "session_snapshot": {
+            "restored_before_navigation": runtime.session_snapshot_restored,
+            "captured_at": runtime.session_snapshot_captured_at,
         },
         "cookies": sorted(cookies, key=lambda item: (item["domain"], item["name"])),
         "storage": storage,

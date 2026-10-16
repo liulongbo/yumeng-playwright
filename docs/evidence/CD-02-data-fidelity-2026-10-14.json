@@ -1,0 +1,1066 @@
+{
+  "checks": [
+    {
+      "kind": "rail",
+      "check": "粉丝",
+      "ok": true,
+      "page": "1,351,784",
+      "stored": "1,351,784",
+      "note": "首屏身份指标"
+    },
+    {
+      "kind": "rail",
+      "check": "月连接用户",
+      "ok": true,
+      "page": "23,439,854",
+      "stored": "23,439,854",
+      "note": "首屏身份指标"
+    },
+    {
+      "kind": "rail",
+      "check": "月深度用户",
+      "ok": true,
+      "page": "≈11,580,000",
+      "stored": "≈11,580,000",
+      "note": "首屏身份指标"
+    },
+    {
+      "kind": "rail",
+      "check": "月涨粉率",
+      "ok": true,
+      "page": "1.97%",
+      "stored": "1.97%",
+      "note": "首屏身份指标"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/星图ID",
+      "ok": true,
+      "page": "7503176021160493065",
+      "stored": "7503176021160493065",
+      "note": "basic.platform_creator_id"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/城市",
+      "ok": true,
+      "page": "赤峰市",
+      "stored": "赤峰市",
+      "note": "basic.city"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/省份",
+      "ok": true,
+      "page": "内蒙古自治区",
+      "stored": "内蒙古自治区",
+      "note": "basic.province"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/MCN公司",
+      "ok": true,
+      "page": {
+        "value": "平台暂无数据",
+        "state": "平台暂无数据"
+      },
+      "stored": "平台暂无数据",
+      "note": "basic.mcn_name"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/达人类型（平台原值）",
+      "ok": true,
+      "page": "0",
+      "stored": "0",
+      "note": "basic.creator_type_raw"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/作者类型（平台原值）",
+      "ok": true,
+      "page": "1",
+      "stored": "1",
+      "note": "basic.author_type_raw"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/行业标签（平台结构）",
+      "ok": true,
+      "page": {
+        "value": "平台暂无数据",
+        "state": "平台暂无数据"
+      },
+      "stored": "平台暂无数据",
+      "note": "basic.industry_labels_raw"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/内容风格标签（平台原值）",
+      "ok": true,
+      "page": {
+        "value": "平台暂无数据",
+        "state": "平台暂无数据"
+      },
+      "stored": "平台暂无数据",
+      "note": "basic.content_style_labels_raw"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/抖音 SecUID",
+      "ok": true,
+      "page": "MS4wLjABAAAAxfOJrtSs98JMi7KvLWsdHJG-a4nX4JisIcJw1chnGmM",
+      "stored": "MS4wLjABAAAAxfOJrtSs98JMi7KvLWsdHJG-a4nX4JisIcJw1chnGmM",
+      "note": "basic.douyin_sec_uid"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/抖音号",
+      "ok": true,
+      "page": "28264865291",
+      "stored": "28264865291",
+      "note": "basic.douyin_unique_id"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/播放稳定性",
+      "ok": true,
+      "page": {
+        "value": "平台返回空值",
+        "state": "平台返回空值"
+      },
+      "stored": "平台返回空值",
+      "note": "spread.play_stability"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/播放中位数",
+      "ok": true,
+      "page": "929,620",
+      "stored": "929,620",
+      "note": "spread.play_median"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/平均点赞",
+      "ok": true,
+      "page": "9,658",
+      "stored": "9,658",
+      "note": "spread.average_likes"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/平均评论",
+      "ok": true,
+      "page": "749",
+      "stored": "749",
+      "note": "spread.average_comments"
+    },
+    {
+      "kind": "field",
+      "check": "达人概览/平均分享",
+      "ok": true,
+      "page": "2,108",
+      "stored": "2,108",
+      "note": "spread.average_shares"
+    },
+    {
+      "kind": "field",
+      "check": "商业能力/商业播放量",
+      "ok": true,
+      "page": "1,346,919",
+      "stored": "1,346,919",
+      "note": "spread.commercial_play_count"
+    },
+    {
+      "kind": "field",
+      "check": "商业能力/商业自然播放量",
+      "ok": true,
+      "page": "1,092,476",
+      "stored": "1,092,476",
+      "note": "spread.commercial_natural_play_count"
+    },
+    {
+      "kind": "field",
+      "check": "商业能力/20-60秒商业 CPM",
+      "ok": true,
+      "page": "29.6974",
+      "stored": "29.6974",
+      "note": "spread.commercial_cpm_20_60"
+    },
+    {
+      "kind": "field",
+      "check": "商业能力/60秒以上商业 CPM",
+      "ok": true,
+      "page": "29.6974",
+      "stored": "29.6974",
+      "note": "spread.commercial_cpm_60"
+    },
+    {
+      "kind": "field",
+      "check": "商业能力/20-60秒商业 CPE",
+      "ok": true,
+      "page": "2.4605",
+      "stored": "2.4605",
+      "note": "spread.commercial_cpe_20_60"
+    },
+    {
+      "kind": "field",
+      "check": "商业能力/60秒以上商业 CPE",
+      "ok": true,
+      "page": "2.4605",
+      "stored": "2.4605",
+      "note": "spread.commercial_cpe_60"
+    },
+    {
+      "kind": "field",
+      "check": "商业能力/推荐商品数",
+      "ok": true,
+      "page": {
+        "value": "—",
+        "state": "平台返回空值"
+      },
+      "stored": "平台返回空值",
+      "note": "conversion.recommended_product_count"
+    },
+    {
+      "kind": "field",
+      "check": "履约能力/信用分（旧口径）",
+      "ok": true,
+      "page": "100",
+      "stored": "100",
+      "note": "fulfillment.credit_score"
+    },
+    {
+      "kind": "field",
+      "check": "履约能力/信用分（新口径）",
+      "ok": true,
+      "page": "80",
+      "stored": "80",
+      "note": "fulfillment.new_credit_score"
+    },
+    {
+      "kind": "field",
+      "check": "履约能力/历史订单数",
+      "ok": true,
+      "page": "6",
+      "stored": "6",
+      "note": "fulfillment.historical_order_count"
+    },
+    {
+      "kind": "field",
+      "check": "履约能力/进行中订单数",
+      "ok": true,
+      "page": "0",
+      "stored": "0",
+      "note": "fulfillment.processing_order_count"
+    },
+    {
+      "kind": "field",
+      "check": "履约能力/最大承接订单数",
+      "ok": true,
+      "page": "1",
+      "stored": "1",
+      "note": "fulfillment.max_processing_order_count"
+    },
+    {
+      "kind": "field",
+      "check": "履约能力/消息回复率",
+      "ok": true,
+      "page": "0.5238",
+      "stored": "0.5238",
+      "note": "fulfillment.message_reply_rate"
+    },
+    {
+      "kind": "field",
+      "check": "连接用户/粉丝数",
+      "ok": true,
+      "page": "1,351,784",
+      "stored": "1,351,784",
+      "note": "basic.followers"
+    },
+    {
+      "kind": "field",
+      "check": "连接用户/月连接用户数（月）",
+      "ok": true,
+      "page": "23,439,854",
+      "stored": "23,439,854",
+      "note": "fans.monthly_connected_users"
+    },
+    {
+      "kind": "field",
+      "check": "连接用户/月深度用户数（月）",
+      "ok": true,
+      "page": "≈11,580,000",
+      "stored": "≈11,580,000",
+      "note": "basic.monthly_deep_users"
+    },
+    {
+      "kind": "identifier",
+      "check": "星图ID",
+      "ok": true,
+      "page": "7503176021160493065",
+      "stored": "7503176021160493065",
+      "note": "标识必须逐字符一致"
+    },
+    {
+      "kind": "identifier",
+      "check": "抖音号",
+      "ok": true,
+      "page": "28264865291",
+      "stored": "28264865291",
+      "note": "标识必须逐字符一致"
+    },
+    {
+      "kind": "dedicated",
+      "check": "互动率及同行超越",
+      "ok": true,
+      "page": {
+        "value": "1.12%优于同类型达人74.93%平台原值",
+        "peer": null
+      },
+      "stored": {
+        "value": "1.12%",
+        "peer": "优于同类型达人 74.93%"
+      },
+      "note": "spread.interaction_rate"
+    },
+    {
+      "kind": "dedicated",
+      "check": "互动率及同行超越保留原值",
+      "ok": true,
+      "page": "· 平台原值 112 / 7493",
+      "stored": "标签应含平台原值 112",
+      "note": "spread.interaction_rate"
+    },
+    {
+      "kind": "dedicated",
+      "check": "完播率及同行超越",
+      "ok": true,
+      "page": {
+        "value": "5.51%优于同类型达人98.01%平台原值",
+        "peer": null
+      },
+      "stored": {
+        "value": "5.51%",
+        "peer": "优于同类型达人 98.01%"
+      },
+      "note": "spread.completion_rate"
+    },
+    {
+      "kind": "dedicated",
+      "check": "完播率及同行超越保留原值",
+      "ok": true,
+      "page": "· 平台原值 551 / 9801",
+      "stored": "标签应含平台原值 551",
+      "note": "spread.completion_rate"
+    },
+    {
+      "kind": "dedicated",
+      "check": "预期 CPM（21–60 秒）",
+      "ok": true,
+      "page": "2,969",
+      "stored": "2,969",
+      "note": "spread.expected_cpm.cpm_21_60"
+    },
+    {
+      "kind": "dedicated",
+      "check": "预期 CPM（60 秒以上）",
+      "ok": true,
+      "page": "2,969",
+      "stored": "2,969",
+      "note": "spread.expected_cpm.cpm_60"
+    },
+    {
+      "kind": "dedicated",
+      "check": "预期 CPE（21–60 秒）",
+      "ok": true,
+      "page": "246",
+      "stored": "246",
+      "note": "spread.expected_cpe.cpe_21_60"
+    },
+    {
+      "kind": "dedicated",
+      "check": "预期 CPE（60 秒以上）",
+      "ok": true,
+      "page": "246",
+      "stored": "246",
+      "note": "spread.expected_cpe.cpe_60"
+    },
+    {
+      "kind": "dedicated",
+      "check": "销售预期 CPM（21–60 秒）",
+      "ok": true,
+      "page": "3,836",
+      "stored": "3,836",
+      "note": "spread.sales_expected_cpm.cpm_21_60"
+    },
+    {
+      "kind": "dedicated",
+      "check": "销售预期 CPM（60 秒以上）",
+      "ok": true,
+      "page": "3,836",
+      "stored": "3,836",
+      "note": "spread.sales_expected_cpm.cpm_60"
+    },
+    {
+      "kind": "dedicated",
+      "check": "作品传播比较指标",
+      "ok": true,
+      "page": "作品数 1 · 中位播放 929,620（同行超越 9759）",
+      "stored": "作品数 1 · 中位播放 929,620（同行超越 9759）",
+      "note": "spread.item_rate_metrics"
+    },
+    {
+      "kind": "dedicated",
+      "check": "相关视频数",
+      "ok": true,
+      "page": "1",
+      "stored": "1",
+      "note": "conversion.related_video_count"
+    },
+    {
+      "kind": "dedicated",
+      "check": "相关视频播放中位数",
+      "ok": true,
+      "page": "862,850",
+      "stored": "862,850",
+      "note": "conversion.related_video_play_median"
+    },
+    {
+      "kind": "dedicated",
+      "check": "粉丝增长量",
+      "ok": true,
+      "page": "26,138",
+      "stored": "26,138",
+      "note": "fans.fans_growth"
+    },
+    {
+      "kind": "dedicated",
+      "check": "平均观看时长",
+      "ok": true,
+      "page": "101.4 秒",
+      "stored": "101.4 秒",
+      "note": "平台显示 101.4s，库内原值是秒×100"
+    },
+    {
+      "kind": "dedicated",
+      "check": "性别编码",
+      "ok": true,
+      "page": {
+        "value": "女",
+        "label": "性别 · 平台编码 2"
+      },
+      "stored": {
+        "value": "女",
+        "label": "性别 · 平台编码 2"
+      },
+      "note": "basic.gender"
+    },
+    {
+      "kind": "dedicated",
+      "check": "GPM",
+      "ok": true,
+      "page": "0",
+      "stored": "0",
+      "note": "gpm"
+    },
+    {
+      "kind": "dedicated",
+      "check": "销量",
+      "ok": true,
+      "page": "0",
+      "stored": "0",
+      "note": "sell_cnt"
+    },
+    {
+      "kind": "dedicated",
+      "check": "订单数",
+      "ok": true,
+      "page": "0",
+      "stored": "0",
+      "note": "order_cnt"
+    },
+    {
+      "kind": "dedicated",
+      "check": "累计数",
+      "ok": true,
+      "page": "0",
+      "stored": "0",
+      "note": "total_cnt"
+    },
+    {
+      "kind": "dedicated",
+      "check": "A3 增量及同行排名",
+      "ok": true,
+      "page": "20,000 - 100,000",
+      "stored": "20,000 - 100,000",
+      "note": "seeding.a3_increment"
+    },
+    {
+      "kind": "dedicated",
+      "check": "看后搜人数",
+      "ok": true,
+      "page": "5,000 - 15,000",
+      "stored": "5,000 - 15,000",
+      "note": "seeding.search_after_view"
+    },
+    {
+      "kind": "dedicated",
+      "check": "看后搜比例",
+      "ok": true,
+      "page": "0.5% - 1%",
+      "stored": "0.5% - 1%",
+      "note": "seeding.search_after_view_rate"
+    },
+    {
+      "kind": "dedicated",
+      "check": "个人页看后搜人数",
+      "ok": true,
+      "page": "100 - 1,000",
+      "stored": "100 - 1,000",
+      "note": "seeding.personal_search_after_view"
+    },
+    {
+      "kind": "dedicated",
+      "check": "个人页看后搜比例",
+      "ok": true,
+      "page": "0.02% - 0.1%",
+      "stored": "0.02% - 0.1%",
+      "note": "seeding.personal_search_after_view_rate"
+    },
+    {
+      "kind": "dedicated",
+      "check": "搜索词点击率",
+      "ok": true,
+      "page": "1% - 1.5%",
+      "stored": "1% - 1.5%",
+      "note": "seeding.search_word_ctr"
+    },
+    {
+      "kind": "dedicated",
+      "check": "GPM 区间",
+      "ok": true,
+      "page": "—",
+      "stored": "—",
+      "note": "conversion.gpm_range"
+    },
+    {
+      "kind": "dedicated",
+      "check": "销售额区间",
+      "ok": true,
+      "page": "—",
+      "stored": "—",
+      "note": "conversion.sales_amount_range"
+    },
+    {
+      "kind": "dedicated",
+      "check": "组件点击数区间",
+      "ok": true,
+      "page": "—",
+      "stored": "—",
+      "note": "conversion.component_click_count_range"
+    },
+    {
+      "kind": "dedicated",
+      "check": "组件点击率区间",
+      "ok": true,
+      "page": "—",
+      "stored": "—",
+      "note": "conversion.component_click_rate_range"
+    },
+    {
+      "kind": "dedicated",
+      "check": "相关 CPC 区间",
+      "ok": true,
+      "page": "—",
+      "stored": "—",
+      "note": "conversion.related_cpc_range"
+    },
+    {
+      "kind": "dedicated",
+      "check": "商品价格区间",
+      "ok": true,
+      "page": "—",
+      "stored": "—",
+      "note": "conversion.product_price_range"
+    },
+    {
+      "kind": "derivation",
+      "check": "分层行数",
+      "ok": true,
+      "page": 5,
+      "stored": 5,
+      "note": "4 层 + 合计"
+    },
+    {
+      "kind": "derivation",
+      "check": "分层名称",
+      "ok": true,
+      "page": [
+        "了解",
+        "兴趣",
+        "喜欢",
+        "追随",
+        "连接用户数（合计）"
+      ],
+      "stored": [
+        "了解",
+        "兴趣",
+        "喜欢",
+        "追随",
+        "连接用户数（合计）"
+      ],
+      "note": "平台页面上的分层名称"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段1人数",
+      "ok": true,
+      "page": "11,860,342",
+      "stored": "11,860,342",
+      "note": "平台原值"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段1占比",
+      "ok": true,
+      "page": "50.60%",
+      "stored": "50.60%",
+      "note": "按合计计算的展示占比"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段1对比列",
+      "ok": true,
+      "page": "同行业中位 466,345",
+      "stored": "同行业中位 466,345",
+      "note": "平台同行业对比原值"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段2人数",
+      "ok": true,
+      "page": "6,643,390",
+      "stored": "6,643,390",
+      "note": "平台原值"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段2占比",
+      "ok": true,
+      "page": "28.34%",
+      "stored": "28.34%",
+      "note": "按合计计算的展示占比"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段2对比列",
+      "ok": true,
+      "page": "同行业中位 96,578",
+      "stored": "同行业中位 96,578",
+      "note": "平台同行业对比原值"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段3人数",
+      "ok": true,
+      "page": "4,930,200",
+      "stored": "4,930,200",
+      "note": "平台原值"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段3占比",
+      "ok": true,
+      "page": "21.03%",
+      "stored": "21.03%",
+      "note": "按合计计算的展示占比"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段3对比列",
+      "ok": true,
+      "page": "同行业中位 20,201",
+      "stored": "同行业中位 20,201",
+      "note": "平台同行业对比原值"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段4人数",
+      "ok": true,
+      "page": "5,922",
+      "stored": "5,922",
+      "note": "平台原值"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段4占比",
+      "ok": true,
+      "page": "0.03%",
+      "stored": "0.03%",
+      "note": "按合计计算的展示占比"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段4对比列",
+      "ok": true,
+      "page": "同行业中位 0",
+      "stored": "同行业中位 0",
+      "note": "平台同行业对比原值"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段5人数",
+      "ok": true,
+      "page": "23,439,854",
+      "stored": "23,439,854",
+      "note": "平台原值"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段5占比",
+      "ok": true,
+      "page": "100.00%",
+      "stored": "100.00%",
+      "note": "按合计计算的展示占比"
+    },
+    {
+      "kind": "derivation",
+      "check": "阶段5对比列",
+      "ok": true,
+      "page": "平台超越比例原值 0.0125",
+      "stored": "平台超越比例原值 0.0125",
+      "note": "平台同行业对比原值"
+    },
+    {
+      "kind": "derivation",
+      "check": "各层合计=合计值",
+      "ok": true,
+      "page": "各层合计 23,439,854，与合计值一致",
+      "stored": "各层合计 23,439,854，与合计值一致",
+      "note": "平台分层关系必须成立"
+    },
+    {
+      "kind": "trend",
+      "check": "粉丝总数末值",
+      "ok": true,
+      "page": "平台每日粉丝总数 · 末值 1,353,611（2026-10-13）",
+      "stored": "末值 1,353,611",
+      "note": "fans.fans_daily_trend"
+    },
+    {
+      "kind": "trend",
+      "check": "粉丝总数点数",
+      "ok": true,
+      "page": 30,
+      "stored": 30,
+      "note": "平台序列长度"
+    },
+    {
+      "kind": "trend",
+      "check": "粉丝日增量区间内净增合计",
+      "ok": true,
+      "page": "平台每日粉丝净增 · 区间内净增合计 27,548",
+      "stored": "区间内净增合计 27,548",
+      "note": "fans.fans_daily_delta"
+    },
+    {
+      "kind": "trend",
+      "check": "粉丝日增量点数",
+      "ok": true,
+      "page": 30,
+      "stored": 30,
+      "note": "平台序列长度"
+    },
+    {
+      "kind": "trend",
+      "check": "连接用户末值",
+      "ok": true,
+      "page": "平台窗口口径（末点=月连接用户数） · 末值 23,439,854（2026-10-12）",
+      "stored": "末值 23,439,854",
+      "note": "fans.connection_daily_trend"
+    },
+    {
+      "kind": "trend",
+      "check": "连接用户点数",
+      "ok": true,
+      "page": 30,
+      "stored": 30,
+      "note": "平台序列长度"
+    },
+    {
+      "kind": "collection",
+      "check": "精选作品条数",
+      "ok": true,
+      "page": 4,
+      "stored": 4,
+      "note": "快照集合作品数"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片播放",
+      "ok": true,
+      "page": [
+        "播放 1,944,275",
+        "点赞 28,260",
+        "评论 1,156"
+      ],
+      "stored": "播放 1,944,275",
+      "note": "卡片字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片点赞",
+      "ok": true,
+      "page": [
+        "播放 1,944,275",
+        "点赞 28,260",
+        "评论 1,156"
+      ],
+      "stored": "点赞 28,260",
+      "note": "卡片字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片评论",
+      "ok": true,
+      "page": [
+        "播放 1,944,275",
+        "点赞 28,260",
+        "评论 1,156"
+      ],
+      "stored": "评论 1,156",
+      "note": "卡片字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片标题",
+      "ok": true,
+      "page": "汽车玻璃水怎么选 给大家总结4款不同配方的玻璃水品牌#汽车 #汽车知识 #汽车玻璃水 #汽车保养 #生物基玻璃水",
+      "stored": "汽车玻璃水怎么选 给大家总结4款不同配方的玻璃水品牌#汽车 #汽车知识 #汽车玻璃水 #汽车保养 #生物基玻璃水",
+      "note": "title 字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片播放",
+      "ok": true,
+      "page": [
+        "播放 3,932,469",
+        "点赞 46,941",
+        "评论 1,257"
+      ],
+      "stored": "播放 3,932,469",
+      "note": "卡片字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片点赞",
+      "ok": true,
+      "page": [
+        "播放 3,932,469",
+        "点赞 46,941",
+        "评论 1,257"
+      ],
+      "stored": "点赞 46,941",
+      "note": "卡片字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片评论",
+      "ok": true,
+      "page": [
+        "播放 3,932,469",
+        "点赞 46,941",
+        "评论 1,257"
+      ],
+      "stored": "评论 1,257",
+      "note": "卡片字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片标题",
+      "ok": true,
+      "page": "刚提完新车 建议购买的四种汽车用品#汽车知识#提新车#汽车#生物基玻璃水#汽车用品",
+      "stored": "刚提完新车 建议购买的四种汽车用品#汽车知识#提新车#汽车#生物基玻璃水#汽车用品",
+      "note": "title 字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片播放",
+      "ok": true,
+      "page": [
+        "播放 5,753,771",
+        "点赞 70,393",
+        "评论 2,738"
+      ],
+      "stored": "播放 5,753,771",
+      "note": "卡片字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片点赞",
+      "ok": true,
+      "page": [
+        "播放 5,753,771",
+        "点赞 70,393",
+        "评论 2,738"
+      ],
+      "stored": "点赞 70,393",
+      "note": "卡片字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片评论",
+      "ok": true,
+      "page": [
+        "播放 5,753,771",
+        "点赞 70,393",
+        "评论 2,738"
+      ],
+      "stored": "评论 2,738",
+      "note": "卡片字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片标题",
+      "ok": true,
+      "page": "S挡的隐藏用法 #汽车知识#说车聊车#行车安全#汽车保养#汽车",
+      "stored": "S挡的隐藏用法 #汽车知识#说车聊车#行车安全#汽车保养#汽车",
+      "note": "title 字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片播放",
+      "ok": true,
+      "page": [
+        "播放 5,775,429",
+        "点赞 32,021",
+        "评论 3,488"
+      ],
+      "stored": "播放 5,775,429",
+      "note": "卡片字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片点赞",
+      "ok": true,
+      "page": [
+        "播放 5,775,429",
+        "点赞 32,021",
+        "评论 3,488"
+      ],
+      "stored": "点赞 32,021",
+      "note": "卡片字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片评论",
+      "ok": true,
+      "page": [
+        "播放 5,775,429",
+        "点赞 32,021",
+        "评论 3,488"
+      ],
+      "stored": "评论 3,488",
+      "note": "卡片字段"
+    },
+    {
+      "kind": "collection",
+      "check": "卡片标题",
+      "ok": true,
+      "page": "前驱车和后驱车区别 #汽车知识#说车聊车#行车安全#汽车保养#汽车",
+      "stored": "前驱车和后驱车区别 #汽车知识#说车聊车#行车安全#汽车保养#汽车",
+      "note": "title 字段"
+    },
+    {
+      "kind": "quotes",
+      "check": "快照报价条数",
+      "ok": true,
+      "page": 2,
+      "stored": 2,
+      "note": "报价数组长度"
+    },
+    {
+      "kind": "quotes",
+      "check": "合作形式-植入视频",
+      "ok": true,
+      "page": "植入视频",
+      "stored": "植入视频",
+      "note": "desc 字段"
+    },
+    {
+      "kind": "quotes",
+      "check": "报价额-植入视频",
+      "ok": true,
+      "page": "￥40,000",
+      "stored": "￥40,000",
+      "note": "price 字段 + 平台展示币种"
+    },
+    {
+      "kind": "quotes",
+      "check": "原价-植入视频",
+      "ok": true,
+      "page": "￥40,000",
+      "stored": "￥40,000",
+      "note": "origin_price 字段 + 平台展示币种"
+    },
+    {
+      "kind": "quotes",
+      "check": "合作形式-定制视频",
+      "ok": true,
+      "page": "定制视频",
+      "stored": "定制视频",
+      "note": "desc 字段"
+    },
+    {
+      "kind": "quotes",
+      "check": "报价额-定制视频",
+      "ok": true,
+      "page": "￥40,000",
+      "stored": "￥40,000",
+      "note": "price 字段 + 平台展示币种"
+    },
+    {
+      "kind": "quotes",
+      "check": "原价-定制视频",
+      "ok": true,
+      "page": "￥40,000",
+      "stored": "￥40,000",
+      "note": "origin_price 字段 + 平台展示币种"
+    },
+    {
+      "kind": "traceability",
+      "check": "页面数字可溯源",
+      "ok": true,
+      "page": [],
+      "stored": "全部来自存储值或文档化派生",
+      "note": "15 个数字 token"
+    },
+    {
+      "kind": "history",
+      "check": "索引计数",
+      "ok": true,
+      "page": "5/7 次已入索引",
+      "stored": "5/7 次已入索引",
+      "note": "如实报告索引缺口"
+    },
+    {
+      "kind": "history",
+      "check": "历史行数=索引数",
+      "ok": true,
+      "page": 5,
+      "stored": 5,
+      "note": "每行一个索引快照"
+    },
+    {
+      "kind": "history",
+      "check": "报价历史条数",
+      "ok": true,
+      "page": 10,
+      "stored": 10,
+      "note": "报价观察行数"
+    }
+  ],
+  "failed": 0
+}
