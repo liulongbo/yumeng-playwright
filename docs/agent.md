@@ -25,7 +25,7 @@
 | 已确定技术方向 | Python、FastAPI、Pydantic、Temporal、PostgreSQL、Redis、Playwright + Chrome/Chromium、S3 兼容对象存储、Docker Compose（FastAPI 与 Redis 在本轮实现中尚未使用，见 `docs/development.md`） |
 | 已完成初始化 | 目录职责、统一命令、测试分层、依赖锁定（`uv.lock`）及任务卡片流程；详见 `docs/development.md` |
 | 待确定或待验证 | U01—U09，包括前端与会话选型、模型服务、平台能力、远程登录、硬件线路、隔离机制及存储运维配置 |
-| 版本库 | 尚无 Git 仓库；建立仓库前不提交密钥、profile 或未脱敏证据 |
+| 版本库 | 已建立 Git 仓库并配置 GitHub 远程 `https://github.com/liulongbo/yumeng-playwright.git`（私有），默认分支 `main`；业务代码与脱敏证据在此受版本控制。不提交密钥、profile 或未脱敏证据：`.runtime/`、`.env`、数据库文件与凭据均保持在 `.gitignore` 中，确认未脱敏内容不得入库 |
 
 不额外引入 Celery、Kafka 或 RabbitMQ。不因前端或平台路径尚未确定而跳过领域接口和模拟验证，也不能据此宣称真实采集已经可用。
 
@@ -153,7 +153,7 @@ docs/
 
 范围内常规实现和修复直接推进；产品范围变化、破坏性数据操作、新增付费资源及生产发布需要明确授权。已有明确授权不重复申请。卡片不得被用作未经授权部署或删除数据的依据。
 
-当前尚无 Git；后续建立仓库时，先检查工作区再变更，不覆盖他人修改，不提交密钥、profile 或未脱敏证据。提交应聚焦单一任务并关联任务 ID；不能编造提交号、分支或 PR，也不因交付规范而擅自初始化仓库。
+已有 Git 仓库与 GitHub 远程（见 1.2 节）；沿用既有流程推送分支，先检查工作区再变更，不覆盖他人修改，不提交密钥、profile 或未脱敏证据。提交应聚焦单一任务并关联任务 ID；不能编造提交号、分支或 PR。
 
 ### 4.4 完成后强制回写
 
