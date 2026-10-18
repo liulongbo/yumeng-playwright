@@ -1,0 +1,26 @@
+[PASS] MCP-01: server={'name': 'Playwright', 'version': '1.62.0-alpha-2026-06-29'}, tools=23
+[PASS] T01-01: creator detail opened
+[PASS] T01-02: manual update control visible
+[PASS] T01-03: manual update button={'text': '手动更新', 'disabled': False}
+[PASS] T01-04: manual update clicked
+[PASS] T01-05: root_task=560a3fb6-0cae-463c-b818-3ddf49fe4711
+[PASS] T01-06: in-flight button={'text': '更新进行中', 'disabled': True}
+[PASS] T01-07: task link visible
+[PASS] T03-01: manual update visible in task center
+[PASS] T03-02: task_kind filter={'ok': True, 'items': [{'id': '560a3fb6-0cae-463c-b818-3ddf49fe4711', 'kind': 'manual_update', 'state': 'COLLECTING'}]}
+[PASS] T03-03: update target panel visible
+[PASS] T03-04: task kind label visible
+state: COLLECTING
+state: PARTIAL_COMPLETED
+[PASS] T01-08: task terminal={'root_task_id': UUID('560a3fb6-0cae-463c-b818-3ddf49fe4711'), 'task_kind': 'manual_update', 'state': 'PARTIAL_COMPLETED', 'unit_id': 'unit-local-mac-02', 'failure_reason': 'MODULE_COLLECTION_FAILED', 'updated_at': datetime.datetime(2026, 10, 17, 16, 20, 14, 430334, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'completed_at': datetime.datetime(2026, 10, 17, 16, 20, 14, 430334, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))} states=['COLLECTING', 'PARTIAL_COMPLETED']
+[PASS] T01-09: terminal status visible in task detail
+[PASS] T06-01: snapshots 1 -> 2
+[PASS] T06-02: all pre-existing snapshots keep their payload hash
+[PASS] T06-03: platform_creators {'n': 1} -> {'n': 1}
+[PASS] T06-04: data_updated_at 2026-10-16 02:16:29.522318+00:00 -> 2026-10-17 16:20:14.430334+00:00
+[PASS] T06-05: task={'task_kind': 'manual_update', 'state': 'PARTIAL_COMPLETED', 'unit_id': 'unit-local-mac-02'} filter_plans={'n': 0} requirements={'n': 0} model_runs={'n': 0} task_creators={'n': 1}
+[FAIL] T02-06: schedule after terminal={'last_success_at': datetime.datetime(2026, 10, 16, 2, 16, 29, 522318, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'last_success_snapshot_id': UUID('8366cf58-9f68-4cdf-bb73-5bb0c23438dd'), 'next_due_at': datetime.datetime(2026, 10, 19, 2, 16, 29, 522318, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'tier': '50w_100w', 'interval_days': 3, 'consecutive_failures': 0, 'last_failure_reason': None, 'in_flight_root_task_id': UUID('560a3fb6-0cae-463c-b818-3ddf49fe4711')}
+[PASS] T01-10: update status={'ok': True, 'body': {'creator_id': '6f13771f-b62a-4b6f-b5a4-c3aa85c86edd', 'in_flight_root_task_id': None, 'task_status': None, 'task_stage': None, 'last_write_at': '2026-10-17T16:20:14.430334Z', 'last_success_at': '2026-10-16T02:16:29.522318Z', 'last_success_snapshot_id': '8366cf58-9f68-4cdf-bb73-5bb0c23438dd', 'next_due_at': '2026-10-17T17:20:22.856829Z', 'tier': '50w_100w', 'interval_days': 3, 'consecutive_failures': 1, 'last_failure_reason': 'PARTIAL_UPDATE'}}
+[PASS] T01-11: creator page shows update timestamps
+REPORT docs/evidence/UPD-manual-e2e-2026-10-17.json
+RESULT FAIL

@@ -94,6 +94,18 @@ class TaskStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class TaskKind(StrEnum):
+    """The business kind of a root task.
+
+    ``task_type`` on ``root_tasks`` records which entry produced the root (a product intake root
+    keeps ``product_intake`` after promotion), so it cannot describe the current execution kind.
+    """
+
+    COLLECTION = "collection"
+    MANUAL_UPDATE = "manual_update"
+    SCHEDULED_UPDATE = "scheduled_update"
+
+
 class NetworkMode(StrEnum):
     """Explicit network binding. A local development unit is never a production line unit."""
 
@@ -1028,7 +1040,11 @@ class TaskRecord(Model):
     root_task_id: str
     task_id: str
     attempt_id: str
-    plan: FilterPlan
+    # A collection task always carries the filter plan that drives search.  An update task has no
+    # filter plan; its targets are seeded directly and only the profile/featured steps run.
+    plan: FilterPlan | None = None
+    task_kind: TaskKind = TaskKind.COLLECTION
+    update_targets: list[CreatorRef] = Field(default_factory=list)
     state: TaskStatus = TaskStatus.QUEUED
     version: int = 0
     execution_unit_id: str
@@ -1045,3 +1061,35 @@ class TaskRecord(Model):
     featured_status: Literal["COMPLETED", "PARTIAL_COMPLETED", "NOT_ATTEMPTED"] = "NOT_ATTEMPTED"
     # Complete only when the target is reached and every valid creator's F05 + F06 steps are done.
     pipeline_complete: bool = False
+
+    @model_validator(mode="after")
+    def task_kind_contract(self) -> Self:
+        if self.task_kind == TaskKind.COLLECTION:
+            if self.plan is None:
+                raise ValueError("collection task requires a filter plan")
+            if self.update_targets:
+                raise ValueError("collection task cannot carry update targets")
+            return self
+        if self.plan is not None:
+            raise ValueError("update task cannot carry a filter plan")
+        if not self.update_targets:
+            raise ValueError("update task requires update targets")
+        if len(self.update_targets) > 200:
+            raise ValueError("update task target limit is 200")
+        target_ids = [target.platform_creator_id for target in self.update_targets]
+        if len(target_ids) != len(set(target_ids)):
+            raise ValueError("update targets must be unique")
+        candidate_ids = [
+            candidate.ref.platform_creator_id for candidate in self.checkpoint.candidates
+        ]
+        if candidate_ids != target_ids:
+            raise ValueError("update targets and checkpoint candidates must match in order")
+        return self
+
+    @property
+    def target_count(self) -> int:
+        return self.plan.target_count if self.plan is not None else len(self.update_targets)
+
+    @property
+    def capability_version(self) -> str | None:
+        return self.plan.capability_version if self.plan is not None else None

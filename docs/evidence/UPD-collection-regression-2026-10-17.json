@@ -1,0 +1,112 @@
+{
+  "root_task_id": "193b7b97-9601-4bdc-9cc3-fec9ea58b2fc",
+  "states": [
+    "RECEIVED",
+    "QUEUED",
+    "COLLECTING",
+    "COMPLETED"
+  ],
+  "final": {
+    "root_task_id": "193b7b97-9601-4bdc-9cc3-fec9ea58b2fc",
+    "task_kind": "collection",
+    "state": "COMPLETED",
+    "unit_id": "unit-local-mac-02",
+    "failure_reason": "None",
+    "updated_at": "2026-10-17 16:51:22.606671+00:00",
+    "completed_at": "2026-10-17 16:51:22.606671+00:00"
+  },
+  "counts": {
+    "task_creators": "1",
+    "snapshots": "1",
+    "dispatched": "1"
+  },
+  "results": [
+    {
+      "check": "MCP-02",
+      "passed": true,
+      "detail": "server={'name': 'Playwright', 'version': '1.62.0-alpha-2026-06-29'}, tools=23"
+    },
+    {
+      "check": "T07-01",
+      "passed": true,
+      "detail": "new task form opened"
+    },
+    {
+      "check": "T07-02",
+      "passed": true,
+      "detail": "form={'keyword': '露营', 'target': '1'}"
+    },
+    {
+      "check": "T07-03",
+      "passed": true,
+      "detail": "submit clicked"
+    },
+    {
+      "check": "T07-04",
+      "passed": true,
+      "detail": "root_task=193b7b97-9601-4bdc-9cc3-fec9ea58b2fc"
+    },
+    {
+      "check": "T07-05",
+      "passed": true,
+      "detail": "terminal=COMPLETED states=['RECEIVED', 'QUEUED', 'COLLECTING', 'COMPLETED']"
+    },
+    {
+      "check": "T07-06",
+      "passed": true,
+      "detail": "task=collection/COMPLETED unit=unit-local-mac-02 valid=1 target=1"
+    },
+    {
+      "check": "T07-07",
+      "passed": true,
+      "detail": "collection task detail renders keyword/requirement panel"
+    },
+    {
+      "check": "T07-08",
+      "passed": true,
+      "detail": "DB counts={'task_creators': 1, 'snapshots': 1, 'dispatched': 1}"
+    },
+    {
+      "check": "T03-05",
+      "passed": true,
+      "detail": "collection filter/list visible"
+    },
+    {
+      "check": "OBS-console",
+      "passed": true,
+      "detail": "### Result\nTotal messages: 3 (Errors: 0, Warnings: 0)\nReturning 1 messages for level \"info\"\n\n[INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=1e9a3433:22162"
+    },
+    {
+      "check": "OBS-network",
+      "passed": true,
+      "detail": "### Result\n32. [GET] http://127.0.0.1:5173/api/auth/me => [200] OK\n33. [GET] http://127.0.0.1:5173/api/tasks?limit=20 => [200] OK\n\nNote: 31 static requests not shown, run with \"static\" option to see them."
+    }
+  ],
+  "shots": [
+    {
+      "name": "10-collection-form",
+      "path": "docs/evidence/assets/upd/10-collection-form.png",
+      "note": null
+    },
+    {
+      "name": "12-collection-queued",
+      "path": "docs/evidence/assets/upd/12-collection-queued.png",
+      "note": null
+    },
+    {
+      "name": "12-collection-collecting",
+      "path": "docs/evidence/assets/upd/12-collection-collecting.png",
+      "note": null
+    },
+    {
+      "name": "13-collection-terminal",
+      "path": "docs/evidence/assets/upd/13-collection-terminal.png",
+      "note": null
+    },
+    {
+      "name": "14-task-list-collection",
+      "path": "docs/evidence/assets/upd/14-task-list-collection.png",
+      "note": null
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "tasks": {
+    "console": "### Result\nTotal messages: 3 (Errors: 0, Warnings: 0)\nReturning 1 messages for level \"info\"\n\n[INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=1e9a3433:22162",
+    "network": "### Result\n32. [GET] http://127.0.0.1:5173/api/auth/me => [200] OK\n33. [GET] http://127.0.0.1:5173/api/tasks?limit=20 => [200] OK\n\nNote: 31 static requests not shown, run with \"static\" option to see them.",
+    "path": "/tasks"
+  },
+  "creators": {
+    "console": "### Result\nTotal messages: 3 (Errors: 0, Warnings: 0)\nReturning 1 messages for level \"info\"\n\n[INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=1e9a3433:22162",
+    "network": "### Result\n32. [GET] http://127.0.0.1:5173/api/auth/me => [200] OK\n33. [GET] http://127.0.0.1:5173/api/creator-library?limit=20 => [200] OK\n\nNote: 51 static requests not shown, run with \"static\" option to see them.",
+    "path": "/creators"
+  }
+}

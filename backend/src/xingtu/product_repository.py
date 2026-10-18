@@ -13,6 +13,7 @@ from .domain import (
     CollectorError,
     FilterPlan,
     ProfileRequirement,
+    TaskKind,
     TaskRecord,
     TaskStatus,
     uid,
@@ -496,10 +497,26 @@ class ProductRepository:
             if root["state"] not in {TaskStatus.PARSING, TaskStatus.RECEIVED}:
                 raise CollectorError("INVALID_FORM", "INTAKE_STATE_CONFLICT")
             unit = conn.execute(
-                "SELECT unit_id FROM execution_units WHERE unit_id=%s", (unit_id,)
+                "SELECT unit_id,allowed_task_kinds FROM execution_units WHERE unit_id=%s",
+                (unit_id,),
             ).fetchone()
             if not unit:
                 raise CollectorError("RESOURCE_UNAVAILABLE", "EXECUTION_UNIT_NOT_FOUND")
+            # Keep the existing promotion-time assignment, but never assign a collection task to a
+            # unit whose capability configuration no longer allows it.  With the current single
+            # unit this is behavior-identical; the fallback only matters for future multi-unit
+            # configurations.
+            assigned_unit_id = unit_id
+            if TaskKind.COLLECTION.value not in (unit["allowed_task_kinds"] or []):
+                capable = conn.execute(
+                    """SELECT unit_id FROM execution_units
+                    WHERE %s = ANY(allowed_task_kinds) AND state <> 'QUARANTINED'
+                    ORDER BY unit_id LIMIT 1""",
+                    (TaskKind.COLLECTION.value,),
+                ).fetchone()
+                if not capable:
+                    raise CollectorError("RESOURCE_UNAVAILABLE", "NO_COLLECTION_UNIT")
+                assigned_unit_id = str(capable["unit_id"])
             p2_task_id, attempt_id = uid(), uid()
             module_versions = {item.key: item.checkpoint_version for item in registry.modules}
             featured_types = [item.key.value for item in registry.featured]
@@ -513,7 +530,7 @@ class ProductRepository:
                 plan=plan,
                 state=TaskStatus.QUEUED,
                 version=int(root["version"]) + 1,
-                execution_unit_id=unit_id,
+                execution_unit_id=assigned_unit_id,
                 source="model",
                 profile_requirement=profile_requirement,
                 checkpoint=Checkpoint(
@@ -559,7 +576,7 @@ class ProductRepository:
                 updated_at=now() WHERE root_task_id=%s""",
                 (
                     task.version,
-                    unit_id,
+                    assigned_unit_id,
                     Jsonb(task.model_dump(mode="json", exclude={"checkpoint"})),
                     state.root_task_id,
                 ),

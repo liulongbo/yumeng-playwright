@@ -4,11 +4,15 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from xingtu.contracts import PlatformRegistry
-from xingtu.domain import uid, utcnow
+from xingtu.domain import TaskStatus, uid, utcnow
 from xingtu.product_api import ProductServices, ProductSettings, create_app
 from xingtu.product_auth import AuthService, MemoryLoginLimiter, PasswordService
 from xingtu.product_covers import ProductCoverConfig
-from xingtu.product_models import CreateTaskResponse
+from xingtu.product_models import (
+    CreateTaskResponse,
+    CreatorUpdateResponse,
+    CreatorUpdateStatus,
+)
 
 
 class MemoryAuthStore:
@@ -77,6 +81,15 @@ class FakeCovers:
         return b""
 
 
+class FakeUpdates:
+    def create_manual_update(self, creator_id, *, user_id, idempotency_key):
+        del user_id, idempotency_key
+        return CreatorUpdateResponse(root_task_id=uid(), status=TaskStatus.QUEUED)
+
+    def status(self, creator_id):
+        return CreatorUpdateStatus(creator_id=creator_id)
+
+
 def client_fixture():
     auth_store = MemoryAuthStore()
     products = FakeProducts()
@@ -102,6 +115,7 @@ def client_fixture():
         registry=PlatformRegistry.model_validate_json(settings.registry_path.read_text()),
         covers=FakeCovers(),
         settings=settings,
+        updates=FakeUpdates(),
     )
     return TestClient(create_app(services), base_url="https://app.test"), products
 
@@ -218,3 +232,35 @@ def test_every_business_read_including_cover_requires_authentication(path):
     response = client.get(path)
     assert response.status_code == 401
     assert response.json()["code"] == "ACCOUNT_LOGIN_REQUIRED"
+
+
+def test_creator_update_routes_use_csrf_and_are_authenticated():
+    client, _ = client_fixture()
+    assert (
+        client.post(
+            "/api/creator-library/creator/updates",
+            headers={"Origin": "https://app.test", "Idempotency-Key": "k"},
+        ).status_code
+        == 401
+    )
+    login_response = login(client)
+    assert login_response.status_code == 200
+    csrf = login_response.json()["csrf_token"]
+    missing_key = client.post(
+        "/api/creator-library/creator/updates",
+        headers={"Origin": "https://app.test", "X-CSRF-Token": csrf},
+    )
+    assert missing_key.status_code == 422
+    response = client.post(
+        "/api/creator-library/creator/updates",
+        headers={
+            "Origin": "https://app.test",
+            "X-CSRF-Token": csrf,
+            "Idempotency-Key": "k",
+        },
+    )
+    assert response.status_code == 202
+    assert response.json()["status"] == "QUEUED"
+    status = client.get("/api/creator-library/creator/update")
+    assert status.status_code == 200
+    assert status.json()["creator_id"] == "creator"

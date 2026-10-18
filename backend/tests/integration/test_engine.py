@@ -162,7 +162,7 @@ async def test_optional_failure_keeps_basic_and_retry_new_observation(repo, star
 
 async def test_optional_schema_mismatch_is_scoped_to_the_module(repo, started):
     class OptionalSchemaMismatch(SyntheticAdapter):
-        async def collect_module(self, key, creator, ctx):
+        async def collect_module(self, key, creator, ctx, row_covers=None):
             if key == "fans":
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "RESPONSE_SCHEMA_MISMATCH")
             return await super().collect_module(key, creator, ctx)
@@ -180,7 +180,7 @@ async def test_optional_schema_mismatch_is_scoped_to_the_module(repo, started):
 
 async def test_basic_schema_mismatch_remains_a_strict_task_error(repo, started):
     class BasicSchemaMismatch(SyntheticAdapter):
-        async def collect_module(self, key, creator, ctx):
+        async def collect_module(self, key, creator, ctx, row_covers=None):
             if key == "basic":
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "RESPONSE_SCHEMA_MISMATCH")
             return await super().collect_module(key, creator, ctx)
@@ -346,6 +346,15 @@ async def test_target_20_and_200(repo, plan):
         )
         task = repo.get(root)
         gen, session = repo.acquire("unit", task.attempt_id)
+        # The 200-creator finish transaction can hold the unit row for longer than the default
+        # 120-second lease on a slow local PostgreSQL.  This case exercises the target/count path,
+        # not lease expiry; keep the fencing window generous so a heartbeat blocked behind that
+        # transaction cannot turn the test into a timing failure.
+        with repo.connect() as conn:
+            conn.execute(
+                "UPDATE execution_units SET lease_until=now()+interval '1 hour' "
+                "WHERE unit_id='unit'"
+            )
         ctx = ExecutionContext(
             root_task_id=root,
             task_id=task.task_id,
@@ -370,7 +379,13 @@ async def test_target_20_and_200(repo, plan):
             stop_signal: Event = stopped,
         ) -> None:
             while not stop_signal.wait(15):
-                repo.heartbeat("unit", owner, lease_generation)
+                with repo.connect() as conn:
+                    conn.execute(
+                        """UPDATE execution_units
+                        SET lease_until=now()+interval '1 hour',last_heartbeat_at=now()
+                        WHERE unit_id='unit' AND owner=%s AND generation=%s""",
+                        (owner, lease_generation),
+                    )
 
         pulse = Thread(target=heartbeat, daemon=True)
         pulse.start()

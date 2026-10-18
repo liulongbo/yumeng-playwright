@@ -1,7 +1,8 @@
 import type {
   Capabilities, ContentPage, CreatorLibraryDetail, CreatorLibraryHistory, CreatorLibraryPage,
-  CreatorLibraryQuote, CreatorPage, CreatorSummary, ProductError, ProfileFieldCatalog,
-  RequirementForm, TaskDetail, TaskPage, UserView,
+  CreatorLibraryQuote, CreatorPage, CreatorSummary, CreatorUpdateResponse, CreatorUpdateStatus,
+  CreatorVideoPage, ProductError, ProfileFieldCatalog,
+  BrowserTakeover, ExecutionUnit, RequirementForm, TaskDetail, TaskPage, UserView, VerificationEvent,
 } from "./types";
 
 export class ApiError extends Error {
@@ -40,6 +41,16 @@ export const api = {
   profileFieldCatalog: () => request<ProfileFieldCatalog>("/api/platforms/douyin_xingtu/profile-field-catalog"),
   listTasks: (params: URLSearchParams) => request<TaskPage>(`/api/tasks?${params.toString()}`),
   task: (id: string) => request<TaskDetail>(`/api/tasks/${id}`),
+  executionUnits: () => request<ExecutionUnit[]>("/api/execution-units"),
+  executionUnit: (id: string) => request<ExecutionUnit>(`/api/execution-units/${id}`),
+  verificationEvents: () => request<VerificationEvent[]>("/api/verification-events"),
+  requestTakeover: (unitId: string) => request<BrowserTakeover>(`/api/execution-units/${unitId}/takeovers`, { method: "POST" }),
+  takeover: (takeoverId: string) => request<BrowserTakeover>(`/api/takeovers/${takeoverId}`),
+  takeoverReappearance: (takeoverId: string, reason: string) => request<BrowserTakeover>(
+    `/api/takeovers/${takeoverId}/reappearance?reason=${encodeURIComponent(reason)}`, { method: "POST" },
+  ),
+  completeTakeover: (takeoverId: string) => request<BrowserTakeover>(`/api/takeovers/${takeoverId}/complete`, { method: "POST" }),
+  releaseTakeover: (takeoverId: string) => request<void>(`/api/takeovers/${takeoverId}`, { method: "DELETE" }),
   createTask: (form: RequirementForm, idempotencyKey: string, origin?: string | null) =>
     request<{ root_task_id: string; status: "RECEIVED" }>("/api/tasks", {
       method: "POST",
@@ -64,6 +75,12 @@ export const api = {
   creatorLibrary: (params: URLSearchParams) => request<CreatorLibraryPage>(`/api/creator-library?${params.toString()}`),
   creatorLibraryDetail: (creatorId: string) => request<CreatorLibraryDetail>(`/api/creator-library/${creatorId}`),
   creatorLibraryHistory: (creatorId: string) => request<CreatorLibraryHistory>(`/api/creator-library/${creatorId}/history`),
+  creatorUpdateStatus: (creatorId: string) => request<CreatorUpdateStatus>(`/api/creator-library/${creatorId}/update`),
+  createCreatorUpdate: (creatorId: string, idempotencyKey: string) =>
+    request<CreatorUpdateResponse>(`/api/creator-library/${creatorId}/updates`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+    }),
   creatorLibraryQuotes: (creatorId: string) => request<CreatorLibraryQuote[]>(`/api/creator-library/${creatorId}/quotes`),
   contents: (taskId: string, creatorId: string, type: "excellent_reach" | "excellent_seeding", cursor?: string | null) =>
     request<ContentPage>(
@@ -77,4 +94,14 @@ export const api = {
   /** 达人库入口的封面：同一只读端点族，按达人授权（不是按任务授权）。 */
   creatorLibraryCover: (creatorId: string, objectId: string) =>
     `/api/creator-library/${creatorId}/covers/${encodeURIComponent(objectId)}`,
+  /** 「创作能力 → 最新视频表现」的作品观测；未指定 module_key 时两个集合都返回（按 module_key、position 排序）。 */
+  creatorLibraryVideos: (creatorId: string, moduleKey?: string) =>
+    request<CreatorVideoPage>(
+      `/api/creator-library/${creatorId}/videos${moduleKey ? `?module_key=${moduleKey}` : ""}`,
+    ),
+  /** 任务入口的同名观测：范围是本任务的不可变快照，因此按 root_task_id 授权。 */
+  taskCreatorVideos: (taskId: string, creatorId: string, moduleKey?: string) =>
+    request<CreatorVideoPage>(
+      `/api/tasks/${taskId}/creators/${creatorId}/videos${moduleKey ? `?module_key=${moduleKey}` : ""}`,
+    ),
 };

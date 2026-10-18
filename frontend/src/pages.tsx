@@ -5,7 +5,7 @@ import {
   AlertCircle, ArrowLeft, ArrowRight, Check, ChevronRight, CircleStop, Clock3,
   ExternalLink, Eye, EyeOff, FileCheck2, ImageOff, ListFilter, LoaderCircle, LockKeyhole,
   Play, Plus, RefreshCcw, RotateCcw, Search, ShieldCheck, Sparkles,
-  UserRound, UsersRound, WandSparkles,
+  UserRound, UsersRound, WandSparkles, MonitorCog, MousePointer2, TriangleAlert, X,
 } from "lucide-react";
 import { api, ApiError } from "./api";
 import { useAuth } from "./AuthContext";
@@ -18,10 +18,30 @@ import { indexCatalog, useFieldCatalog } from "./fieldCatalog";
 import { formatDate, shortId, statusLabel, terminalStatuses, waitingStatuses } from "./status";
 import type {
   AudienceProfile, CapabilityDimension, CapabilityField, ContentPage,
-  CreatorLibraryDetail, CreatorLibraryQuote, CreatorLibrarySummary, CreatorSummary, IntakeProgress,
-  RangeValue, RequirementForm, RequirementFormV2, TaskDetail, TaskStatus,
+  CreatorLibraryDetail, CreatorLibraryQuote, CreatorLibrarySummary, CreatorSummary, CreatorVideoPage,
+  IntakeProgress, BrowserTakeover, ExecutionUnit, RangeValue, RequirementForm, RequirementFormV2,
+  TaskDetail, TaskKind, TaskStatus,
 } from "./types";
 import { BrandMark, EmptyState, ErrorState, LoadingState, PageHeader, SkeletonRows, StatusBadge } from "./ui";
+
+const taskKindLabel: Record<TaskKind, string> = {
+  collection: "采集任务",
+  manual_update: "手动更新",
+  scheduled_update: "定时更新",
+};
+
+function taskTitle(task: { task_kind?: TaskKind; keyword: string | null; counts: { target_count: number } }) {
+  if (!task.task_kind || task.task_kind === "collection") return task.keyword || "系统内部任务";
+  return `${taskKindLabel[task.task_kind]} · ${task.counts.target_count} 位达人`;
+}
+
+const updateTargetStateLabel: Record<string, string> = {
+  pending: "等待更新",
+  collecting: "更新中",
+  done: "已完成",
+  invalid: "达人无效",
+  failed: "失败",
+};
 
 const allStatuses: TaskStatus[] = [
   "RECEIVED", "PARSING", "QUEUED", "SEARCHING", "COLLECTING", "PERSISTING",
@@ -95,6 +115,7 @@ export function LoginPage() {
 
 export function TasksPage() {
   const [status, setStatus] = useState("");
+  const [taskKind, setTaskKind] = useState("");
   const [keyword, setKeyword] = useState("");
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
@@ -102,11 +123,12 @@ export function TasksPage() {
   const params = useMemo(() => {
     const value = new URLSearchParams({ limit: "20" });
     if (status) value.set("status", status);
+    if (taskKind) value.set("task_kind", taskKind);
     if (createdFrom) value.set("created_from", new Date(`${createdFrom}T00:00:00`).toISOString());
     if (createdTo) { const exclusive = new Date(`${createdTo}T00:00:00`); exclusive.setDate(exclusive.getDate() + 1); value.set("created_to", exclusive.toISOString()); }
     if (cursor) value.set("cursor", cursor);
     return value;
-  }, [status, createdFrom, createdTo, cursor]);
+  }, [status, taskKind, createdFrom, createdTo, cursor]);
   const tasks = useQuery({ queryKey: ["tasks", params.toString()], queryFn: () => api.listTasks(params), refetchInterval: 15_000 });
   const visible = (tasks.data?.items ?? []).filter((task) => !keyword.trim() || (task.keyword || "").toLowerCase().includes(keyword.trim().toLowerCase()) || task.root_task_id.includes(keyword.trim()));
   const summary = tasks.data?.items.reduce((acc, task) => {
@@ -128,6 +150,7 @@ export function TasksPage() {
     <section className="panel task-panel">
       <div className="toolbar">
         <div className="search-box"><Search size={17} /><input aria-label="搜索任务" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="搜索关键词或任务 ID" /></div>
+        <label className="select-wrap"><ListFilter size={16} /><select aria-label="按任务类型筛选" value={taskKind} onChange={(e) => { setTaskKind(e.target.value); setCursor(null); }}><option value="">全部类型</option><option value="collection">采集任务</option><option value="manual_update">手动更新</option><option value="scheduled_update">定时更新</option></select></label>
         <label className="select-wrap"><ListFilter size={16} /><select aria-label="按状态筛选" value={status} onChange={(e) => { setStatus(e.target.value); setCursor(null); }}><option value="">全部状态</option>{allStatuses.map((item) => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>
         <label className="date-filter"><span>从</span><input aria-label="创建开始日期" type="date" value={createdFrom} onChange={(e) => { setCreatedFrom(e.target.value); setCursor(null); }} /></label>
         <label className="date-filter"><span>至</span><input aria-label="创建结束日期" type="date" min={createdFrom || undefined} value={createdTo} onChange={(e) => { setCreatedTo(e.target.value); setCursor(null); }} /></label>
@@ -136,9 +159,9 @@ export function TasksPage() {
       {tasks.isLoading ? <SkeletonRows rows={6} /> : tasks.isError ? <ErrorState error={tasks.error} retry={() => tasks.refetch()} /> : visible.length === 0 ? <EmptyState title="没有匹配的任务" description={tasks.data?.items.length ? "调整搜索词或状态筛选后再试。" : "创建第一个达人采集任务，提交后即可在这里追踪进度。"} action={!tasks.data?.items.length && <Link to="/tasks/new" className="button primary"><Plus size={16} />创建任务</Link>} /> : <div className="task-table" role="table">
         <div className="task-row table-head" role="row"><span>任务</span><span>进度</span><span>结果计数</span><span>创建信息</span><span /></div>
         {visible.map((task) => <Link className="task-row" role="row" to={`/tasks/${task.root_task_id}`} key={task.root_task_id}>
-          <div className="task-main"><StatusBadge status={task.status} pulse={!terminalStatuses.has(task.status)} /><strong>{task.keyword || "系统内部任务"}</strong><span>#{shortId(task.root_task_id)} · {task.source === "product" ? "产品提交" : "内部任务"}</span></div>
-          <div className="task-stage"><strong>{task.stage}</strong><div className="mini-progress"><i style={{ width: `${Math.min(100, task.counts.target_count ? task.counts.valid_count / task.counts.target_count * 100 : 0)}%` }} /></div><span>{task.counts.valid_count} / {task.counts.target_count} 位有效达人</span></div>
-          <div className="count-pills"><span><b>{task.counts.discovered_count}</b>发现</span><span><b>{task.counts.profile_complete_count}</b>资料</span><span><b>{task.counts.featured_complete_count}</b>精选</span>{task.counts.failed_count > 0 && <span className="failed"><b>{task.counts.failed_count}</b>失败</span>}</div>
+          <div className="task-main"><StatusBadge status={task.status} pulse={!terminalStatuses.has(task.status)} /><strong>{taskTitle(task)}</strong><span>#{shortId(task.root_task_id)} · {taskKindLabel[task.task_kind] || taskKindLabel.collection} · {task.source === "product" ? "产品提交" : "内部任务"}</span></div>
+          <div className="task-stage"><strong>{task.stage}</strong><div className="mini-progress"><i style={{ width: `${Math.min(100, task.counts.target_count ? task.counts.valid_count / task.counts.target_count * 100 : 0)}%` }} /></div><span>{task.counts.valid_count} / {task.counts.target_count} 位{(task.task_kind ?? "collection") === "collection" ? "有效达人" : "已更新"}</span></div>
+          <div className="count-pills"><span><b>{task.counts.discovered_count}</b>{(task.task_kind ?? "collection") === "collection" ? "发现" : "目标"}</span><span><b>{task.counts.profile_complete_count}</b>资料</span><span><b>{task.counts.featured_complete_count}</b>精选</span>{task.counts.failed_count > 0 && <span className="failed"><b>{task.counts.failed_count}</b>失败</span>}</div>
           <div className="task-meta"><strong>{task.created_by_name || "系统"}</strong><span>{formatDate(task.created_at)}</span></div>
           <ChevronRight size={18} />
         </Link>)}
@@ -323,17 +346,21 @@ export function TaskDetailPage() {
   if (task.isLoading) return <div className="page-wrap"><LoadingState label="正在读取任务事实" /></div>;
   if (task.isError || !task.data) return <div className="page-wrap"><ErrorState error={task.error} retry={() => task.refetch()} /></div>;
   const item = task.data;
-  const countCards = [
+  const taskKind = item.task_kind ?? "collection";
+  const countCards = taskKind === "collection" ? [
     ["已发现", item.counts.discovered_count, "候选达人"], ["有效入库", item.counts.valid_count, `目标 ${item.counts.target_count}`],
+    ["资料完整", item.counts.profile_complete_count, "F05 模块"], ["精选完整", item.counts.featured_complete_count, "F06 双集合"],
+  ] : [
+    ["目标达人", item.counts.target_count, taskKindLabel[taskKind]], ["已更新", item.counts.valid_count, `目标 ${item.counts.target_count}`],
     ["资料完整", item.counts.profile_complete_count, "F05 模块"], ["精选完整", item.counts.featured_complete_count, "F06 双集合"],
   ];
   return <div className="page-wrap">
     <div className="detail-topline"><Link to="/tasks" className="back-link"><ArrowLeft size={17} />任务中心</Link><span>/</span><span>#{shortId(item.root_task_id)}</span></div>
-    <PageHeader eyebrow="TASK DETAIL" title={item.keyword || "系统内部任务"} description={`任务 #${item.root_task_id}`} actions={<TaskActions task={item} busy={command.isPending} run={(action) => command.mutate(action)} />} />
+    <PageHeader eyebrow="TASK DETAIL" title={taskTitle(item)} description={`任务 #${item.root_task_id}`} actions={<TaskActions task={item} busy={command.isPending} run={(action) => command.mutate(action)} />} />
     <section className="task-hero panel">
       <div className="hero-status"><StatusBadge status={item.status} pulse={!terminalStatuses.has(item.status)} /><h2>{item.stage}</h2><p>{taskMessage(item)}</p></div>
-      <ProgressRail status={item.status} />
-      <div className="hero-meta"><div><span>创建人</span><strong>{item.created_by_name || "系统"}</strong></div><div><span>创建时间</span><strong>{formatDate(item.created_at)}</strong></div><div><span>最近更新</span><strong title="服务端最后一次改动这条任务记录的时间（状态推进、进度保存或人工操作），不代表任务完成时刻">{formatDate(item.updated_at)}</strong></div>{/* 只在任务真正进入终态后展示完成时间，进行中的任务不显示该字段，避免误读为已完成。 */}{item.completed_at && <div><span>完成时间</span><strong>{formatDate(item.completed_at)}</strong></div>}<div><span>能力版本</span><strong>{item.capability_version || "历史任务"}</strong></div></div>
+      <ProgressRail status={item.status} kind={taskKind} />
+      <div className="hero-meta"><div><span>创建人</span><strong>{item.created_by_name || "系统"}</strong></div><div><span>创建时间</span><strong>{formatDate(item.created_at)}</strong></div><div><span>最近更新</span><strong title="服务端最后一次改动这条任务记录的时间（状态推进、进度保存或人工操作），不代表任务完成时刻">{formatDate(item.updated_at)}</strong></div>{/* 只在任务真正进入终态后展示完成时间，进行中的任务不显示该字段，避免误读为已完成。 */}{item.completed_at && <div><span>完成时间</span><strong>{formatDate(item.completed_at)}</strong></div>}<div><span>能力版本</span><strong>{item.capability_version || (taskKind === "collection" ? "历史任务" : "更新任务不适用")}</strong></div></div>
     </section>
     {item.challenge && <ChallengePanel task={item} />}
     {item.intake && <IntakePanel intake={item.intake} />}
@@ -345,7 +372,7 @@ export function TaskDetailPage() {
       <section className="panel creators-panel"><div className="panel-heading"><div><h2>任务内达人</h2><p>执行中只展示已持久草稿；终态展示任务关联快照。</p></div><span>{creators.data?.pages.flatMap((page) => page.items).length ?? 0} 位可查看</span></div>
         {creators.isLoading ? <SkeletonRows rows={4} /> : creators.isError ? <ErrorState error={creators.error} retry={() => creators.refetch()} /> : !creators.data?.pages[0]?.items.length ? <EmptyState title={terminalStatuses.has(item.status) ? "当前任务没有有效达人" : "达人结果正在形成"} description={terminalStatuses.has(item.status) ? "查看任务状态与失败原因，确认是零结果、部分完成还是执行失败。" : "发现并有效落库后，达人会出现在这里。"} /> : <><div className="creator-list">{creators.data.pages.flatMap((page) => page.items).map((creator) => <CreatorRow key={creator.creator_id} taskId={taskId} creator={creator} />)}</div>{creators.hasNextPage && <div className="pagination"><button className="button secondary" disabled={creators.isFetchingNextPage} onClick={() => creators.fetchNextPage()}>{creators.isFetchingNextPage ? "正在读取" : "查看更多达人"}<ArrowRight size={16} /></button></div>}</>}
       </section>
-      <aside className="panel requirement-panel"><div className="panel-heading"><div><h2>需求与执行约束</h2><p>原始需求和执行计划分开留存。</p></div></div><dl><div><dt>内容关键词</dt><dd>{item.requirement?.keyword || item.keyword || "—"}</dd></div><div><dt>目标数量</dt><dd>{item.counts.target_count} 位</dd></div><div><dt>排序方式</dt><dd>平台默认排序</dd></div><div><dt>来源</dt><dd>{item.source === "product" ? "媒介产品提交" : "系统内部任务"}</dd></div></dl>{item.plan && <details><summary>查看最终执行计划</summary><pre>{JSON.stringify(item.plan, null, 2)}</pre></details>}{item.origin_root_task_id && <Link to={`/tasks/${item.origin_root_task_id}`} className="origin-link"><RotateCcw size={15} />查看来源任务</Link>}</aside>
+      {taskKind === "collection" ? <aside className="panel requirement-panel"><div className="panel-heading"><div><h2>需求与执行约束</h2><p>原始需求和执行计划分开留存。</p></div></div><dl><div><dt>内容关键词</dt><dd>{item.requirement?.keyword || item.keyword || "—"}</dd></div><div><dt>目标数量</dt><dd>{item.counts.target_count} 位</dd></div><div><dt>排序方式</dt><dd>平台默认排序</dd></div><div><dt>来源</dt><dd>{item.source === "product" ? "媒介产品提交" : "系统内部任务"}</dd></div></dl>{item.plan && <details><summary>查看最终执行计划</summary><pre>{JSON.stringify(item.plan, null, 2)}</pre></details>}{item.origin_root_task_id && <Link to={`/tasks/${item.origin_root_task_id}`} className="origin-link"><RotateCcw size={15} />查看来源任务</Link>}</aside> : <aside className="panel requirement-panel"><div className="panel-heading"><div><h2>更新目标</h2><p>批次内每位达人独立采集、独立保存；失败不影响其他达人。</p></div></div><dl><div><dt>任务类型</dt><dd>{taskKindLabel[taskKind]}</dd></div><div><dt>目标数量</dt><dd>{item.counts.target_count} 位</dd></div><div><dt>已更新</dt><dd>{item.counts.valid_count} 位</dd></div><div><dt>来源</dt><dd>{item.created_by_name || "定时调度"}</dd></div></dl><div className="update-target-list">{(item.update_targets ?? []).map((target) => <div key={target.platform_creator_id}><span>{target.display_name || `达人 ${target.first_position + 1}`}</span><em>{updateTargetStateLabel[target.state] || target.state}</em>{target.failure_reason && <small>{target.failure_reason}</small>}</div>)}</div></aside>}
     </div>
   </div>;
 }
@@ -474,8 +501,8 @@ function TaskActions({ task, busy, run }: { task: TaskDetail; busy: boolean; run
   </div>;
 }
 
-function ProgressRail({ status }: { status: TaskStatus }) {
-  const stages = [{ label: "需求接收", states: ["RECEIVED"] }, { label: "转换校验", states: ["PARSING", "FAILED_VALIDATION"] }, { label: "排队", states: ["QUEUED", "WAITING_FOR_RESOURCE"] }, { label: "发现达人", states: ["SEARCHING"] }, { label: "采集资料", states: ["COLLECTING", "RETRY_WAIT", "WAITING_FOR_LOGIN", "WAITING_FOR_ACCOUNT", "WAITING_FOR_VERIFICATION", "PAUSED_BUDGET"] }, { label: "发布结果", states: ["PERSISTING", "COMPLETED", "PARTIAL_COMPLETED"] }];
+function ProgressRail({ status, kind = "collection" }: { status: TaskStatus; kind?: TaskKind }) {
+  const stages = kind === "collection" ? [{ label: "需求接收", states: ["RECEIVED"] }, { label: "转换校验", states: ["PARSING", "FAILED_VALIDATION"] }, { label: "排队", states: ["QUEUED", "WAITING_FOR_RESOURCE"] }, { label: "发现达人", states: ["SEARCHING"] }, { label: "采集资料", states: ["COLLECTING", "RETRY_WAIT", "WAITING_FOR_LOGIN", "WAITING_FOR_ACCOUNT", "WAITING_FOR_VERIFICATION", "PAUSED_BUDGET"] }, { label: "发布结果", states: ["PERSISTING", "COMPLETED", "PARTIAL_COMPLETED"] }] : [{ label: "排队", states: ["QUEUED", "WAITING_FOR_RESOURCE"] }, { label: "采集资料", states: ["COLLECTING", "RETRY_WAIT", "WAITING_FOR_LOGIN", "WAITING_FOR_ACCOUNT", "WAITING_FOR_VERIFICATION", "PAUSED_BUDGET"] }, { label: "发布结果", states: ["PERSISTING", "COMPLETED", "PARTIAL_COMPLETED"] }];
   const current = Math.max(0, stages.findIndex((stage) => stage.states.includes(status)));
   return <div className="progress-rail">{stages.map((stage, index) => <div className={`${index < current ? "done" : index === current ? "current" : ""}`} key={stage.label}><span>{index < current ? <Check size={14} /> : index + 1}</span><b>{stage.label}</b></div>)}</div>;
 }
@@ -552,7 +579,7 @@ function ProvenancePanel({ creator, payload }: { creator: CreatorLibraryDetail; 
   </>;
 }
 
-function CreatorDetailView({ creator, profilePayload, backTo, backLabel, scopeLabel, description, badgeLabel, badgeTone, notice, contents, historyChapter }: {
+function CreatorDetailView({ creator, profilePayload, backTo, backLabel, scopeLabel, description, badgeLabel, badgeTone, notice, contents, videos, historyChapter, actions }: {
   creator: CreatorLibraryDetail;
   profilePayload: Record<string, unknown>;
   backTo: string;
@@ -564,7 +591,10 @@ function CreatorDetailView({ creator, profilePayload, backTo, backLabel, scopeLa
   notice?: ReactNode;
   /** 两组精选视频集合的真实数据源；由各入口按自己的快照范围提供。 */
   contents?: FeaturedContent;
+  /** 「创作能力」的作品观测取数（页面 + 该入口的授权封面地址构造器）；由各入口按自己的快照范围提供。 */
+  videos: ReturnType<typeof useVideoObservations>;
   historyChapter?: ReactNode;
+  actions?: ReactNode;
 }) {
   return <CreatorProfile
     creator={creator}
@@ -577,7 +607,13 @@ function CreatorDetailView({ creator, profilePayload, backTo, backLabel, scopeLa
     badgeTone={badgeTone}
     notice={notice}
     contents={contents}
+    videos={videos.page}
+    videosLoading={videos.loading}
+    videosError={videos.error}
+    onRetryVideos={videos.onRetry}
+    videoCoverUrl={videos.coverUrl}
     historyChapter={historyChapter}
+    actions={actions}
     overlay={<ProvenancePanel creator={creator} payload={profilePayload} />}
   />;
 }
@@ -684,6 +720,46 @@ function useFeaturedContent(
 }
 
 /**
+ * 「创作能力 → 最新视频表现」的作品观测取数（DATA-02）。
+ *
+ * 与精选集合同一套范围语义：任务入口读本任务不可变快照的观测，达人库入口读该达人当前快照的观测。
+ * 一次取回两个集合（不传 `module_key`），由面板按当前选中的集合过滤，保证图表与列表始终同源；
+ * 封面地址也按入口授权（任务按 root_task_id，达人库按 creator_id），不使用平台签名外链。
+ * `retry` 语义沿用全局 QueryClient，与其它只读查询一致。
+ */
+function useVideoObservations(
+  scope: { kind: "task"; taskId: string; creatorId: string } | { kind: "library"; creatorId: string },
+): {
+  page: CreatorVideoPage | null;
+  coverUrl: (objectId: string) => string;
+  loading: boolean;
+  error: unknown;
+  onRetry: () => void;
+} {
+  const taskScoped = scope.kind === "task";
+  const taskId = (scope as { taskId?: string }).taskId ?? "";
+  const query = useQuery({
+    queryKey: ["videos", scope.kind, scope.creatorId, taskId],
+    queryFn: () =>
+      taskScoped
+        ? api.taskCreatorVideos(taskId, scope.creatorId)
+        : api.creatorLibraryVideos(scope.creatorId),
+  });
+  const coverUrl = taskScoped
+    ? (objectId: string) => `/api/tasks/${taskId}/covers/${encodeURIComponent(objectId)}`
+    : (objectId: string) => api.creatorLibraryCover(scope.creatorId, objectId);
+  return {
+    page: query.data ?? null,
+    coverUrl,
+    loading: query.isLoading,
+    error: query.error ?? null,
+    onRetry: () => {
+      void query.refetch();
+    },
+  };
+}
+
+/**
  * 报价与历史（CD-04 调整）：报价数据本身不在「商业能力」内展示，改由本入口的独立章节承载。
  *
  * 任务入口只有本任务的不可变快照，报价来自快照内 `commercial.cooperation_offers` 的平台原值；
@@ -720,6 +796,7 @@ export function CreatorDetailPage() {
   const { taskId = "", creatorId = "" } = useParams();
   const creator = useQuery({ queryKey: ["creator", taskId, creatorId], queryFn: () => api.creator(taskId, creatorId) });
   const contents = useFeaturedContent({ kind: "task", taskId, creatorId });
+  const videos = useVideoObservations({ kind: "task", taskId, creatorId });
   const catalog = useFieldCatalog();
   const index = useMemo(() => indexCatalog(catalog), [catalog]);
   if (creator.isLoading) return <div className="page-wrap"><LoadingState label="正在读取达人快照" /></div>;
@@ -743,6 +820,7 @@ export function CreatorDetailPage() {
     badgeTone={item.view_kind === "draft" || !(view.profile_complete && view.pipeline_complete) ? "draft" : "published"}
     notice={item.view_kind === "draft" ? <div className="draft-banner"><Clock3 size={18} /><div><strong>这是执行中的持久草稿</strong><span>字段与作品仍可能补齐；任务发布后将切换到不可变快照。</span></div></div> : undefined}
     contents={contents}
+    videos={videos}
     historyChapter={snapshotQuotes.length ? <div className="profile-sections">
       <QuoteTable payload={item.payload} index={index} />
       <section className="panel library-detail-panel"><div className="panel-heading"><div><h2>报价观察</h2><p>本任务快照内每次采集到的报价观察，保留原始报价与合作形式。</p></div><span>{snapshotQuotes.length} 条</span></div><div className="quote-list">{snapshotQuotes.map((quote) => <div key={`${quote.position}-${quote.cooperation_form ?? ""}`}><strong>{quote.cooperation_form || "未标记合作形式"}</strong><span>{quote.settlement_description || "结算说明暂无数据"}</span><b>{quote.price_raw === null ? "暂无报价" : String(quote.price_raw)}</b>{quote.origin_price_raw !== null && quote.origin_price_raw !== quote.price_raw && <em>原价 {String(quote.origin_price_raw)}</em>}<small>{formatDate(quote.observed_at)}</small></div>)}</div></section>
@@ -840,9 +918,23 @@ function CreatorLibraryRow({ creator }: { creator: CreatorLibrarySummary }) {
 
 export function CreatorLibraryDetailPage() {
   const { creatorId = "" } = useParams();
+  const queryClient = useQueryClient();
   const detail = useQuery({ queryKey: ["creator-library", creatorId], queryFn: () => api.creatorLibraryDetail(creatorId) });
   const quotes = useQuery({ queryKey: ["creator-library-quotes", creatorId], queryFn: () => api.creatorLibraryQuotes(creatorId), enabled: Boolean(detail.data) });
+  const update = useQuery({
+    queryKey: ["creator-update", creatorId],
+    queryFn: () => api.creatorUpdateStatus(creatorId),
+    refetchInterval: (query) => (query.state.data?.in_flight_root_task_id ? 5_000 : false),
+  });
+  const requestUpdate = useMutation({
+    mutationFn: () => api.createCreatorUpdate(creatorId, crypto.randomUUID()),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["creator-update", creatorId] });
+      void queryClient.invalidateQueries({ queryKey: ["creator-library", creatorId] });
+    },
+  });
   const contents = useFeaturedContent({ kind: "library", creatorId });
+  const videos = useVideoObservations({ kind: "library", creatorId });
   if (detail.isLoading) return <div className="page-wrap"><LoadingState label="正在读取达人库资料" /></div>;
   if (detail.isError || !detail.data) return <div className="page-wrap"><ErrorState error={detail.error} retry={() => detail.refetch()} /></div>;
   const creator = detail.data;
@@ -855,6 +947,18 @@ export function CreatorLibraryDetailPage() {
     return true;
   });
   const quoteHistory = quoteRows.filter((quote) => !currentQuotes.includes(quote));
+  const inFlight = Boolean(update.data?.in_flight_root_task_id);
+  const updateActions = <div className="creator-update-actions">
+    <button className="button primary" disabled={inFlight || requestUpdate.isPending} onClick={() => requestUpdate.mutate()}>
+      {requestUpdate.isPending ? <><LoaderCircle className="spin" size={16} />正在提交</> : inFlight ? <><Clock3 size={16} />更新进行中</> : <><RefreshCcw size={16} />手动更新</>}
+    </button>
+    {update.data?.in_flight_root_task_id && <Link className="origin-link" to={`/tasks/${update.data.in_flight_root_task_id}`}>查看更新任务<ChevronRight size={14} /></Link>}
+    {update.data?.last_success_at && <span>最近成功更新 {formatDate(update.data.last_success_at)}</span>}
+    {update.data?.last_write_at && update.data.last_write_at !== update.data.last_success_at && <span>最近写入 {formatDate(update.data.last_write_at)}</span>}
+    {update.data?.next_due_at && <span>下次定时更新 {formatDate(update.data.next_due_at)}</span>}
+    {update.data?.last_failure_reason && <span>最近一次未完成：{update.data.last_failure_reason}</span>}
+    {requestUpdate.isError && <span className="form-error">{friendlyError(requestUpdate.error)}</span>}
+  </div>;
   return <CreatorDetailView
     creator={creator}
     profilePayload={creator.profile_payload || {}}
@@ -864,8 +968,98 @@ export function CreatorLibraryDetailPage() {
     badgeLabel={completeLabel(creator)}
     badgeTone={creator.profile_complete && creator.pipeline_complete ? "published" : "draft"}
     contents={contents}
+    videos={videos}
+    actions={updateActions}
     historyChapter={<div className="profile-sections">
       <section className="panel library-detail-panel"><div className="panel-heading"><div><h2>报价历史</h2><p>同一合作形式的较早观察，保留原始报价与观测时间。</p></div><span>{quoteHistory.length} 条</span></div>{quotes.isLoading ? <SkeletonRows rows={3} /> : quotes.isError ? <ErrorState error={quotes.error} retry={() => quotes.refetch()} /> : <div className="quote-list">{quoteHistory.length ? quoteHistory.map((quote) => <div key={`${quote.snapshot_id}-${quote.position}`}><strong>{quote.cooperation_form || "未标记合作形式"}</strong><span>{quote.settlement_description || "结算说明暂无数据"}</span><b>{quote.price_raw === null ? "暂无报价" : String(quote.price_raw)}</b><small>{formatDate(quote.observed_at)}</small></div>) : <p className="muted">暂无更早报价观察。</p>}</div>}</section>
     </div>}
   />;
+}
+
+function secondsLabel(value: string | null) {
+  if (!value) return "—";
+  const seconds = Math.max(0, Math.floor((new Date(value).getTime() - Date.now()) / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function unitLabel(unit: ExecutionUnit) {
+  if (unit.takeover_state === "ACTIVE") return "人工接管中";
+  if (unit.takeover_state === "VERIFYING") return "正在校验验证结果";
+  if (unit.verification_state) return "等待人工验证";
+  if (unit.browser_status === "QUARANTINED") return "已隔离";
+  if (unit.browser_status === "SUSPECTED_OFFLINE") return "疑似失联";
+  if (unit.mode === "collect") return "采集中";
+  return unit.state === "READY" ? "空闲可用" : unit.state;
+}
+
+function TakeoverWorkspace({ takeover, close }: { takeover: BrowserTakeover; close: () => void }) {
+  const queryClient = useQueryClient();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackReason, setFeedbackReason] = useState("PLATFORM_SECURITY_CHALLENGE");
+  const complete = useMutation({
+    mutationFn: () => api.completeTakeover(takeover.takeover_id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["takeover", takeover.takeover_id] }),
+  });
+  const reappearance = useMutation({
+    mutationFn: (reason: string) => api.takeoverReappearance(takeover.takeover_id, reason),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["takeover", takeover.takeover_id] }),
+  });
+  const release = useMutation({ mutationFn: () => api.releaseTakeover(takeover.takeover_id), onSuccess: close });
+  const actionable = takeover.state === "ACTIVE";
+  return <div className="takeover-overlay" role="dialog" aria-modal="true" aria-label="人工浏览器接管">
+    <section className="takeover-workspace">
+      <header><div><button className="icon-button" aria-label="关闭接管工作区" onClick={close}><X size={18} /></button><span className="eyebrow">ORIGINAL BROWSER CONTROL</span><h2>{takeover.unit_id} · {takeover.state === "ACTIVE" ? "人工验证中" : "验证状态同步中"}</h2></div><strong>剩余 {secondsLabel(takeover.expires_at)}</strong></header>
+      <div className="takeover-viewer">
+        {takeover.state === "REQUESTED" && <LoadingState label="正在确认原浏览器实例仍在线" />}
+        {takeover.state === "ACTIVE" && takeover.viewer_url && <iframe title="原 Chromium 浏览器" src={takeover.viewer_url} allow="clipboard-read; clipboard-write" />}
+        {takeover.state === "ACTIVE" && !takeover.viewer_url && <div className="state-panel"><MonitorCog /><strong>远程浏览器正在就绪</strong><span>接管已被 Worker 确认。Linux noVNC 网关配置完成后，此处将显示原 Chromium 窗口。</span></div>}
+        {takeover.state === "VERIFYING" && <LoadingState label="正在检查验证、账号与受保护业务页面" />}
+        {["FAILED", "EXPIRED", "RELEASED", "RESUMED"].includes(takeover.state) && <div className="state-panel"><ShieldCheck /><strong>{takeover.state === "RESUMED" ? "验证通过，任务已恢复" : "本次接管已结束"}</strong><span>{takeover.failure_reason || "请返回执行单元查看最新状态。"}</span></div>}
+      </div>
+      <footer>
+        <div><strong>系统已暂停自动页面检测与采集操作。</strong><span>可在当前原浏览器内手动检查最多 3 位未完成达人；系统不会自动打开或采集它们。</span></div>
+        <div className="takeover-actions">
+          <button className="button ghost" disabled={!actionable || reappearance.isPending} onClick={() => setFeedbackOpen(true)}><TriangleAlert size={16} />仍有验证/无法完成</button>
+          <button className="button secondary" disabled={!actionable || release.isPending} onClick={() => release.mutate()}>放弃接管</button>
+          <button className="button primary" disabled={!actionable || complete.isPending} onClick={() => complete.mutate()}><Check size={16} />我已完成验证</button>
+        </div>
+      </footer>
+      {feedbackOpen && <div className="takeover-feedback" role="group" aria-label="无法完成原因"><label>当前情况<select value={feedbackReason} onChange={(event) => setFeedbackReason(event.target.value)}><option value="PLATFORM_SECURITY_CHALLENGE">滑块或交互验证再次出现</option><option value="ACCOUNT_LOGIN_REQUIRED">已跳转登录页</option><option value="ACCOUNT_MISMATCH">当前账号不正确</option><option value="NETWORK_OR_PROTECTED_PAGE_UNAVAILABLE">网络或页面无法访问</option><option value="HUMAN_CANNOT_COMPLETE">人工暂时无法完成</option></select></label><button className="button secondary" onClick={() => setFeedbackOpen(false)}>取消</button><button className="button primary" disabled={reappearance.isPending} onClick={() => { reappearance.mutate(feedbackReason); setFeedbackOpen(false); }}>提交状态</button></div>}
+      {takeover.manual_probe_creators.length > 0 && <div className="probe-note"><MousePointer2 size={15} />建议人工核验：{takeover.manual_probe_creators.map((item) => item.platform_creator_id).join("、")}</div>}
+    </section>
+  </div>;
+}
+
+export function ExecutionUnitsPage() {
+  const queryClient = useQueryClient();
+  const [takeoverId, setTakeoverId] = useState<string | null>(null);
+  const units = useQuery({ queryKey: ["execution-units"], queryFn: api.executionUnits, refetchInterval: 5_000 });
+  const events = useQuery({ queryKey: ["verification-events"], queryFn: api.verificationEvents, refetchInterval: 5_000 });
+  const takeover = useQuery({
+    queryKey: ["takeover", takeoverId], queryFn: () => api.takeover(takeoverId || ""), enabled: Boolean(takeoverId),
+    refetchInterval: (query) => ["RESUMED", "FAILED", "EXPIRED", "RELEASED"].includes(query.state.data?.state || "") ? false : 2_000,
+  });
+  const request = useMutation({
+    mutationFn: (unitId: string) => api.requestTakeover(unitId),
+    onSuccess: (data) => { setTakeoverId(data.takeover_id); queryClient.invalidateQueries({ queryKey: ["execution-units"] }); },
+  });
+  if (units.isLoading) return <div className="page-wrap"><LoadingState label="正在读取执行单元" /></div>;
+  if (units.isError || !units.data) return <div className="page-wrap"><ErrorState error={units.error} retry={() => units.refetch()} /></div>;
+  const waiting = events.data?.filter((event) => ["OPEN", "ACKNOWLEDGED"].includes(event.state)) ?? [];
+  const nearingDeadline = waiting
+    .filter((event) => event.remaining_seconds <= 300)
+    .sort((left, right) => left.remaining_seconds - right.remaining_seconds)[0];
+  return <div className="page-wrap">
+    <PageHeader eyebrow="RESOURCE CONTROL" title="执行单元管理" description="查看采集资源状态，并在平台要求时接管原浏览器完成人工验证。" />
+    {waiting.length > 0 && <section className="verification-alert"><TriangleAlert size={20} /><div><strong>{waiting.length} 个执行单元需要人工验证</strong><span>{waiting.map((event) => `${event.unit_id}（剩余 ${Math.floor(event.remaining_seconds / 60)} 分钟）`).join(" · ")}</span>{nearingDeadline && <em>当前验证等待窗口剩余 {Math.floor(nearingDeadline.remaining_seconds / 60)}:{String(nearingDeadline.remaining_seconds % 60).padStart(2, "0")}。若平台再次出现验证，请在原浏览器内完成后重新提交校验。</em>}</div></section>}
+    <section className="unit-summary-grid">
+      <div className="panel"><span>可用单元</span><strong>{units.data.filter((unit) => unit.state === "READY").length}</strong></div>
+      <div className="panel"><span>采集中</span><strong>{units.data.filter((unit) => unit.mode === "collect").length}</strong></div>
+      <div className="panel warning"><span>待人工验证</span><strong>{waiting.length}</strong></div>
+      <div className="panel danger"><span>隔离/异常</span><strong>{units.data.filter((unit) => ["QUARANTINED", "SUSPECTED_OFFLINE"].includes(unit.browser_status)).length}</strong></div>
+    </section>
+    <section className="panel unit-table-wrap"><table className="unit-table"><thead><tr><th>执行单元</th><th>运行状态</th><th>绑定账号/线路</th><th>当前任务</th><th>浏览器</th><th>验证</th><th>最近心跳</th><th /></tr></thead><tbody>{units.data.map((unit) => <tr key={unit.unit_id}><td><strong>{unit.unit_id}</strong><small>{unit.platform}</small></td><td><b>{unitLabel(unit)}</b><small>{unit.actionable_reason || "—"}</small></td><td><span>{unit.account_label}</span><small>{unit.line_label}</small></td><td>{unit.current_root_task_id ? <Link to={`/tasks/${unit.current_root_task_id}`}>{shortId(unit.current_root_task_id)}</Link> : "—"}</td><td>{unit.browser_status}</td><td>{unit.verification_state ? <><b>{unit.takeover_state || unit.verification_state}</b><small>{secondsLabel(unit.verification_deadline_at)}</small></> : "正常"}</td><td>{formatDate(unit.last_heartbeat_at)}</td><td>{unit.verification_state ? <button className="button primary" disabled={request.isPending || unit.takeover_state === "VERIFYING"} onClick={() => request.mutate(unit.unit_id)}>{unit.takeover_state === "ACTIVE" ? "重新进入" : unit.takeover_state === "REQUESTED" ? "查看接管" : unit.takeover_state === "VERIFYING" ? "系统校验中" : "接管浏览器"}</button> : <button className="button ghost" disabled>查看</button>}</td></tr>)}</tbody></table></section>
+    {request.isError && <div className="form-error" role="alert"><AlertCircle size={16} />{friendlyError(request.error)}</div>}
+    {takeover.data && <TakeoverWorkspace takeover={takeover.data} close={() => { setTakeoverId(null); queryClient.invalidateQueries({ queryKey: ["execution-units"] }); }} />}
+  </div>;
 }

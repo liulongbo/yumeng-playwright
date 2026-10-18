@@ -11,7 +11,7 @@ export PLAYWRIGHT_BROWSERS_PATH := $(CURDIR)/.runtime/browsers
 # silently breaks uv's `_editable_impl_*.pth`.  Keeping the package root on PYTHONPATH makes the
 # documented check/test targets work regardless of that environment defect.
 export PYTHONPATH := $(CURDIR)/backend/src
-.PHONY: help setup dev stop m3-check m3-up api intake-worker collection-worker frontend-install frontend-dev frontend-check frontend-build test-product-e2e lint format-check typecheck test-unit test-integration test-contract test-e2e check migrate smoke-live smoke-local
+.PHONY: help setup dev stop m3-check m3-up api intake-worker collection-worker update-scheduler frontend-install frontend-dev frontend-check frontend-build test-product-e2e lint format-check typecheck test-unit test-integration test-contract test-e2e check migrate smoke-live smoke-local
 help:
 	@$(PY) scripts/commands.py help
 setup:
@@ -35,6 +35,8 @@ intake-worker:
 collection-worker:
 	@test -n "$(UNIT_CONFIG)" || (echo "UNIT_CONFIG required" >&2; exit 2)
 	$(LOAD_ENV) .venv/bin/xingtu worker --config "$(UNIT_CONFIG)"
+update-scheduler:
+	$(LOAD_ENV) .venv/bin/xingtu-product update-scheduler --unit-config "$(if $(UNIT_CONFIG),$(UNIT_CONFIG),$(DEFAULT_UNIT_CONFIG))" --batch-size "$(if $(BATCH_SIZE),$(BATCH_SIZE),5)"
 frontend-install:
 	npm --prefix frontend ci --no-audit --no-fund
 frontend-dev:

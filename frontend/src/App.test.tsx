@@ -344,6 +344,45 @@ describe("UI-01 page optimisations", () => {
     expect(screen.getAllByText("最近更新").length).toBeGreaterThan(0);
   });
 
+  it("renders an update batch with per-creator state and no requirement panel", async () => {
+    const updateTask = {
+      ...taskDetail,
+      task_kind: "manual_update",
+      capability_version: null,
+      keyword: null,
+      status: "PARTIAL_COMPLETED",
+      stage: "部分完成",
+      allowed_actions: [],
+      counts: {
+        ...task.counts,
+        target_count: 2,
+        valid_count: 1,
+        profile_complete_count: 1,
+        featured_complete_count: 1,
+        failed_count: 1,
+      },
+      update_targets: [
+        { creator_id: "creator-1", platform_creator_id: "1001", display_name: null, first_position: 0, state: "done", failure_reason: null },
+        { creator_id: "creator-2", platform_creator_id: "1002", display_name: null, first_position: 1, state: "invalid", failure_reason: "CREATOR_INVALID" },
+      ],
+    };
+    vi.mocked(fetch).mockImplementation((input) => {
+      const path = String(input);
+      if (path === "/api/auth/me") return json(user);
+      if (path === `/api/tasks/${task.root_task_id}`) return json(updateTask);
+      if (path.startsWith(`/api/tasks/${task.root_task_id}/creators`)) return json({ items: [], next_cursor: null });
+      return json({}, 404);
+    });
+    renderApp(`/tasks/${task.root_task_id}`);
+    expect(await screen.findByRole("heading", { name: /手动更新 · 2 位达人/ })).toBeInTheDocument();
+    expect(screen.getByText("更新目标")).toBeInTheDocument();
+    expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
+    expect(screen.getByText("达人无效")).toBeInTheDocument();
+    expect(screen.getByText("CREATOR_INVALID")).toBeInTheDocument();
+    expect(screen.getByText("更新任务不适用")).toBeInTheDocument();
+    expect(screen.queryByText("历史任务")).not.toBeInTheDocument();
+  });
+
   it("renders one shared creator detail for both entry points", async () => {
     // CD-07: 记录实际发出的请求，用于断言页面已不再消费「系统采集历史」接口。
     const requestedPaths: string[] = [];

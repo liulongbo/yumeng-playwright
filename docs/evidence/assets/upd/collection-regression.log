@@ -1,0 +1,16 @@
+[PASS] MCP-02: server={'name': 'Playwright', 'version': '1.62.0-alpha-2026-06-29'}, tools=23
+[PASS] T07-01: new task form opened
+[PASS] T07-02: form={'keyword': '露营', 'target': '1'}
+[PASS] T07-03: submit clicked
+[PASS] T07-04: root_task=3130eb97-93e5-4987-b0b0-dd65f64e348c
+state: PARSING
+state: QUEUED
+state: COLLECTING
+state: COMPLETED
+[PASS] T07-05: terminal=COMPLETED states=['PARSING', 'QUEUED', 'COLLECTING', 'COMPLETED']
+[PASS] T07-06: task=collection/COMPLETED unit=unit-local-mac-02 valid=1 target=1
+[PASS] T07-07: collection task detail renders keyword/requirement panel
+[PASS] T07-08: DB counts={'task_creators': 1, 'snapshots': 1, 'dispatched': 1}
+[PASS] T03-05: collection filter/list visible
+REPORT docs/evidence/UPD-collection-regression-2026-10-17.json
+RESULT PASS

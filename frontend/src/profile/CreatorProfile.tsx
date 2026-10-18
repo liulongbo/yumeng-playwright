@@ -17,7 +17,7 @@ import { ArrowLeft, Check, Copy, MapPin } from "lucide-react";
 import { Link } from "react-router-dom";
 import { countUnitText, numberOrNull, ratioPercentText } from "../format";
 import { useFieldCatalog, indexCatalog } from "../fieldCatalog";
-import type { CreatorLibraryDetail, LibraryMetric } from "../types";
+import type { CreatorLibraryDetail, CreatorVideoPage, LibraryMetric } from "../types";
 import { AudiencePanel } from "./audience";
 import { CommercialPanel, type FeaturedContent } from "./commercial";
 import { CreationPanel, FulfillmentPanel } from "./panels";
@@ -43,8 +43,20 @@ export interface CreatorProfileProps {
    * 每个入口各自提供真实数据源：任务入口读任务快照集合，达人库入口读该达人最新快照集合。
    */
   contents?: FeaturedContent;
+  /**
+   * 「创作能力 → 最新视频表现」的作品观测（DATA-02）。两个入口的数据范围不同、形状相同：
+   * 任务入口读本任务快照的观测，达人库入口读该达人当前快照的观测；为空时该面板按空集降级。
+   */
+  videos?: CreatorVideoPage | null;
+  videosLoading?: boolean;
+  videosError?: unknown;
+  onRetryVideos?: () => void;
+  /** 该入口的授权封面端点构造器（按任务或按达人授权）；缺省时不构造任何封面地址。 */
+  videoCoverUrl?: (objectId: string) => string;
   /** 报价与历史; only the library entry owns the cross-task read model. */
   historyChapter?: ReactNode;
+  /** 入口动作（达人库的“手动更新”）；任务快照入口不提供。 */
+  actions?: ReactNode;
   /**
    * 抽屉等覆层内容。CD-03 需求 4.10 移除了左栏的「数据来源」入口，但字段来源/单位/观测时间数据
    * 仍然属于本页；两个入口通过这里挂载 `ProvenanceDrawer`，不随入口不同而丢失。
@@ -134,6 +146,11 @@ function StarId({ value }: { value: string }) {
   );
 }
 
+/**
+ * 调用方没给封面端点时的兜底：永远不产生地址，作品封面走「封面未生成」占位，绝不拼任何链接。
+ */
+const noCoverUrl = () => "";
+
 export function CreatorProfile({
   creator,
   payload,
@@ -143,7 +160,13 @@ export function CreatorProfile({
   description,
   notice,
   contents,
+  videos,
+  videosLoading,
+  videosError,
+  onRetryVideos,
+  videoCoverUrl,
   historyChapter,
+  actions,
   overlay,
 }: CreatorProfileProps) {
   const catalog = useFieldCatalog();
@@ -181,6 +204,7 @@ export function CreatorProfile({
         </Link>
         <span>/</span>
         <span>{creator.display_name || "达人详情"}</span>
+        {actions ? <div className="detail-actions">{actions}</div> : null}
       </div>
       {notice}
       <div className="profile-layout">
@@ -277,7 +301,17 @@ export function CreatorProfile({
             {chapter === "commercial" ? (
               <CommercialPanel payload={payload} index={index} contents={contents} />
             ) : null}
-            {chapter === "creation" ? <CreationPanel payload={payload} index={index} /> : null}
+            {chapter === "creation" ? (
+              <CreationPanel
+                payload={payload}
+                index={index}
+                videos={videos}
+                videosLoading={videosLoading}
+                videosError={videosError}
+                onRetryVideos={onRetryVideos}
+                coverUrl={videoCoverUrl ?? noCoverUrl}
+              />
+            ) : null}
             {chapter === "fulfillment" ? <FulfillmentPanel payload={payload} index={index} /> : null}
             {chapter === "audience" ? <AudiencePanel payload={payload} index={index} /> : null}
             {chapter === "history" ? historyChapter : null}
