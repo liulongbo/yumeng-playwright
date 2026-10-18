@@ -18,7 +18,7 @@ from .browser_host import BrowserHost
 from .challenge import ChallengeHandler, ChallengePolicy
 from .contracts import PlatformRegistry
 from .covers import CoverPipeline, build_cover_store
-from .domain import CollectorError, ExecutionContext, TaskRecord, TaskStatus
+from .domain import CollectorError, ExecutionContext, TaskKind, TaskRecord, TaskStatus, utcnow
 from .engine import Engine
 from .evidence import build_evidence_sink
 from .repository import Repository
@@ -37,6 +37,8 @@ def adopt_compatible_legacy_checkpoint(task: TaskRecord, registry: PlatformRegis
     the runtime versions would make resume semantics ambiguous and must remain fail closed.
     """
 
+    if task.plan is None:
+        return False
     capabilities = registry.capabilities
     compatible = (
         task.state == TaskStatus.QUEUED
@@ -95,6 +97,36 @@ def adopt_compatible_legacy_checkpoint(task: TaskRecord, registry: PlatformRegis
     return True
 
 
+def adopt_compatible_update_checkpoint(task: TaskRecord, registry: PlatformRegistry) -> bool:
+    """Adopt the current registry versions for a pristine plan-less update task.
+
+    An update task records the contract/adapter versions at creation.  If a deployment upgrades the
+    registry while the task is still queued, it must fail closed once any creator work exists;
+    a pristine task may adopt the new versions because it has collected nothing yet.
+    """
+    if task.task_kind == TaskKind.COLLECTION:
+        return False
+    if any(
+        candidate.modules
+        or candidate.observation_history
+        or candidate.collections
+        or candidate.collection_history
+        for candidate in task.checkpoint.candidates
+    ):
+        return False
+    task.checkpoint.adapter_version = registry.adapter_version
+    task.checkpoint.contract_version = registry.contract_version
+    task.checkpoint.profile_module_keys = [item.key for item in registry.modules]
+    task.checkpoint.profile_checkpoint_versions = {
+        item.key: item.checkpoint_version for item in registry.modules
+    }
+    task.checkpoint.featured_collection_types = [item.key.value for item in registry.featured]
+    task.checkpoint.featured_checkpoint_versions = {
+        item.key.value: item.checkpoint_version for item in registry.featured
+    }
+    return True
+
+
 class Activities:
     def __init__(
         self,
@@ -108,6 +140,111 @@ class Activities:
         # per-unit BrowserHost ownership explicit for direct tests/callers.
         self.host_lock = asyncio.Lock()
         self.challenge_policy = challenge_policy or ChallengePolicy()
+
+    async def _wait_for_human_challenge_handoff(
+        self,
+        *,
+        host: BrowserHost,
+        task: TaskRecord,
+        page: object,
+        handler: ChallengeHandler,
+    ) -> str:
+        """Keep the original browser idle until a human explicitly returns control.
+
+        This loop intentionally makes no Playwright calls while a takeover is ACTIVE.  It only
+        renews the host lease via the caller's heartbeat task and reads durable takeover state.
+        A person may manually inspect a small number of creator pages in the visible browser;
+        those observations are never persisted as collection output.
+        """
+        if not host.browser_instance_id:
+            raise CollectorError("LEASE_LOST", "BROWSER_INSTANCE_NOT_REGISTERED")
+        event = self.repo.create_verification_event(
+            unit=task.execution_unit_id,
+            root_task_id=task.root_task_id,
+            generation=host.generation,
+            browser_instance_id=host.browser_instance_id,
+            timeout_seconds=max(0.0, handler.remaining_timeout(self.repo.get(task.root_task_id))),
+        )
+        event_id = str(event["event_id"])
+        while True:
+            latest_task = self.repo.get(task.root_task_id)
+            if latest_task.state in {TaskStatus.CANCELLING, TaskStatus.CANCELLED}:
+                self.repo.expire_verification_event(event_id, "TASK_CANCELLED")
+                return "cancelled"
+            remaining = handler.remaining_timeout(latest_task)
+            if remaining <= 0:
+                self.repo.expire_verification_event(event_id, "SECURITY_CHALLENGE_TIMEOUT")
+                return "timeout"
+            takeover = self.repo.activate_browser_takeover(
+                unit=task.execution_unit_id,
+                owner=host.owner,
+                generation=host.generation,
+                browser_instance_id=host.browser_instance_id,
+            )
+            if takeover is None:
+                # No human is controlling the page, so keep the original browser idle.
+                await asyncio.sleep(min(1.0, remaining))
+                continue
+            takeover_id = str(takeover["takeover_id"])
+            while True:
+                current = self.repo.takeover(takeover_id)
+                state = str(current["state"])
+                if self.repo.get(task.root_task_id).state in {
+                    TaskStatus.CANCELLING,
+                    TaskStatus.CANCELLED,
+                }:
+                    self.repo.expire_verification_event(event_id, "TASK_CANCELLED")
+                    return "cancelled"
+                if current["expires_at"] <= utcnow():
+                    self.repo.finish_browser_takeover(
+                        takeover_id, resumed=False, failure_reason="TAKEOVER_EXPIRED"
+                    )
+                    break
+                if state == "VERIFYING":
+                    # The API flips state before closing the noVNC WebSocket.  Its connection
+                    # fence is cleared in the proxy's finally block; until then, any Playwright
+                    # page access would race the operator's last mouse/keyboard input.
+                    if current.get("viewer_connection_id"):
+                        await asyncio.sleep(0.1)
+                        continue
+                    verification_remaining = handler.remaining_timeout(
+                        self.repo.get(task.root_task_id)
+                    )
+                    if verification_remaining <= 0:
+                        self.repo.finish_browser_takeover(
+                            takeover_id, resumed=False, failure_reason="TAKEOVER_EXPIRED"
+                        )
+                        self.repo.expire_verification_event(event_id, "SECURITY_CHALLENGE_TIMEOUT")
+                        return "timeout"
+                    try:
+                        await host.maintain_and_promote(
+                            timeout=min(verification_remaining, 30.0),
+                            actor="browser-host:" + task.attempt_id,
+                            page=page,  # type: ignore[arg-type]
+                            challenge_handler=handler,
+                            return_on_challenge_visible=True,
+                        )
+                    except CollectorError as exc:
+                        reason = (
+                            "SECURITY_CHALLENGE_STILL_PRESENT"
+                            if exc.code == "SECURITY_CHALLENGE_STILL_PRESENT"
+                            else exc.code
+                        )
+                        self.repo.finish_browser_takeover(
+                            takeover_id, resumed=False, failure_reason=reason
+                        )
+                        break
+                    self.repo.finish_browser_takeover(takeover_id, resumed=True)
+                    return "resumed"
+                if state in {"RELEASED", "EXPIRED", "FAILED"}:
+                    break
+                if handler.remaining_timeout(self.repo.get(task.root_task_id)) <= 0:
+                    self.repo.finish_browser_takeover(
+                        takeover_id, resumed=False, failure_reason="TAKEOVER_EXPIRED"
+                    )
+                    self.repo.expire_verification_event(event_id, "SECURITY_CHALLENGE_TIMEOUT")
+                    return "timeout"
+                await asyncio.sleep(0.5)
 
     @activity.defn(name="collect_segment_v1")
     async def collect(self, root: str) -> str:
@@ -124,17 +261,38 @@ class Activities:
             TaskStatus.FAILED,
         }:
             return task.state
+        unit = self.repo.unit(task.execution_unit_id)
+        if task.task_kind.value not in (unit.get("allowed_task_kinds") or []):
+            with self.repo.edit(root) as (current, _):
+                current.state = TaskStatus.FAILED
+                current.failure_reason = "TASK_KIND_NOT_ALLOWED"
+            return TaskStatus.FAILED
+        if task.task_kind != TaskKind.COLLECTION and self.repo.has_runnable_higher_priority_task(
+            task.execution_unit_id, root, task.task_kind
+        ):
+            # Do not acquire or open the browser while normal collection (or a manual update for
+            # a scheduled batch) is runnable.  The Workflow's 30-second loop retries this activity.
+            with self.repo.edit(root) as (current, _):
+                current.state = TaskStatus.QUEUED
+                current.failure_reason = None
+            return TaskStatus.QUEUED
         registry = PlatformRegistry.model_validate_json(self.config.registry_path.read_text())
         try:
             registry.require_enabled(live=True)
-            registry.capabilities.validate_plan(task.plan, live=True)
+            if task.plan is not None:
+                registry.capabilities.validate_plan(task.plan, live=True)
             versions_changed = (
                 task.checkpoint.adapter_version != registry.adapter_version
                 or task.checkpoint.contract_version != registry.contract_version
             )
             if versions_changed:
                 with self.repo.edit(root) as (current, _):
-                    if not adopt_compatible_legacy_checkpoint(current, registry):
+                    adopted = (
+                        adopt_compatible_legacy_checkpoint(current, registry)
+                        if current.plan is not None
+                        else adopt_compatible_update_checkpoint(current, registry)
+                    )
+                    if not adopted:
                         raise CollectorError("PLATFORM_PAGE_CHANGED", "VERSION_MISMATCH")
                 task = self.repo.get(root)
             required_scopes = {"session", "search", "profile_identity"}
@@ -186,7 +344,6 @@ class Activities:
                         main_task.cancel()
                     return
 
-        unit = self.repo.unit(task.execution_unit_id)
         maintenance = unit["state"] in {
             "NEEDS_LOGIN",
             "ACCOUNT_MISMATCH",
@@ -291,7 +448,9 @@ class Activities:
                                 execution_unit_id=task.execution_unit_id,
                                 lease_generation=host.generation,
                                 session_version=host.session_version,
-                                capability_version=task.plan.capability_version,
+                                capability_version=(
+                                    task.capability_version or registry.capabilities.version
+                                ),
                                 adapter_version=registry.adapter_version,
                                 contract_version=registry.contract_version,
                                 network_mode=self.config.network_mode,
@@ -314,7 +473,9 @@ class Activities:
                                 self.repo, adapter, ctx, evidence=evidence, covers=covers
                             )
                             try:
-                                return await engine.run()
+                                if task.task_kind == TaskKind.COLLECTION:
+                                    return await engine.run()
+                                return await engine.run_update()
                             except CollectorError as exc:
                                 if exc.code in {
                                     "ACCOUNT_LOGIN_REQUIRED",
@@ -344,23 +505,24 @@ class Activities:
                                             return engine.partial_complete(
                                                 "SECURITY_CHALLENGE_UNKNOWN"
                                             )
-                                        try:
-                                            await host.maintain_and_promote(
-                                                timeout=self.challenge_policy.timeout_seconds,
-                                                actor="browser-host:" + task.attempt_id,
-                                                page=maintenance_page,
-                                                challenge_handler=challenge_handler,
+                                        handoff = await self._wait_for_human_challenge_handoff(
+                                            host=host,
+                                            task=task,
+                                            page=maintenance_page,
+                                            handler=challenge_handler,
+                                        )
+                                        if handoff == "timeout":
+                                            challenge_handler.failed(
+                                                root, task.attempt_id, "SECURITY_CHALLENGE_TIMEOUT"
                                             )
-                                        except CollectorError as recovery_error:
-                                            reason = (
-                                                recovery_error.code
-                                                if recovery_error.code.startswith(
-                                                    "SECURITY_CHALLENGE_"
-                                                )
-                                                else "SECURITY_CHALLENGE_UNKNOWN"
+                                            return engine.partial_complete(
+                                                "SECURITY_CHALLENGE_TIMEOUT"
                                             )
-                                            challenge_handler.failed(root, task.attempt_id, reason)
-                                            return engine.partial_complete(reason)
+                                        if handoff == "cancelled":
+                                            with self.repo.edit(root) as (current, _):
+                                                if current.state == TaskStatus.CANCELLING:
+                                                    current.state = TaskStatus.CANCELLED
+                                            return TaskStatus.CANCELLED
                                         challenge_handler.recovered(
                                             root, task.attempt_id, attempt.creator_id
                                         )
@@ -443,7 +605,10 @@ async def dispatch(repo: Repository, client: Client, queue: str) -> None:
     with repo.connect() as conn:
         rows = conn.execute(
             "SELECT d.* FROM task_dispatches d JOIN root_tasks r USING(root_task_id) "
-            "WHERE d.sent=false AND r.unit_id=%s ORDER BY r.updated_at,d.segment",
+            "WHERE d.sent=false AND r.unit_id=%s "
+            "ORDER BY CASE r.task_kind "
+            "WHEN 'collection' THEN 0 WHEN 'manual_update' THEN 1 "
+            "WHEN 'scheduled_update' THEN 2 ELSE 3 END, r.updated_at,d.segment",
             (queue.removeprefix("xingtu-"),),
         ).fetchall()
     for row in rows:
@@ -516,7 +681,11 @@ async def run_worker(
     ):
         while True:
             try:
+                # Local (normal collection/manual) dispatches start first.  Only then does this
+                # worker claim one unassigned update task from the shared pool.
                 await dispatch(repo, client, queue)
+                if repo.claim_unassigned_update(config.unit_id):
+                    await dispatch(repo, client, queue)
             except Exception as exc:  # noqa: BLE001 - the consumer must survive any tick error
                 logger.warning("collection dispatch tick failed: %s", type(exc).__name__)
             await asyncio.sleep(2)

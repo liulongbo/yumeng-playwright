@@ -16,7 +16,14 @@ from .browser_host import wait_for_manual_clearance
 from .contracts import PlatformRegistry
 from .covers import CoverPipeline, S3CoverStore, build_cover_store
 from .diagnostics import run_session_diagnostics
-from .domain import CollectorError, FilterPlan, NetworkMode, ProfileRequirement, SegmentBudget
+from .domain import (
+    CollectorError,
+    FilterPlan,
+    NetworkMode,
+    ProfileRequirement,
+    SegmentBudget,
+    TaskKind,
+)
 from .evidence import EvidenceConfig
 from .repository import Repository
 from .research import ResearchStep, run_research
@@ -26,6 +33,7 @@ from .runtime import (
     ensure_line,
     load_unit,
 )
+from .video_covers import backfill_video_covers
 from .worker import dispatch, run_worker
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -78,6 +86,15 @@ def main() -> None:
     enable.add_argument("--reason")
     register = commands.add_parser("register-unit")
     register.add_argument("--config", type=Path, required=True)
+    task_kinds = commands.add_parser("set-unit-task-kinds")
+    task_kinds.add_argument("--unit", required=True)
+    task_kinds.add_argument(
+        "--kinds",
+        required=True,
+        help="comma-separated: collection,manual_update,scheduled_update",
+    )
+    task_kinds.add_argument("--actor", required=True)
+    task_kinds.add_argument("--reason", required=True)
     rebind = commands.add_parser("rebind-account")
     rebind.add_argument("--config", type=Path, required=True)
     rebind.add_argument("--account-id", required=True)
@@ -106,6 +123,13 @@ def main() -> None:
     cover_gc.add_argument("--config", type=Path, required=True)
     cover_init = commands.add_parser("cover-init")
     cover_init.add_argument("--config", type=Path, required=True)
+    video_covers = commands.add_parser("video-covers")
+    video_covers.add_argument("--config", type=Path, required=True)
+    video_covers.add_argument("--creator", help="仅回填这位达人（库内 creator_id）")
+    video_covers.add_argument("--limit", type=int, help="最多处理多少个作品封面 key")
+    video_covers.add_argument(
+        "--dry-run", action="store_true", help="只统计待回填数量，不发起任何平台请求"
+    )
     research = commands.add_parser("research")
     research.add_argument("--config", type=Path, required=True)
     research.add_argument("--url", required=True)
@@ -201,6 +225,23 @@ def main() -> None:
                     }
                 )
             )
+        elif args.command == "set-unit-task-kinds":
+            raw = [item.strip() for item in args.kinds.split(",") if item.strip()]
+            try:
+                kinds = [TaskKind(item) for item in raw]
+            except ValueError as exc:
+                raise CollectorError("INVALID_FORM", "UNKNOWN_TASK_KIND") from exc
+            requeued = repository().set_unit_task_kinds(args.unit, kinds, args.actor, args.reason)
+            print(
+                json.dumps(
+                    {
+                        "unit_id": args.unit,
+                        "allowed_task_kinds": [kind.value for kind in kinds],
+                        "requeued": requeued,
+                    },
+                    ensure_ascii=False,
+                )
+            )
         elif args.command == "rebind-account":
             # Explicit, audited account rebinding: never automatic, never while a browser owns
             # the unit.  The config file must already carry the same identity.
@@ -283,6 +324,22 @@ def main() -> None:
                     ensure_ascii=False,
                 )
             )
+        elif args.command == "video-covers":
+            # Explicit, read-only-on-the-platform cover backfill for works collected before CD-08.
+            # It re-uses stored opaque keys only: no collection, no snapshot or metric write.
+            config = load_unit(args.config)
+            cover_report = asyncio.run(
+                backfill_video_covers(
+                    config,
+                    ROOT / ".runtime",
+                    repository(),
+                    creator_id=args.creator,
+                    limit=args.limit,
+                    dry_run=args.dry_run,
+                    progress=lambda message: print(message, file=sys.stderr),
+                )
+            )
+            print(json.dumps(cover_report.as_dict(), ensure_ascii=False))
         elif args.command == "research":
             config = load_unit(args.config)
             steps = (

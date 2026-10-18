@@ -1,0 +1,33 @@
+# F10 example overlay. Copy it to private deployment configuration and replace unit-01 values
+# per ExecutionUnit. It has no `ports:` section: VNC is reachable only by the product API proxy.
+services:
+  browser-unit-01:
+    image: ${XINGTU_WORKER_IMAGE:?build and pin the collection-worker image first}
+    init: true
+    entrypoint: ["/bin/sh", "/opt/xingtu/deploy/f10-browser-unit.sh"]
+    environment:
+      DISPLAY: ":99"
+      UNIT_CONFIG: /run/xingtu/unit.json
+      XINGTU_DATABASE_URL: ${XINGTU_DATABASE_URL:?required}
+      XINGTU_TEMPORAL_ADDRESS: temporal:7233
+      XINGTU_VNC_GEOMETRY: 1440x960x24
+    volumes:
+      - ${XINGTU_UNIT_01_CONFIG:?private unit config}:/run/xingtu/unit.json:ro
+      - ${XINGTU_UNIT_01_PROFILE:?private browser profile}:/var/lib/xingtu/profile
+      - ./f10-browser-unit.sh:/opt/xingtu/deploy/f10-browser-unit.sh:ro
+    networks: [app-private, browser-private]
+    restart: unless-stopped
+
+  product-api:
+    image: ${XINGTU_PRODUCT_IMAGE:?build and pin the product API image first}
+    environment:
+      # The noVNC wrapper is same-origin and connects only to the authenticated WebSocket proxy.
+      XINGTU_REMOTE_VIEWER_BASE_URL: /remote-viewer/vnc.html
+      XINGTU_REMOTE_VNC_TARGETS_JSON: '{"unit-01":"browser-unit-01:5900"}'
+    networks: [app-private, browser-private]
+
+networks:
+  app-private:
+    external: true
+  browser-private:
+    internal: true

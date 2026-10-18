@@ -6,7 +6,7 @@ from typing import Literal, Self
 
 from pydantic import Field, JsonValue, model_validator
 
-from .domain import Capabilities, FilterPlan, Model, TaskStatus
+from .domain import Capabilities, FilterPlan, Model, TaskKind, TaskStatus
 
 
 class RequirementRange(Model):
@@ -426,8 +426,58 @@ class ChallengeSummary(Model):
     delivered_result: str
 
 
+class ManualProbeCreator(Model):
+    """Presentation-only suggestion for a human using the existing browser window."""
+
+    platform_creator_id: str
+    display_name: str | None = None
+    state: str
+
+
+class VerificationEventView(Model):
+    event_id: str
+    unit_id: str
+    root_task_id: str
+    state: Literal["OPEN", "ACKNOWLEDGED", "RESOLVED", "EXPIRED"]
+    reason: str
+    detected_at: datetime
+    last_detected_at: datetime
+    deadline_at: datetime
+    reappearance_count: int = 0
+    remaining_seconds: int = 0
+
+
+class BrowserTakeoverView(Model):
+    takeover_id: str
+    unit_id: str
+    root_task_id: str
+    state: Literal["REQUESTED", "ACTIVE", "VERIFYING", "RESUMED", "FAILED", "EXPIRED", "RELEASED"]
+    expires_at: datetime
+    failure_reason: str | None = None
+    viewer_url: str | None = None
+    manual_probe_creators: list[ManualProbeCreator] = Field(default_factory=list)
+
+
+class ExecutionUnitView(Model):
+    unit_id: str
+    platform: Literal["douyin_xingtu"] = "douyin_xingtu"
+    account_label: str
+    line_label: str
+    state: str
+    mode: str | None = None
+    allowed_task_kinds: list[str] = Field(default_factory=list)
+    current_root_task_id: str | None = None
+    browser_status: Literal["ONLINE", "MAINTENANCE", "STOPPED", "SUSPECTED_OFFLINE", "QUARANTINED"]
+    verification_state: str | None = None
+    takeover_state: str | None = None
+    verification_deadline_at: datetime | None = None
+    last_heartbeat_at: datetime | None = None
+    actionable_reason: str | None = None
+
+
 class TaskSummary(Model):
     root_task_id: str
+    task_kind: TaskKind = TaskKind.COLLECTION
     status: TaskStatus
     stage: str
     version: int
@@ -468,6 +518,17 @@ class IntakeProgress(Model):
         return self.blocked_reason is not None
 
 
+class UpdateTargetView(Model):
+    """One creator targeted by a manual/scheduled update, with its checkpoint state."""
+
+    creator_id: str | None = None
+    platform_creator_id: str
+    display_name: str | None = None
+    first_position: int = 0
+    state: Literal["pending", "collecting", "done", "invalid", "failed"] = "pending"
+    failure_reason: str | None = None
+
+
 class TaskDetail(TaskSummary):
     requirement: RequirementForm | None = None
     capability_version: str | None = None
@@ -476,6 +537,7 @@ class TaskDetail(TaskSummary):
     origin_root_task_id: str | None = None
     challenge: ChallengeSummary | None = None
     intake: IntakeProgress | None = None
+    update_targets: list[UpdateTargetView] = Field(default_factory=list)
 
 
 class TaskPage(Model):
@@ -529,6 +591,15 @@ class CreatorLibrarySummary(Model):
     monthly_follower_growth_rate: LibraryMetric
     interaction_rate: LibraryMetric
     completion_rate: LibraryMetric
+    # DATA-02: the five remaining 「商业能力 → 内容数据」 metrics, projected out of the
+    # snapshot JSONB. `play_median` is the platform card 「播放量中位数」
+    # (`spread.item_rate_metrics.play_mid`), which is NOT the registered top-level
+    # `spread.play_median` leaf (see docs/tasks/CD-08.md).
+    play_median: LibraryMetric
+    average_duration: LibraryMetric
+    average_likes: LibraryMetric
+    average_comments: LibraryMetric
+    average_shares: LibraryMetric
     expected_cpm_21_60: LibraryMetric
     expected_cpm_60_plus: LibraryMetric
     expected_cpe_21_60: LibraryMetric
@@ -561,6 +632,29 @@ class CreatorLibraryDetail(CreatorLibrarySummary):
     profile_payload: dict[str, JsonValue] = Field(default_factory=dict)
 
 
+class CreatorUpdateStatus(Model):
+    """Current manual/scheduled update state for one library creator."""
+
+    creator_id: str
+    in_flight_root_task_id: str | None = None
+    task_status: TaskStatus | None = None
+    task_stage: str | None = None
+    last_write_at: datetime | None = None
+    last_success_at: datetime | None = None
+    last_success_snapshot_id: str | None = None
+    next_due_at: datetime | None = None
+    tier: str | None = None
+    interval_days: int | None = None
+    consecutive_failures: int = 0
+    last_failure_reason: str | None = None
+
+
+class CreatorUpdateResponse(Model):
+    root_task_id: str
+    status: TaskStatus = TaskStatus.QUEUED
+    reused: bool = False
+
+
 class CreatorLibraryHistoryPoint(Model):
     snapshot_id: str
     captured_at: datetime
@@ -587,6 +681,47 @@ class CreatorLibraryQuote(Model):
     origin_price_raw: Decimal | None = None
     observed_at: datetime
     offer_raw: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class CreatorVideoObservation(Model):
+    """One 「创作能力 → 最新视频表现」 work observation (DATA-02).
+
+    Counts stay platform-native Decimals: no unit, scale or percentage is inferred here.  A field
+    the platform never returns keeps `None` and says so in `field_statuses` — a real platform zero
+    stays `0`, so "missing" and "zero" are never conflated.
+    """
+
+    module_key: Literal["recent_video_performance", "recent_xingtu_video_performance"]
+    position: int
+    content_id: str | None = None
+    platform_item_id: str | None = None
+    platform_video_id: str | None = None
+    platform_author_id: str | None = None
+    title: str | None = None
+    subtitle: str | None = None
+    published_at: datetime | None = None
+    published_raw: str | None = None
+    play_count: Decimal | None = None
+    like_count: Decimal | None = None
+    comment_count: Decimal | None = None
+    favorite_count: Decimal | None = None
+    share_count: Decimal | None = None
+    # The platform's opaque object-store key, and the id of the verified object once it is stored.
+    cover_source_uri: str | None = None
+    cover_object_id: str | None = None
+    cover_status: Literal["STORED", "UNRESOLVED", "NOT_PROVIDED"] = "NOT_PROVIDED"
+    work_url: str | None = None
+    field_statuses: dict[str, str] = Field(default_factory=dict)
+    observed_at: datetime
+
+
+class CreatorVideoPage(Model):
+    """The ordered work observations of exactly one snapshot."""
+
+    creator_id: str
+    snapshot_id: str | None = None
+    view_kind: Literal["published", "unavailable"] = "published"
+    items: list[CreatorVideoObservation] = Field(default_factory=list)
 
 
 class ProfileFieldCatalogEntry(Model):

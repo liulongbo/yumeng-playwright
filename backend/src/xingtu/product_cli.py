@@ -10,6 +10,7 @@ from pathlib import Path
 import uvicorn
 
 from .contracts import PlatformRegistry
+from .creator_update import CreatorUpdateService
 from .domain import CollectorError, ProfileRequirement
 from .intake import DeepSeekAdapter
 from .intake_worker import IntakeProcessor, run_intake_worker
@@ -44,6 +45,46 @@ def run_api() -> None:
         port=int(os.environ.get("XINGTU_API_PORT", "8000")),
         proxy_headers=False,
     )
+
+
+async def _run_update_scheduler(
+    unit_config: Path,
+    profile_requirement_path: Path | None,
+    *,
+    batch_size: int,
+    tick_seconds: float,
+) -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    config = load_unit(unit_config)
+    registry = PlatformRegistry.model_validate_json(config.registry_path.read_text())
+    registry.require_enabled(live=True)
+    requirement = (
+        ProfileRequirement.model_validate_json(profile_requirement_path.read_text())
+        if profile_requirement_path
+        else None
+    )
+    dsn = os.environ.get("XINGTU_DATABASE_URL")
+    if not dsn:
+        raise CollectorError("STORAGE_UNAVAILABLE", "XINGTU_DATABASE_URL_REQUIRED")
+    service = CreatorUpdateService(Repository(dsn), registry, requirement, batch_size=batch_size)
+    while True:
+        try:
+            result = service.scheduler_tick()
+            if result["created"]:
+                logging.getLogger(__name__).info(
+                    "creator update batch created=%s reconciled=%s enrolled=%s",
+                    result["created"],
+                    result["reconciled"],
+                    result["enrolled"],
+                )
+        except Exception as exc:  # noqa: BLE001 - the scheduler must survive any tick error
+            logging.getLogger(__name__).warning(
+                "creator update scheduler tick failed: %s", type(exc).__name__
+            )
+        await asyncio.sleep(tick_seconds)
 
 
 async def _run_intake(unit_config: Path, profile_requirement: Path | None) -> None:
@@ -106,9 +147,20 @@ def main() -> None:
         type=Path,
         default=ROOT / "contracts/profile_requirements.json",
     )
+    scheduler = commands.add_parser("update-scheduler")
+    scheduler.add_argument("--unit-config", type=Path, required=True)
+    scheduler.add_argument(
+        "--profile-requirement",
+        type=Path,
+        default=ROOT / "contracts/profile_requirements.json",
+    )
+    scheduler.add_argument("--batch-size", type=int, default=5)
+    scheduler.add_argument("--tick-seconds", type=float, default=60.0)
     args = parser.parse_args()
     try:
-        products = repository() if args.command != "intake-worker" else None
+        products = (
+            repository() if args.command not in {"intake-worker", "update-scheduler"} else None
+        )
         if args.command == "create-user":
             assert products
             username = normalize_username(args.username)
@@ -133,6 +185,15 @@ def main() -> None:
                 actor=args.actor,
             )
             print(user_id)
+        elif args.command == "update-scheduler":
+            asyncio.run(
+                _run_update_scheduler(
+                    args.unit_config,
+                    args.profile_requirement,
+                    batch_size=args.batch_size,
+                    tick_seconds=args.tick_seconds,
+                )
+            )
         else:
             asyncio.run(_run_intake(args.unit_config, args.profile_requirement))
     except CollectorError as exc:

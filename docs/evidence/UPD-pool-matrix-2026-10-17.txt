@@ -1,0 +1,7 @@
+PASS all {'allowed': ['collection', 'manual_update', 'scheduled_update'], 'claimed': ['collection', 'manual_update', 'scheduled_update'], 'pass': True}
+PASS collection {'allowed': ['collection'], 'claimed': ['collection'], 'pass': True}
+PASS manual {'allowed': ['manual_update'], 'claimed': ['manual_update'], 'pass': True}
+PASS scheduled {'allowed': ['scheduled_update'], 'claimed': ['scheduled_update'], 'pass': True}
+PASS collection+manual {'allowed': ['collection', 'manual_update'], 'claimed': ['collection', 'manual_update'], 'pass': True}
+PASS race {'first': '8c3e733d-969a-4539-abbc-33304507e5eb', 'second': 'd8e842d6-fbba-476f-ab75-ed98a0f0f4a4', 'pass': True}
+RESULT PASS

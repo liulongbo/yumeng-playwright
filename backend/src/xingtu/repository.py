@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -26,11 +27,14 @@ from .domain import (
     NetworkMode,
     ProfileRequirement,
     ReleaseDisposition,
+    TaskKind,
     TaskRecord,
     TaskStatus,
     uid,
     utcnow,
 )
+
+logger = logging.getLogger(__name__)
 
 RUNNING = {
     TaskStatus.QUEUED,
@@ -426,6 +430,143 @@ class Repository:
                 raise CollectorError("RESOURCE_UNAVAILABLE", "unit not registered")
             return row
 
+    def select_execution_unit(self, task_kind: TaskKind) -> str | None:
+        """First non-quarantined unit that allows this task kind; no load balancing in MVP."""
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT unit_id FROM execution_units
+                WHERE %s = ANY(allowed_task_kinds) AND state <> 'QUARANTINED'
+                ORDER BY unit_id LIMIT 1""",
+                (task_kind.value,),
+            ).fetchone()
+            return str(row["unit_id"]) if row else None
+
+    def set_unit_task_kinds(self, unit: str, kinds: list[TaskKind], actor: str, reason: str) -> int:
+        """Replace one unit's allowed task kinds and requeue unstarted incompatible tasks.
+
+        Running tasks keep running: their Activity already re-validated the kind at start.  A queued
+        task that never started is unassigned so the pool can match it to another capable unit.
+        """
+        values = [kind.value for kind in kinds]
+        if not values or len(values) != len(set(values)):
+            raise CollectorError("INVALID_FORM", "TASK_KINDS_REQUIRED_AND_UNIQUE")
+        supported = {kind.value for kind in TaskKind}
+        if not set(values) <= supported:
+            raise CollectorError("INVALID_FORM", "UNKNOWN_TASK_KIND")
+        if not actor.strip() or not reason.strip():
+            raise CollectorError("INVALID_FORM", "ACTOR_AND_REASON_REQUIRED")
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT unit_id FROM execution_units WHERE unit_id=%s FOR UPDATE", (unit,)
+            ).fetchone()
+            if not row:
+                raise CollectorError("RESOURCE_UNAVAILABLE", "unit not registered")
+            conn.execute(
+                "UPDATE execution_units SET allowed_task_kinds=%s WHERE unit_id=%s",
+                (values, unit),
+            )
+            requeued = conn.execute(
+                """UPDATE root_tasks r
+                SET unit_id=NULL,
+                    payload=jsonb_set(
+                      r.payload,'{execution_unit_id}',to_jsonb(%s::text),true
+                    ),
+                    updated_at=now()
+                WHERE r.unit_id=%s AND r.state='QUEUED'
+                  AND NOT (r.task_kind = ANY(%s))
+                  AND NOT EXISTS (
+                    SELECT 1 FROM task_dispatches d
+                    WHERE d.root_task_id=r.root_task_id
+                      AND d.workflow_started_at IS NOT NULL
+                  )
+                RETURNING r.root_task_id""",
+                ("", unit, values),
+            ).fetchall()
+            for item in requeued:
+                conn.execute(
+                    """UPDATE task_dispatches SET sent=false
+                    WHERE root_task_id=%s AND workflow_started_at IS NULL""",
+                    (item["root_task_id"],),
+                )
+            conn.execute(
+                "INSERT INTO audit_logs(actor,action) VALUES(%s,%s)",
+                (
+                    actor.strip(),
+                    "set_unit_task_kinds:" + unit + ":" + ",".join(values) + ":" + reason.strip(),
+                ),
+            )
+            return len(requeued)
+
+    def claim_unassigned_update(self, unit: str) -> str | None:
+        """Claim one unassigned pool task for this unit; returns the root id or None.
+
+        Manual/scheduled updates are created unassigned.  Normal collection keeps its existing
+        promotion-time assignment, so it only appears here when an operator removed its capability
+        and it was released back to the pool; matching it again is the intended recovery.
+        """
+        with self.connect() as conn:
+            row = conn.execute(
+                """WITH candidate AS (
+                  SELECT r.root_task_id
+                  FROM root_tasks r
+                  JOIN execution_units u ON u.unit_id=%s
+                  WHERE r.unit_id IS NULL
+                    AND r.state='QUEUED'
+                    AND r.task_kind = ANY(u.allowed_task_kinds)
+                    AND u.state <> 'QUARANTINED'
+                    AND EXISTS (
+                      SELECT 1 FROM task_dispatches d
+                      WHERE d.root_task_id=r.root_task_id
+                        AND d.segment=(r.payload->>'segment')::int
+                        AND d.sent=false
+                    )
+                  ORDER BY CASE r.task_kind
+                    WHEN 'collection' THEN 0
+                    WHEN 'manual_update' THEN 1
+                    WHEN 'scheduled_update' THEN 2
+                    ELSE 3 END,
+                    r.created_at, r.root_task_id
+                  FOR UPDATE OF r SKIP LOCKED
+                  LIMIT 1
+                )
+                UPDATE root_tasks r
+                SET unit_id=%s,
+                    payload=jsonb_set(
+                      r.payload,'{execution_unit_id}',to_jsonb(%s::text),true
+                    ),
+                    updated_at=now()
+                FROM candidate c
+                WHERE r.root_task_id=c.root_task_id
+                RETURNING r.root_task_id""",
+                (unit, unit, unit),
+            ).fetchone()
+            return str(row["root_task_id"]) if row else None
+
+    def has_runnable_higher_priority_task(
+        self, unit: str, current_root: str, current_kind: TaskKind
+    ) -> bool:
+        """Whether a collection/manual task should get the browser before this update task."""
+        priority = {
+            TaskKind.COLLECTION: 0,
+            TaskKind.MANUAL_UPDATE: 1,
+            TaskKind.SCHEDULED_UPDATE: 2,
+        }
+        higher = [kind.value for kind, value in priority.items() if value < priority[current_kind]]
+        if not higher:
+            return False
+        runnable = ["QUEUED", "SEARCHING", "COLLECTING", "PERSISTING", "RETRY_WAIT"]
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT 1 FROM root_tasks
+                WHERE root_task_id<>%s
+                  AND task_kind = ANY(%s)
+                  AND (unit_id=%s OR unit_id IS NULL)
+                  AND state = ANY(%s)
+                LIMIT 1""",
+                (current_root, higher, unit, runnable),
+            ).fetchone()
+            return row is not None
+
     def acquire(
         self,
         unit: str,
@@ -450,6 +591,17 @@ class Repository:
                 conn.execute(
                     "UPDATE execution_units SET state='QUARANTINED', "
                     "failure_reason='EXPIRED_OWNER' WHERE unit_id=%s",
+                    (unit,),
+                )
+                conn.execute(
+                    """UPDATE browser_takeover_sessions SET state='EXPIRED',
+                    failure_reason='UNIT_QUARANTINED'
+                    WHERE unit_id=%s AND state IN ('REQUESTED','ACTIVE','VERIFYING')""",
+                    (unit,),
+                )
+                conn.execute(
+                    """UPDATE verification_events SET state='EXPIRED',reason='UNIT_QUARANTINED'
+                    WHERE unit_id=%s AND state IN ('OPEN','ACKNOWLEDGED')""",
                     (unit,),
                 )
                 error = True
@@ -488,13 +640,372 @@ class Repository:
     def heartbeat(self, unit: str, owner: str, generation: int) -> None:
         with self.connect() as conn:
             row = conn.execute(
-                """UPDATE execution_units SET lease_until=%s
+                """UPDATE execution_units SET lease_until=%s,last_heartbeat_at=now()
               WHERE unit_id=%s AND owner=%s AND generation=%s AND lease_until>now()
               AND state='LEASED' RETURNING unit_id""",
                 (utcnow() + timedelta(seconds=120), unit, owner, generation),
             ).fetchone()
             if not row:
                 raise CollectorError("LEASE_LOST")
+
+    def register_browser_instance(
+        self, unit: str, owner: str, generation: int, browser_instance_id: str
+    ) -> None:
+        """Publish only a random instance fence, never a browser control endpoint.
+
+        Product APIs use this value to reject stale takeover requests after a host restart.  The
+        actual BrowserContext continues to be owned by BrowserHost in the Worker process.
+        """
+        with self.connect() as conn:
+            row = conn.execute(
+                """UPDATE execution_units SET browser_instance_id=%s,browser_started_at=now(),
+                last_heartbeat_at=now() WHERE unit_id=%s AND owner=%s AND generation=%s
+                AND state='LEASED' AND browser_stopped=false RETURNING unit_id""",
+                (browser_instance_id, unit, owner, generation),
+            ).fetchone()
+            if not row:
+                raise CollectorError("LEASE_LOST", "BROWSER_INSTANCE_FENCE_REJECTED")
+
+    def create_verification_event(
+        self,
+        *,
+        unit: str,
+        root_task_id: str,
+        generation: int,
+        browser_instance_id: str,
+        timeout_seconds: float,
+        reason: str = "PLATFORM_SECURITY_CHALLENGE",
+    ) -> dict[str, Any]:
+        """Create one open notification per original browser instance.
+
+        Repeated detections before a successful handoff update the existing event instead of
+        generating alert noise or consuming the normal recovery budget.
+        """
+        deadline = utcnow() + timedelta(seconds=timeout_seconds)
+        with self.connect() as conn:
+            existing = conn.execute(
+                """SELECT * FROM verification_events WHERE unit_id=%s AND root_task_id=%s
+                AND browser_instance_id=%s AND state IN ('OPEN','ACKNOWLEDGED') FOR UPDATE""",
+                (unit, root_task_id, browser_instance_id),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    """UPDATE verification_events SET last_detected_at=now(),reason=%s
+                    WHERE event_id=%s""",
+                    (reason, existing["event_id"]),
+                )
+                existing["reason"] = reason
+                return existing
+            row = conn.execute(
+                """INSERT INTO verification_events(event_id,unit_id,root_task_id,
+                lease_generation,browser_instance_id,state,reason,deadline_at)
+                VALUES(%s,%s,%s,%s,%s,'OPEN',%s,%s) RETURNING *""",
+                (uid(), unit, root_task_id, generation, browser_instance_id, reason, deadline),
+            ).fetchone()
+            assert row
+            conn.execute(
+                "INSERT INTO audit_logs(root_task_id,actor,action) VALUES(%s,%s,%s)",
+                (root_task_id, "browser-host", "verification_event.open:" + unit),
+            )
+            return row
+
+    def list_verification_events(self, *, open_only: bool = True) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """SELECT e.*,u.state AS unit_state,u.mode,u.browser_stopped,u.last_heartbeat_at,
+                r.state AS task_state FROM verification_events e
+                JOIN execution_units u USING(unit_id) JOIN root_tasks r USING(root_task_id) """
+                + ("WHERE e.state IN ('OPEN','ACKNOWLEDGED') " if open_only else "")
+                + "ORDER BY e.detected_at DESC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def verification_event(self, event_id: str) -> dict[str, Any]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM verification_events WHERE event_id=%s", (event_id,)
+            ).fetchone()
+            if not row:
+                raise CollectorError("INVALID_FORM", "VERIFICATION_EVENT_NOT_FOUND")
+            return dict(row)
+
+    def request_browser_takeover(self, unit: str, actor_user_id: str) -> dict[str, Any]:
+        """Create a fenced request; the owning Worker alone can activate it."""
+        with self.connect() as conn:
+            unit_row = conn.execute(
+                "SELECT * FROM execution_units WHERE unit_id=%s FOR UPDATE", (unit,)
+            ).fetchone()
+            if not unit_row:
+                raise CollectorError("RESOURCE_UNAVAILABLE", "EXECUTION_UNIT_NOT_FOUND")
+            if (
+                unit_row["state"] != "LEASED"
+                or unit_row["mode"] != "maintenance"
+                or unit_row["browser_stopped"]
+                or not unit_row["browser_instance_id"]
+            ):
+                raise CollectorError("RESOURCE_UNAVAILABLE", "ORIGINAL_BROWSER_UNAVAILABLE")
+            event = conn.execute(
+                """SELECT * FROM verification_events WHERE unit_id=%s
+                AND browser_instance_id=%s AND state IN ('OPEN','ACKNOWLEDGED')
+                AND deadline_at>now() ORDER BY detected_at DESC LIMIT 1 FOR UPDATE""",
+                (unit, unit_row["browser_instance_id"]),
+            ).fetchone()
+            if not event:
+                raise CollectorError("INVALID_FORM", "NO_ACTIVE_VERIFICATION_EVENT")
+            # A disconnected operator must not prevent a new operator from taking over for
+            # the remainder of the verification window.  This is deliberately done under
+            # the unit row lock before checking the partial unique index below.
+            conn.execute(
+                """UPDATE browser_takeover_sessions SET state='EXPIRED',
+                failure_reason=COALESCE(failure_reason, 'TAKEOVER_EXPIRED')
+                WHERE unit_id=%s AND state IN ('REQUESTED','ACTIVE','VERIFYING')
+                AND expires_at<=now()""",
+                (unit,),
+            )
+            current = conn.execute(
+                """SELECT * FROM browser_takeover_sessions WHERE unit_id=%s
+                AND state IN ('REQUESTED','ACTIVE','VERIFYING') FOR UPDATE""",
+                (unit,),
+            ).fetchone()
+            if current:
+                if str(current["actor_user_id"]) == actor_user_id:
+                    return dict(current)
+                raise CollectorError("RESOURCE_UNAVAILABLE", "BROWSER_ALREADY_TAKEN_OVER")
+            row = conn.execute(
+                """INSERT INTO browser_takeover_sessions(takeover_id,event_id,unit_id,root_task_id,
+                lease_generation,browser_instance_id,actor_user_id,state,expires_at)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,'REQUESTED',%s) RETURNING *""",
+                (
+                    uid(),
+                    event["event_id"],
+                    unit,
+                    event["root_task_id"],
+                    event["lease_generation"],
+                    event["browser_instance_id"],
+                    actor_user_id,
+                    event["deadline_at"],
+                ),
+            ).fetchone()
+            assert row
+            conn.execute(
+                "UPDATE verification_events SET state='ACKNOWLEDGED' WHERE event_id=%s",
+                (event["event_id"],),
+            )
+            conn.execute(
+                """INSERT INTO audit_logs(root_task_id,actor,actor_user_id,action)
+                VALUES(%s,%s,%s,%s)""",
+                (
+                    event["root_task_id"],
+                    "product:" + actor_user_id,
+                    actor_user_id,
+                    "browser_takeover.request:" + unit,
+                ),
+            )
+            return dict(row)
+
+    def activate_browser_takeover(
+        self, *, unit: str, owner: str, generation: int, browser_instance_id: str
+    ) -> dict[str, Any] | None:
+        """Worker-side compare-and-set. This is the only path to ACTIVE."""
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT * FROM browser_takeover_sessions WHERE unit_id=%s
+                AND lease_generation=%s AND browser_instance_id=%s AND state='REQUESTED'
+                AND expires_at>now() ORDER BY created_at LIMIT 1 FOR UPDATE""",
+                (unit, generation, browser_instance_id),
+            ).fetchone()
+            if not row:
+                return None
+            owned = conn.execute(
+                """SELECT unit_id FROM execution_units WHERE unit_id=%s AND owner=%s
+                AND generation=%s AND browser_instance_id=%s AND state='LEASED'
+                AND mode='maintenance' AND browser_stopped=false""",
+                (unit, owner, generation, browser_instance_id),
+            ).fetchone()
+            if not owned:
+                return None
+            conn.execute(
+                """UPDATE browser_takeover_sessions SET state='ACTIVE',activated_at=now(),
+                last_human_action_at=now() WHERE takeover_id=%s""",
+                (row["takeover_id"],),
+            )
+            row["state"] = "ACTIVE"
+            return dict(row)
+
+    def takeover(self, takeover_id: str, actor_user_id: str | None = None) -> dict[str, Any]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM browser_takeover_sessions WHERE takeover_id=%s", (takeover_id,)
+            ).fetchone()
+            if not row:
+                raise CollectorError("INVALID_FORM", "TAKEOVER_NOT_FOUND")
+            if actor_user_id and str(row["actor_user_id"]) != actor_user_id:
+                raise CollectorError("INVALID_FORM", "TAKEOVER_ACCESS_DENIED")
+            return dict(row)
+
+    def active_takeover_for_viewer(self, takeover_id: str, actor_user_id: str) -> dict[str, Any]:
+        """Return an operator's live takeover only while it still fences the original browser."""
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT t.* FROM browser_takeover_sessions t
+                JOIN execution_units u ON u.unit_id=t.unit_id
+                WHERE t.takeover_id=%s AND t.actor_user_id=%s AND t.state='ACTIVE'
+                AND t.expires_at>now() AND u.state='LEASED' AND u.mode='maintenance'
+                AND u.browser_stopped=false AND u.browser_instance_id=t.browser_instance_id""",
+                (takeover_id, actor_user_id),
+            ).fetchone()
+            if not row:
+                raise CollectorError("INVALID_FORM", "TAKEOVER_NOT_ACTIVE")
+            return dict(row)
+
+    def claim_takeover_viewer(
+        self, takeover_id: str, actor_user_id: str, connection_id: str
+    ) -> None:
+        """Fence one VNC WebSocket so Playwright can wait for its confirmed disconnect."""
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT t.takeover_id FROM browser_takeover_sessions t
+                JOIN execution_units u ON u.unit_id=t.unit_id
+                WHERE t.takeover_id=%s AND t.actor_user_id=%s AND t.state='ACTIVE'
+                AND t.expires_at>now() AND t.viewer_connection_id IS NULL
+                AND u.state='LEASED' AND u.mode='maintenance' AND u.browser_stopped=false
+                AND u.browser_instance_id=t.browser_instance_id FOR UPDATE OF t""",
+                (takeover_id, actor_user_id),
+            ).fetchone()
+            if not row:
+                raise CollectorError("INVALID_FORM", "TAKEOVER_VIEWER_ALREADY_CONNECTED")
+            conn.execute(
+                """UPDATE browser_takeover_sessions SET viewer_connection_id=%s,
+                viewer_connected_at=now(),viewer_disconnected_at=NULL WHERE takeover_id=%s""",
+                (connection_id, takeover_id),
+            )
+
+    def release_takeover_viewer(self, takeover_id: str, connection_id: str) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """UPDATE browser_takeover_sessions SET viewer_connection_id=NULL,
+                viewer_disconnected_at=now() WHERE takeover_id=%s AND viewer_connection_id=%s""",
+                (takeover_id, connection_id),
+            )
+
+    def report_takeover_reappearance(
+        self, takeover_id: str, actor_user_id: str, reason: str
+    ) -> dict[str, Any]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM browser_takeover_sessions WHERE takeover_id=%s FOR UPDATE",
+                (takeover_id,),
+            ).fetchone()
+            if not row or str(row["actor_user_id"]) != actor_user_id:
+                raise CollectorError("INVALID_FORM", "TAKEOVER_ACCESS_DENIED")
+            if row["state"] != "ACTIVE":
+                raise CollectorError("INVALID_FORM", "TAKEOVER_NOT_ACTIVE")
+            conn.execute(
+                """UPDATE verification_events SET state='OPEN',last_detected_at=now(),
+                reappearance_count=reappearance_count+1,reason=%s WHERE event_id=%s""",
+                (reason, row["event_id"]),
+            )
+            conn.execute(
+                """UPDATE browser_takeover_sessions SET last_human_action_at=now()
+                WHERE takeover_id=%s""",
+                (takeover_id,),
+            )
+            row["last_human_action_at"] = utcnow()
+            return dict(row)
+
+    def complete_browser_takeover(self, takeover_id: str, actor_user_id: str) -> dict[str, Any]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM browser_takeover_sessions WHERE takeover_id=%s FOR UPDATE",
+                (takeover_id,),
+            ).fetchone()
+            if not row or str(row["actor_user_id"]) != actor_user_id:
+                raise CollectorError("INVALID_FORM", "TAKEOVER_ACCESS_DENIED")
+            if row["state"] != "ACTIVE" or row["expires_at"] <= utcnow():
+                raise CollectorError("INVALID_FORM", "TAKEOVER_NOT_ACTIVE")
+            conn.execute(
+                """UPDATE browser_takeover_sessions SET state='VERIFYING',
+                last_human_action_at=now(),completed_at=now() WHERE takeover_id=%s""",
+                (takeover_id,),
+            )
+            now = utcnow()
+            row["state"] = "VERIFYING"
+            row["last_human_action_at"] = now
+            row["completed_at"] = now
+            return dict(row)
+
+    def finish_browser_takeover(
+        self, takeover_id: str, *, resumed: bool, failure_reason: str | None = None
+    ) -> None:
+        state = "RESUMED" if resumed else "FAILED"
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM browser_takeover_sessions WHERE takeover_id=%s FOR UPDATE",
+                (takeover_id,),
+            ).fetchone()
+            if not row:
+                return
+            conn.execute(
+                """UPDATE browser_takeover_sessions SET state=%s,failure_reason=%s
+                WHERE takeover_id=%s""",
+                (state, failure_reason, takeover_id),
+            )
+            if resumed:
+                conn.execute(
+                    """UPDATE verification_events SET state='RESOLVED',resolved_at=now()
+                    WHERE event_id=%s""",
+                    (row["event_id"],),
+                )
+            else:
+                conn.execute(
+                    """UPDATE verification_events SET state='OPEN',last_detected_at=now(),
+                    reason=%s,reappearance_count=reappearance_count+
+                    CASE WHEN %s='SECURITY_CHALLENGE_STILL_PRESENT' THEN 1 ELSE 0 END
+                    WHERE event_id=%s""",
+                    (
+                        failure_reason or "VERIFICATION_NOT_CONFIRMED",
+                        failure_reason,
+                        row["event_id"],
+                    ),
+                )
+
+    def expire_verification_event(self, event_id: str, reason: str) -> None:
+        """Close a notification when its bounded wait is no longer actionable.
+
+        Expiry never attempts browser cleanup.  The Worker remains the sole owner that closes the
+        original BrowserContext; this update merely prevents an expired event from appearing as
+        a live operator notification.
+        """
+        with self.connect() as conn:
+            conn.execute(
+                """UPDATE browser_takeover_sessions SET state='EXPIRED',failure_reason=%s
+                WHERE event_id=%s AND state IN ('REQUESTED','ACTIVE','VERIFYING')""",
+                (reason, event_id),
+            )
+            conn.execute(
+                """UPDATE verification_events SET state='EXPIRED',reason=%s
+                WHERE event_id=%s AND state IN ('OPEN','ACKNOWLEDGED')""",
+                (reason, event_id),
+            )
+
+    def release_browser_takeover(self, takeover_id: str, actor_user_id: str) -> None:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM browser_takeover_sessions WHERE takeover_id=%s FOR UPDATE",
+                (takeover_id,),
+            ).fetchone()
+            if not row or str(row["actor_user_id"]) != actor_user_id:
+                raise CollectorError("INVALID_FORM", "TAKEOVER_ACCESS_DENIED")
+            if row["state"] not in {"REQUESTED", "ACTIVE"}:
+                raise CollectorError("INVALID_FORM", "TAKEOVER_NOT_RELEASABLE")
+            conn.execute(
+                """UPDATE browser_takeover_sessions SET state='RELEASED',completed_at=now()
+                WHERE takeover_id=%s""",
+                (takeover_id,),
+            )
+            conn.execute(
+                "UPDATE verification_events SET state='OPEN' WHERE event_id=%s", (row["event_id"],)
+            )
 
     def release(
         self,
@@ -529,7 +1040,8 @@ class Repository:
                 """UPDATE execution_units SET owner=NULL, lease_until=NULL,
               browser_stopped=%s, mode=NULL, state=%s, current_root_task_id=NULL,
               maintenance_deadline=NULL, idle_deadline=NULL,last_session_status=%s,
-              last_session_checked_at=now(),last_session_reason=%s,failure_reason=%s
+              last_session_checked_at=now(),last_session_reason=%s,failure_reason=%s,
+              browser_instance_id=NULL,browser_started_at=NULL
               WHERE unit_id=%s AND owner=%s
               AND generation=%s""",
                 (
@@ -543,6 +1055,18 @@ class Repository:
                     generation,
                 ),
             )
+            if state == "QUARANTINED":
+                conn.execute(
+                    """UPDATE browser_takeover_sessions SET state='EXPIRED',
+                    failure_reason='UNIT_QUARANTINED'
+                    WHERE unit_id=%s AND state IN ('REQUESTED','ACTIVE','VERIFYING')""",
+                    (unit,),
+                )
+                conn.execute(
+                    """UPDATE verification_events SET state='EXPIRED',reason='UNIT_QUARANTINED'
+                    WHERE unit_id=%s AND state IN ('OPEN','ACKNOWLEDGED')""",
+                    (unit,),
+                )
 
     def promote_maintenance_to_collect(
         self,
@@ -904,13 +1428,27 @@ class Repository:
                 ):
                     raise CollectorError("TASK_CANCELLED", "STALE_ATTEMPT_OR_STATE")
                 if (
-                    task.plan.capability_version != ctx.capability_version
-                    or task.checkpoint.adapter_version != ctx.adapter_version
+                    task.plan is not None and task.plan.capability_version != ctx.capability_version
+                ) or (
+                    task.checkpoint.adapter_version != ctx.adapter_version
                     or task.checkpoint.contract_version != ctx.contract_version
                 ):
                     raise CollectorError("PLATFORM_PAGE_CHANGED", "VERSION_MISMATCH")
             yield task, conn
             self._save(conn, task)
+        # The task write path is the single terminal boundary for every caller (Activity,
+        # API command, CLI).  Reconcile the update schedule after the task transaction commits,
+        # so manual updates do not depend on a later UI read or scheduler tick.  The call is
+        # idempotent and only touches rows whose in-flight root is this task.
+        if task.task_kind != TaskKind.COLLECTION and task.state in TERMINAL_TASK_STATES:
+            try:
+                from .creator_update import reconcile_update_task
+
+                reconcile_update_task(self, root)
+            except Exception as exc:  # noqa: BLE001 - a committed task must not be re-failed
+                logger.warning(
+                    "update schedule reconcile failed root=%s: %s", root, type(exc).__name__
+                )
 
     def command(self, root: str, action: str, version: int, actor: str) -> None:
         with self.edit(root) as (task, conn):
@@ -1193,7 +1731,19 @@ class Repository:
         )
 
     def cover_reference(self, root_task_id: str, object_id: str) -> dict[str, Any] | None:
-        """Authenticated-access check: an object is only reachable through its own task's card."""
+        """Authenticated-access check: an object is only reachable through its own task's rows.
+
+        Two ownership paths exist and both are checked:
+
+        * `media_objects` → `featured_cards` → `featured_collections.root_task_id`
+          (精选集合 covers);
+        * `media_objects.source_key` → `douyin_xingtu_creator_video_observations.cover_source_uri`
+          → `creator_snapshots.root_task_id` (the DATA-02 work covers, whose platform object key
+          is the stable link and whose signed URL expires).
+
+        The second path is why the 创作能力 works list can serve a cover through the task-scoped
+        endpoint at all; without it the page correctly degrades to 「封面未生成」.
+        """
         with self.connect() as conn:
             return conn.execute(
                 """SELECT m.object_id,m.checksum,m.kind,m.content_type,m.byte_size,
@@ -1202,8 +1752,17 @@ class Repository:
                 JOIN featured_cards c ON c.cover_object_id=m.object_id
                 JOIN featured_collections f
                 ON f.collection_observation_id=c.collection_observation_id
-                WHERE m.object_id=%s AND m.kind='cover' AND f.root_task_id=%s LIMIT 1""",
-                (object_id, root_task_id),
+                WHERE m.object_id=%s AND m.kind='cover' AND f.root_task_id=%s
+                UNION ALL
+                SELECT m.object_id,m.checksum,m.kind,m.content_type,m.byte_size,NULL,NULL
+                FROM media_objects m
+                JOIN douyin_xingtu_creator_video_observations v
+                  ON v.cover_source_uri=m.source_key
+                JOIN creator_snapshots s ON s.snapshot_id=v.snapshot_id
+                WHERE m.object_id=%s AND m.kind='cover' AND m.source_key IS NOT NULL
+                  AND s.root_task_id=%s
+                LIMIT 1""",
+                (object_id, root_task_id, object_id, root_task_id),
             ).fetchone()
 
     @staticmethod

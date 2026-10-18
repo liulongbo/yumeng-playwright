@@ -174,7 +174,7 @@ class SyntheticAdapter:
             raise CollectorError("CREATOR_INVALID", "synthetic deleted creator")
         yield
 
-    async def collect_module(self, key, creator, ctx):
+    async def collect_module(self, key, creator, ctx, row_covers=None):
         self.modules.append((creator.platform_creator_id, key))
         if self.before_module:
             self.before_module(key)

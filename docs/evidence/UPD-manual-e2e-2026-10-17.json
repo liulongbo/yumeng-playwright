@@ -1,0 +1,203 @@
+{
+  "creator_id": "6f13771f-b62a-4b6f-b5a4-c3aa85c86edd",
+  "platform_creator_id": "6639192346380468227",
+  "root_task_id": "9a7d5d43-daec-42be-ae61-ab377c17754b",
+  "states": [
+    "COLLECTING",
+    "COMPLETED"
+  ],
+  "before": {
+    "creator_id": "6f13771f-b62a-4b6f-b5a4-c3aa85c86edd",
+    "platform_creator_id": "6639192346380468227",
+    "display_name": "就叫Roxy",
+    "followers_count": "947129",
+    "data_updated_at": "2026-10-17 16:20:14.430334+00:00",
+    "latest_snapshot_id": "d2cd6e8c-b658-4317-8236-71a637414c08",
+    "profile_complete": "False",
+    "pipeline_complete": "False",
+    "snapshots": "2"
+  },
+  "after": {
+    "creator_id": "6f13771f-b62a-4b6f-b5a4-c3aa85c86edd",
+    "platform_creator_id": "6639192346380468227",
+    "display_name": "就叫Roxy",
+    "followers_count": "947129",
+    "data_updated_at": "2026-10-17 16:27:02.605133+00:00",
+    "latest_snapshot_id": "7945ec86-13b2-4770-9bc9-750b4d879a03",
+    "profile_complete": "True",
+    "pipeline_complete": "True",
+    "snapshots": "3"
+  },
+  "task": {
+    "root_task_id": "9a7d5d43-daec-42be-ae61-ab377c17754b",
+    "task_kind": "manual_update",
+    "state": "COMPLETED",
+    "unit_id": "unit-local-mac-02",
+    "completed_at": "2026-10-17 16:27:02.605133+00:00"
+  },
+  "schedule": {
+    "last_success_at": "2026-10-17 16:27:02.605133+00:00",
+    "last_success_snapshot_id": "7945ec86-13b2-4770-9bc9-750b4d879a03",
+    "next_due_at": "2026-10-20 16:27:02.605133+00:00",
+    "tier": "50w_100w",
+    "interval_days": "3",
+    "consecutive_failures": "0",
+    "last_failure_reason": "None",
+    "in_flight_root_task_id": "None"
+  },
+  "results": [
+    {
+      "check": "MCP-01",
+      "passed": true,
+      "detail": "server={'name': 'Playwright', 'version': '1.62.0-alpha-2026-06-29'}, tools=23"
+    },
+    {
+      "check": "T01-01",
+      "passed": true,
+      "detail": "creator detail opened"
+    },
+    {
+      "check": "T01-02",
+      "passed": true,
+      "detail": "manual update control visible"
+    },
+    {
+      "check": "T01-03",
+      "passed": true,
+      "detail": "manual update button={'text': '手动更新', 'disabled': False}"
+    },
+    {
+      "check": "T01-04",
+      "passed": true,
+      "detail": "manual update clicked"
+    },
+    {
+      "check": "T01-05",
+      "passed": true,
+      "detail": "root_task=9a7d5d43-daec-42be-ae61-ab377c17754b"
+    },
+    {
+      "check": "T01-06",
+      "passed": true,
+      "detail": "in-flight button={'text': '更新进行中', 'disabled': True}"
+    },
+    {
+      "check": "T01-07",
+      "passed": true,
+      "detail": "task link visible"
+    },
+    {
+      "check": "T03-01",
+      "passed": true,
+      "detail": "manual update visible in task center"
+    },
+    {
+      "check": "T03-02",
+      "passed": true,
+      "detail": "task_kind filter={'ok': True, 'items': [{'id': '9a7d5d43-daec-42be-ae61-ab377c17754b', 'kind': 'manual_update', 'state': 'COLLECTING'}, {'id': '560a3fb6-0cae-463c-b818-3ddf49fe4711', 'kind': 'manual_update', 'state': 'PARTIAL_COMPLETED'}]}"
+    },
+    {
+      "check": "T03-03",
+      "passed": true,
+      "detail": "update target panel visible"
+    },
+    {
+      "check": "T03-04",
+      "passed": true,
+      "detail": "task kind label visible"
+    },
+    {
+      "check": "T01-08",
+      "passed": true,
+      "detail": "task terminal={'root_task_id': UUID('9a7d5d43-daec-42be-ae61-ab377c17754b'), 'task_kind': 'manual_update', 'state': 'COMPLETED', 'unit_id': 'unit-local-mac-02', 'failure_reason': None, 'updated_at': datetime.datetime(2026, 10, 17, 16, 27, 2, 605133, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'completed_at': datetime.datetime(2026, 10, 17, 16, 27, 2, 605133, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))} states=['COLLECTING', 'COMPLETED']"
+    },
+    {
+      "check": "T01-09",
+      "passed": true,
+      "detail": "terminal status visible in task detail"
+    },
+    {
+      "check": "T06-01",
+      "passed": true,
+      "detail": "snapshots 2 -> 3"
+    },
+    {
+      "check": "T06-02",
+      "passed": true,
+      "detail": "all pre-existing snapshots keep their payload hash"
+    },
+    {
+      "check": "T06-03",
+      "passed": true,
+      "detail": "platform_creators {'n': 1} -> {'n': 1}"
+    },
+    {
+      "check": "T06-04",
+      "passed": true,
+      "detail": "data_updated_at 2026-10-17 16:20:14.430334+00:00 -> 2026-10-17 16:27:02.605133+00:00"
+    },
+    {
+      "check": "T06-05",
+      "passed": true,
+      "detail": "task={'task_kind': 'manual_update', 'state': 'COMPLETED', 'unit_id': 'unit-local-mac-02'} filter_plans={'n': 0} requirements={'n': 0} model_runs={'n': 0} task_creators={'n': 1}"
+    },
+    {
+      "check": "T01-10",
+      "passed": true,
+      "detail": "update status={'ok': True, 'body': {'creator_id': '6f13771f-b62a-4b6f-b5a4-c3aa85c86edd', 'in_flight_root_task_id': None, 'task_status': None, 'task_stage': None, 'last_write_at': '2026-10-17T16:27:02.605133Z', 'last_success_at': '2026-10-17T16:27:02.605133Z', 'last_success_snapshot_id': '7945ec86-13b2-4770-9bc9-750b4d879a03', 'next_due_at': '2026-10-20T16:27:02.605133Z', 'tier': '50w_100w', 'interval_days': 3, 'consecutive_failures': 0, 'last_failure_reason': None}}"
+    },
+    {
+      "check": "T02-06",
+      "passed": true,
+      "detail": "effective=True schedule={'last_success_at': datetime.datetime(2026, 10, 17, 16, 27, 2, 605133, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'last_success_snapshot_id': UUID('7945ec86-13b2-4770-9bc9-750b4d879a03'), 'next_due_at': datetime.datetime(2026, 10, 20, 16, 27, 2, 605133, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'tier': '50w_100w', 'interval_days': 3, 'consecutive_failures': 0, 'last_failure_reason': None, 'in_flight_root_task_id': None}"
+    },
+    {
+      "check": "T01-11",
+      "passed": true,
+      "detail": "creator page shows update timestamps"
+    }
+  ],
+  "shots": [
+    {
+      "name": "01-creator-before",
+      "path": "docs/evidence/assets/upd/01-creator-before.png",
+      "note": null
+    },
+    {
+      "name": "02-creator-in-flight",
+      "path": "docs/evidence/assets/upd/02-creator-in-flight.png",
+      "note": null
+    },
+    {
+      "name": "03-task-list",
+      "path": "docs/evidence/assets/upd/03-task-list.png",
+      "note": null
+    },
+    {
+      "name": "04-task-detail-queued",
+      "path": "docs/evidence/assets/upd/04-task-detail-queued.png",
+      "note": null
+    },
+    {
+      "name": "05-task-collecting",
+      "path": "docs/evidence/assets/upd/05-task-collecting.png",
+      "note": null
+    },
+    {
+      "name": "06-task-terminal",
+      "path": "docs/evidence/assets/upd/06-task-terminal.png",
+      "note": null
+    },
+    {
+      "name": "07-creator-after",
+      "path": "docs/evidence/assets/upd/07-creator-after.png",
+      "note": null
+    }
+  ],
+  "console": [
+    "### Result\nTotal messages: 3 (Errors: 0, Warnings: 0)\nReturning 1 messages for level \"info\"\n\n[INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=1e9a3433:22162"
+  ],
+  "network": [
+    "### Result\n32. [GET] http://127.0.0.1:5173/api/auth/me => [200] OK\n33. [GET] http://127.0.0.1:5173/api/creator-library/6f13771f-b62a-4b6f-b5a4-c3aa85c86edd => [200] OK\n34. [GET] http://127.0.0.1:5173/api/creator-library/6f13771f-b62a-4b6f-b5a4-c3aa85c86edd/update => [200] OK\n35. [GET] http://127.0.0.1:5173/api/creator-library/6f13771f-b62a-4b6f-b5a4-c3aa85c86edd/contents?collection_type=excellent_reach&limit=20 => [200] OK\n36. [GET] http://127.0.0.1:5173/api/creator-library/6f13771f-b62a-4b6f-b5a4-c3aa85c86edd/contents?collection_type=excellent_seeding&limit=20 => [200] OK\n37. [GET] http://127.0.0.1:5173/api/creator-library/6f13771f-b62a-4b6f-b5a4-c3aa85c86edd/videos => [200] OK\n38. [GET] http://127.0.0.1:5173/api/platforms/douyin_xingtu/profile-field-catalog => [200] OK\n39. [GET] http://127.0.0.1:5173/api/creator-library/6f13771f-b62a-4b6f-b5a4-c3aa85c86edd/quotes => [200] OK\n\nNote: 37 static requests not shown, run with \"static\" option to see them."
+  ]
+}

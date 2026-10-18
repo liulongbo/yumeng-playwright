@@ -4,7 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CreatorProfile } from "./CreatorProfile";
-import type { CreatorLibraryDetail, ProfileFieldCatalog } from "../types";
+import type {
+  CreatorLibraryDetail,
+  CreatorVideoObservation,
+  CreatorVideoPage,
+  ProfileFieldCatalog,
+} from "../types";
 
 const CATALOG: ProfileFieldCatalog = {
   platform: "douyin_xingtu",
@@ -38,6 +43,13 @@ const CATALOG: ProfileFieldCatalog = {
       key: "spread",
       fields: [
         field("interaction_rate", "互动率及同行超越", "structured"),
+        field("item_rate_metrics", "作品传播比较指标", "structured"),
+        field("play_median", "播放中位数", "structured"),
+        field("completion_rate", "完播率及同行超越", "structured"),
+        field("average_duration", "平均观看时长", "structured"),
+        field("average_likes", "平均点赞", "structured"),
+        field("average_comments", "平均评论", "structured"),
+        field("average_shares", "平均分享", "structured"),
         field("expected_cpm", "预期 CPM", "structured"),
       ],
     },
@@ -154,6 +166,25 @@ const PAYLOAD = {
       fields: [
         // Label-only shape measured in 8 of 78 stored snapshots.
         { ...observation({ kind: "structured", data: { label: "影视娱乐" } }), field_key: "interaction_rate" },
+        // CD-08: the two median leaves, live-verified for creator 6639192346380468227. The platform's
+        // 「播放量中位数」 card is the nested one (766187 → 76.6w, 优于 99.23%); the top-level
+        // `play_mid` (1399516) is rendered nowhere and must not be shown by the panel.
+        {
+          ...observation({
+            kind: "structured",
+            data: {
+              item_num: { label: "", value: 5 },
+              play_mid: { label: "", value: 766187, overtake: 9923 },
+              interact_rate: {},
+            },
+          }),
+          field_key: "item_rate_metrics",
+        },
+        { ...observation({ kind: "structured", data: "1399516" }), field_key: "play_median" },
+        { ...observation({ kind: "structured", data: "19112" }), field_key: "average_duration" },
+        { ...observation({ kind: "structured", data: "32600" }), field_key: "average_likes" },
+        { ...observation({ kind: "structured", data: "1619" }), field_key: "average_comments" },
+        { ...observation({ kind: "structured", data: "549" }), field_key: "average_shares" },
         {
           ...observation({ kind: "structured", data: { cpm_60: "2969", cpm_21_60: "2969" } }),
           field_key: "expected_cpm",
@@ -204,42 +235,18 @@ const PAYLOAD = {
           field_key: "performance_descriptions",
         },
         {
-          // 与真实开发库同形：平铺键、item_id 唯一、item_date 为平台发布日期、
-          // item_cover 是平台对象存储的**不透明 key**（不是可渲染地址）、url 为真实抖音作品链接。
+          // DATA-02 起，「创作能力 → 最新视频表现」改读独立存储的作品观测；快照里这份旧 JSONB 数据
+          // **不再参与图表与列表**，但仍原样留在 payload 中（见下方测试：页面不得再展示它）。
           ...observation({
             kind: "structured",
             data: [
               {
-                item_id: "7695691295523966970",
-                title: "雨刮器为什么不好用 #汽车知识",
-                play: 915520,
-                like: 12027,
-                comment: 598,
-                share: 36,
-                item_date: "2026-10-12",
-                create_time: 1791792758,
-                item_cover: "tos-cn-i-0813c000-ce/ownaEMiVAPe6AynMEABAIsZ6e81wlEDAAkipfP",
-                url: "https://www.iesdouyin.com/share/video/7695691295523966970/?region=CN",
-              },
-              {
-                item_id: "7695317945446185338",
-                title: "如何正确在应急车道停车",
-                play: 2719270,
-                like: 32108,
-                comment: 4395,
-                share: 74,
-                item_date: "2026-10-11",
-                create_time: 1791705830,
-                item_cover: "",
-                url: "https://www.iesdouyin.com/share/video/7695317945446185338/?region=CN",
-              },
-              {
-                // 缺 url 与封面：不得提供可点击入口，也不得构造未经验证的封面地址。
-                item_id: "7694953511649698491",
-                title: "高速上不能压的3种线",
-                play: 8840,
-                item_date: "2026-10-10",
-                create_time: 1791620979,
+                item_id: "jsonb-legacy-work",
+                title: "JSONB 快照内的旧作品记录",
+                play: 1,
+                item_date: "2000-01-01",
+                item_cover: "tos-cn-i-0813c000-ce/legacy",
+                url: "https://example.com/legacy",
               },
             ],
           }),
@@ -287,20 +294,96 @@ const CREATOR: CreatorLibraryDetail = {
   profile_payload: PAYLOAD,
 };
 
-/** Same payload with an empty video collection, for the empty-state check. */
-const PAYLOAD_WITHOUT_VIDEOS = {
-  ...PAYLOAD,
-  modules: {
-    ...PAYLOAD.modules,
-    creation: {
-      ...PAYLOAD.modules.creation,
-      fields: PAYLOAD.modules.creation.fields.map((item) =>
-        (item as { field_key?: string }).field_key === "recent_video_performance"
-          ? { ...(item as Record<string, unknown>), value: { kind: "structured", data: [] } }
-          : item,
-      ),
-    },
-  },
+/** 已入库的封面对象 id（STORED 的唯一合法来源）。 */
+const COVER_OBJECT_ID = "cover/77777777-7777-4777-8777-777777777777/9f2c1d";
+
+function videoRow(overrides: Partial<CreatorVideoObservation> = {}): CreatorVideoObservation {
+  return {
+    module_key: "recent_video_performance",
+    position: 0,
+    content_id: null,
+    platform_item_id: null,
+    platform_video_id: null,
+    platform_author_id: "103411567572",
+    title: null,
+    subtitle: null,
+    published_at: null,
+    published_raw: null,
+    play_count: null,
+    like_count: null,
+    comment_count: null,
+    favorite_count: null,
+    share_count: null,
+    cover_source_uri: null,
+    cover_object_id: null,
+    cover_status: "NOT_PROVIDED",
+    work_url: null,
+    field_statuses: {},
+    observed_at: "2026-10-16T01:43:32Z",
+    ...overrides,
+  };
+}
+
+/**
+ * 作品观测接口的返回（DATA-02）：三条「最新视频」各覆盖一种封面状态
+ * （STORED / UNRESOLVED / NOT_PROVIDED），另有一条「最新星图视频」用于核对集合切换。
+ * `published_at` 为 null、只给平台原样 `published_raw`，是接口允许的形状之一。
+ */
+const VIDEO_PAGE: CreatorVideoPage = {
+  creator_id: CREATOR.creator_id,
+  snapshot_id: CREATOR.latest_snapshot_id,
+  view_kind: "published",
+  items: [
+    videoRow({
+      position: 0,
+      platform_item_id: "7695691295523966970",
+      content_id: "11111111-1111-4111-8111-111111111111",
+      title: "雨刮器为什么不好用 #汽车知识",
+      published_raw: "2026-10-12",
+      // 数字字符串与 JSON 数字两种形状都要能展示。
+      play_count: "915520",
+      like_count: 12027,
+      comment_count: 598,
+      share_count: 36,
+      cover_source_uri: "tos-cn-i-0813c000-ce/ownaEMiVAPe6AynMEABAIsZ6e81wlEDAAkipfP",
+      cover_object_id: COVER_OBJECT_ID,
+      cover_status: "STORED",
+      work_url: "https://www.iesdouyin.com/share/video/7695691295523966970/?region=CN",
+    }),
+    videoRow({
+      position: 1,
+      platform_item_id: "7695317945446185338",
+      title: "如何正确在应急车道停车",
+      published_raw: "2026-10-11",
+      play_count: 2719270,
+      cover_source_uri: "tos-cn-i-0813c001/ab12cd34",
+      cover_object_id: null,
+      cover_status: "UNRESOLVED",
+      work_url: "https://www.iesdouyin.com/share/video/7695317945446185338/?region=CN",
+    }),
+    videoRow({
+      // 平台本次响应没有封面字段，也没有作品链接：不得提供可点击入口，也不得构造封面地址。
+      position: 2,
+      platform_item_id: "7694953511649698491",
+      title: "高速上不能压的3种线",
+      published_raw: "2026-10-10",
+      play_count: "8840",
+      cover_source_uri: null,
+      cover_object_id: null,
+      cover_status: "NOT_PROVIDED",
+      work_url: null,
+    }),
+    videoRow({
+      module_key: "recent_xingtu_video_performance",
+      position: 0,
+      platform_item_id: "7695000000000000001",
+      title: "星图商单复盘",
+      published_raw: "2026-10-09",
+      play_count: "12345",
+      cover_status: "NOT_PROVIDED",
+      work_url: "https://www.iesdouyin.com/share/video/7695000000000000001/",
+    }),
+  ],
 };
 
 function metric(value: string | null, approximate = false) {
@@ -318,6 +401,8 @@ function renderProfile(
   catalog: unknown = CATALOG,
   creator: CreatorLibraryDetail = CREATOR,
   payload: Record<string, unknown> = PAYLOAD as Record<string, unknown>,
+  videos: CreatorVideoPage | null = VIDEO_PAGE,
+  videoState: { loading?: boolean; error?: unknown; onRetry?: () => void } = {},
 ) {
   vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
     const path = String(input);
@@ -341,6 +426,14 @@ function renderProfile(
           badgeLabel="采集完整"
           badgeTone="published"
           description="平台原始值"
+          videos={videos}
+          videosLoading={videoState.loading}
+          videosError={videoState.error}
+          onRetryVideos={videoState.onRetry}
+          // 达人库入口的授权封面端点（按 creator_id 授权），与页面真实传参一致。
+          videoCoverUrl={(objectId) =>
+            `/api/creator-library/${creator.creator_id}/covers/${encodeURIComponent(objectId)}`
+          }
         />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -522,6 +615,30 @@ describe("CreatorProfile", () => {
     expect(stack.textContent).not.toContain("漏斗");
   });
 
+  it("shows the platform's 播放量中位数 from item_rate_metrics, never the top-level play_mid", async () => {
+    const view = renderProfile();
+    const user = userEvent.setup();
+    await user.click(view.getByRole("tab", { name: "商业能力" }));
+    expect(await screen.findByText("内容数据")).toBeInTheDocument();
+    const tile = Array.from(document.querySelectorAll(".biz-metric")).find(
+      (node) => node.querySelector(".biz-metric-label")?.textContent === "播放量中位数",
+    );
+    expect(tile).toBeTruthy();
+    // 766187 → 76.6w（平台线上同值）；1399516（顶层 play_mid）必须不出现。
+    expect(tile?.querySelector("strong")?.textContent).toBe("76.6w");
+    expect(tile?.querySelector(".biz-compare")?.textContent).toBe("优于 99.2% 同类型达人");
+    expect(tile?.querySelector(".biz-original")?.textContent).toBe("平台原值 766187 / 超越原值 9923");
+    expect(view.container.textContent).not.toContain("139.9w");
+    expect(view.container.textContent).not.toContain("1399516");
+
+    // 「转化价值」里另有一张「视频播放中位数」（conversion.related_video_play_median）。它来自
+    // 另一个字段；本 fixture 未采集该字段，因此必须如实降级，不得借用上面的中位播放量。
+    const conversionTile = Array.from(document.querySelectorAll(".biz-metric")).find(
+      (node) => node.querySelector(".biz-metric-label")?.textContent === "视频播放中位数",
+    );
+    expect(conversionTile?.querySelector("strong")?.textContent).toBe("—");
+  });
+
   it("turns a label-only rate response into an explicit state instead of a number", async () => {
     const view = renderProfile();
     const user = userEvent.setup();
@@ -586,6 +703,31 @@ describe("CreatorProfile", () => {
     expect(heights[1]).toBe(100);
     expect(heights[0]).toBeGreaterThan(0);
     expect(heights[0]).toBeLessThan(100);
+
+    // DATA-02：图表与列表只读作品观测接口，快照 JSONB 里的旧视频数据不再参与展示（数据本身仍在 payload 中）。
+    expect(document.querySelector("#content")?.textContent).not.toContain("JSONB 快照内的旧作品记录");
+    expect(JSON.stringify(PAYLOAD)).toContain("JSONB 快照内的旧作品记录");
+  });
+
+  it("switches 最新视频 / 最新星图视频 from the same observation page", async () => {
+    const view = renderProfile();
+    const user = userEvent.setup();
+    await user.click(view.getByRole("tab", { name: "创作能力" }));
+    expect(document.querySelectorAll(".video-bar-slot")).toHaveLength(3);
+
+    await user.click(view.getByRole("button", { name: "最新星图视频" }));
+    // 只切换当前集合：另一集合的作品不得混入（图表与列表仍是同一份数组）。
+    expect(Array.from(document.querySelectorAll(".video-bar-value")).map((n) => n.textContent)).toEqual([
+      "1.2万",
+    ]);
+    const barLinks = Array.from(document.querySelectorAll("a.video-bar")).map((n) => n.getAttribute("href"));
+    const cardLinks = Array.from(document.querySelectorAll("a.video-card")).map((n) => n.getAttribute("href"));
+    expect(cardLinks).toEqual(barLinks);
+    expect(document.querySelectorAll(".video-bar-slot")).toHaveLength(1);
+    expect(document.querySelector("#content")?.textContent).not.toContain("雨刮器为什么不好用");
+
+    await user.click(view.getByRole("button", { name: "最新视频" }));
+    expect(document.querySelectorAll(".video-bar-slot")).toHaveLength(3);
   });
 
   it("links the bar and the work card to that video's real work url", async () => {
@@ -610,18 +752,75 @@ describe("CreatorProfile", () => {
     expect(document.querySelectorAll(".video-bar-slot")).toHaveLength(3);
   });
 
-  it("renders the work cards with a cover or the existing empty-cover degrade", async () => {
+  it("renders each work card's cover according to its own status, never substituting another work's cover", async () => {
     const view = renderProfile();
     const user = userEvent.setup();
     await user.click(view.getByRole("tab", { name: "创作能力" }));
 
     const cards = Array.from(document.querySelectorAll(".video-card"));
     expect(cards).toHaveLength(3);
-    // 平台没有给出可渲染的封面地址（item_cover 是不透明 key / 空串），因此走占位降级，不构造 CDN 链接。
-    expect(document.querySelectorAll(".video-card-cover-empty")).toHaveLength(3);
     expect(cards[0].textContent).toContain("雨刮器为什么不好用");
     expect(cards[0].textContent).toContain("915,520");
     expect(cards[0].textContent).toContain("2026-10-12");
+
+    // 只有 STORED 的作品渲染 <img>，且 src 来自该入口的授权封面端点（按 creator_id 授权），不是平台 CDN。
+    const stored = cards[0].querySelector(".video-card-cover img");
+    expect(document.querySelectorAll(".video-card-cover img")).toHaveLength(1);
+    expect(stored?.getAttribute("src")).toBe(
+      `/api/creator-library/${CREATOR.creator_id}/covers/${encodeURIComponent(COVER_OBJECT_ID)}`,
+    );
+
+    // UNRESOLVED（有平台 key、未入库）与 NOT_PROVIDED（平台没给封面字段）各自一句占位文案与解释，不共用同一句。
+    const placeholders = Array.from(document.querySelectorAll(".video-card-cover-empty"));
+    expect(placeholders).toHaveLength(2);
+    const unresolved = placeholders[0].querySelector("span");
+    expect(unresolved?.textContent).toBe("封面未生成");
+    expect(unresolved?.getAttribute("title")).toContain("还没有存成");
+    const notProvided = placeholders[1].querySelector("span");
+    expect(notProvided?.textContent).toBe("平台未返回封面");
+    expect(notProvided?.getAttribute("title")).toContain("没有该作品的封面字段");
+  });
+
+  it("keeps the existing 封面加载失败 degrade when a stored cover cannot be loaded", async () => {
+    const view = renderProfile();
+    const user = userEvent.setup();
+    await user.click(view.getByRole("tab", { name: "创作能力" }));
+
+    const img = document.querySelector(".video-card-cover img");
+    expect(img).not.toBeNull();
+    fireEvent.error(img as Element);
+    const placeholder = document.querySelector(".video-card-cover-empty");
+    expect(placeholder?.querySelector("span")?.textContent).toBe("封面加载失败");
+    // 失败态不回落到其它作品的封面。
+    expect(document.querySelectorAll(".video-card-cover img")).toHaveLength(0);
+  });
+
+  it("shows the loading note while the work observations are still being read", async () => {
+    const view = renderProfile(undefined, undefined, undefined, null, { loading: true });
+    const user = userEvent.setup();
+    await user.click(view.getByRole("tab", { name: "创作能力" }));
+    expect(document.querySelector("#content .profile-empty")?.textContent).toBe("正在读取作品观测…");
+    expect(document.querySelector(".video-bars")).toBeNull();
+    expect(document.querySelector("#content .profile-heading > span")?.textContent).toBe("读取中");
+  });
+
+  it("shows the error note with a working retry button when the work observations fail", async () => {
+    const retry = vi.fn();
+    const view = renderProfile(undefined, undefined, undefined, null, {
+      error: new Error("观测接口不可用"),
+      onRetry: retry,
+    });
+    const user = userEvent.setup();
+    await user.click(view.getByRole("tab", { name: "创作能力" }));
+    const error = document.querySelector("#content .biz-error");
+    expect(error).not.toBeNull();
+    expect(error?.textContent).toContain("观测接口不可用");
+    expect(document.querySelector("#content .profile-heading > span")?.textContent).toBe("读取失败");
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+    // 读取失败时不渲染图表或作品卡片，也不抛错。
+    expect(document.querySelector(".video-bars")).toBeNull();
+    expect(document.querySelectorAll(".video-card")).toHaveLength(0);
   });
 
   it("shows the video title and play count in a hover layer on the bar", async () => {
@@ -638,20 +837,25 @@ describe("CreatorProfile", () => {
     expect(tip?.textContent).toContain("915,520");
     expect(tip?.textContent).toContain("2026-10-12");
     expect(tip?.getAttribute("role")).toBe("tooltip");
+    // 浮层封面同样按状态渲染：第一条是 STORED，因此浮层里是授权端点的 <img>。
+    expect(tip?.querySelector(".video-tip-cover img")?.getAttribute("src")).toBe(
+      `/api/creator-library/${CREATOR.creator_id}/covers/${encodeURIComponent(COVER_OBJECT_ID)}`,
+    );
   });
 
   it("renders an empty state instead of a broken chart when there are no video records", async () => {
-    const view = renderProfile(CATALOG, CREATOR, PAYLOAD_WITHOUT_VIDEOS as Record<string, unknown>);
+    const view = renderProfile(CATALOG, CREATOR, PAYLOAD as Record<string, unknown>, null);
     const user = userEvent.setup();
     await user.click(view.getByRole("tab", { name: "创作能力" }));
-    // 空数据不渲染图表、柱子或作品卡片，也不抛错；空态使用平台状态文案。
+    // 空数据不渲染图表、柱子或作品卡片，也不抛错；空态使用本次观测量为空时的固定文案。
     expect(document.querySelector(".video-bars")).toBeNull();
     expect(document.querySelectorAll(".video-bar-slot")).toHaveLength(0);
     expect(document.querySelectorAll(".video-card")).toHaveLength(0);
     expect(document.querySelector(".video-tip")).toBeNull();
     const empty = document.querySelector("#content .profile-empty");
     expect(empty).not.toBeNull();
-    expect(empty?.textContent).toBeTruthy();
+    expect(empty?.textContent).toBe("本次没有视频记录。");
+    expect(document.querySelector("#content .profile-heading > span")?.textContent).toBe("平台未返回作品记录");
     // 「视频表现口径对照」在空数据下同样不存在。
     expect(screen.queryByText("视频表现口径对照")).not.toBeInTheDocument();
   });

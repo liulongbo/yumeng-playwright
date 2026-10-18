@@ -52,6 +52,73 @@ def test_transaction_rolls_back_checkpoint_and_count(repo, started):
     assert task.valid_count == 0 and task.checkpoint.cursor is None
 
 
+def test_browser_takeover_is_fenced_mutually_exclusive_and_reusable(repo, started):
+    from xingtu.product_repository import ProductRepository
+
+    products = ProductRepository(repo)
+    operator_a = products.create_user("operator-a", "媒介 A", "unused", actor="test")
+    operator_b = products.create_user("operator-b", "媒介 B", "unused", actor="test")
+    browser_instance = uid()
+    repo.register_browser_instance(
+        "unit", started.attempt_id, started.lease_generation, browser_instance
+    )
+    repo.transition_collect_to_maintenance(
+        "unit",
+        started.attempt_id,
+        started.lease_generation,
+        started.session_version,
+        "PLATFORM_SECURITY_CHALLENGE",
+        "test",
+    )
+    with repo.edit(started.root_task_id) as (task, _):
+        task.state = TaskStatus.WAITING_FOR_VERIFICATION
+    event = repo.create_verification_event(
+        unit="unit",
+        root_task_id=started.root_task_id,
+        generation=started.lease_generation,
+        browser_instance_id=browser_instance,
+        timeout_seconds=60,
+    )
+
+    requested = repo.request_browser_takeover("unit", operator_a)
+    with pytest.raises(CollectorError, match="BROWSER_ALREADY_TAKEN_OVER"):
+        repo.request_browser_takeover("unit", operator_b)
+    active = repo.activate_browser_takeover(
+        unit="unit",
+        owner=started.attempt_id,
+        generation=started.lease_generation,
+        browser_instance_id=browser_instance,
+    )
+    assert active and active["takeover_id"] == requested["takeover_id"]
+    assert repo.active_takeover_for_viewer(str(active["takeover_id"]), operator_a)
+    repo.claim_takeover_viewer(str(active["takeover_id"]), operator_a, "viewer-a")
+    with pytest.raises(CollectorError, match="TAKEOVER_VIEWER_ALREADY_CONNECTED"):
+        repo.claim_takeover_viewer(str(active["takeover_id"]), operator_a, "viewer-b")
+
+    repo.report_takeover_reappearance(
+        str(active["takeover_id"]), operator_a, "PLATFORM_SECURITY_CHALLENGE"
+    )
+    assert repo.verification_event(str(event["event_id"]))["reappearance_count"] == 1
+    verifying = repo.complete_browser_takeover(str(active["takeover_id"]), operator_a)
+    assert verifying["state"] == "VERIFYING"
+    assert repo.takeover(str(active["takeover_id"]))["viewer_connection_id"] == "viewer-a"
+    repo.release_takeover_viewer(str(active["takeover_id"]), "viewer-a")
+    assert repo.takeover(str(active["takeover_id"]))["viewer_connection_id"] is None
+    with pytest.raises(CollectorError, match="TAKEOVER_NOT_ACTIVE"):
+        repo.active_takeover_for_viewer(str(active["takeover_id"]), operator_a)
+
+    repo.finish_browser_takeover(
+        str(active["takeover_id"]),
+        resumed=False,
+        failure_reason="SECURITY_CHALLENGE_STILL_PRESENT",
+    )
+    assert repo.verification_event(str(event["event_id"]))["reappearance_count"] == 2
+    replacement = repo.request_browser_takeover("unit", operator_b)
+    assert replacement["state"] == "REQUESTED"
+    repo.expire_verification_event(str(event["event_id"]), "SECURITY_CHALLENGE_TIMEOUT")
+    assert repo.takeover(str(replacement["takeover_id"]))["state"] == "EXPIRED"
+
+
 def test_lease_expiry_quarantines_and_rejects_stale_write(repo, started):
     with repo.connect() as conn:
         conn.execute("UPDATE execution_units SET lease_until=now()-interval '1 second'")
@@ -158,10 +225,32 @@ def test_network_mode_is_persisted_and_immutable(repo):
         repo.register_unit("local-unit", "acct", "local-dev", "/tmp/local-profile")
     with repo.connect() as conn:
         versions = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
-    # 010/011 add and normalise the creator-library read models (LIB-01) and 012 adds the product
-    # task completion moment: the set is asserted exhaustively so a migration that silently stops
-    # being applied is caught here.
-    assert [row["version"] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    # 010/011 add and normalise the creator-library read models (LIB-01), 012 adds the product
+    # task completion moment, 013 the requirement form v2, 014 the F10 browser takeover, 015 the
+    # creator video/metric fields, 016 their backfilled provenance and 017 the correction that
+    # drops provenance entries describing a NULL column (DATA-02), 018 the creator update task
+    # kinds and scheduling state (UPD): the set is asserted exhaustively so a migration that
+    # silently stops being applied is caught here.
+    assert [row["version"] for row in versions] == [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+    ]
 
 
 def test_account_rebinding_is_explicit_audited_and_requires_released_browser(repo, started):

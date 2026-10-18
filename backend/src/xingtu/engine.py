@@ -4,7 +4,7 @@ import asyncio
 import time
 from typing import Any
 
-from .adapter import Adapter
+from .adapter import Adapter, RowCoverSource
 from .covers import CoverPipeline
 from .domain import (
     Candidate,
@@ -83,9 +83,7 @@ class Engine:
             active_budget if active_budget is not None else ctx.budget.active_seconds
         )
         self.scan_budget = (
-            scan_budget
-            if scan_budget is not None
-            else ctx.budget.candidate_scan(task.plan.target_count)
+            scan_budget if scan_budget is not None else ctx.budget.candidate_scan(task.target_count)
         )
         self.identity_failure_streak = repository.capability_has_failure_streak(
             ctx.contract_version, "profile_identity"
@@ -188,8 +186,11 @@ class Engine:
     async def rebuild_conditions(self) -> None:
         """§5.2.3: rebuild and read back the original conditions before scanning."""
         task = self.repo.get(self.root)
+        plan = task.plan
+        if plan is None:
+            raise CollectorError("INVALID_FORM", "COLLECTION_PLAN_REQUIRED")
         start = time.monotonic()
-        compatible = await self.adapter.prepare(task.plan, task.checkpoint, self.ctx)
+        compatible = await self.adapter.prepare(plan, task.checkpoint, self.ctx)
         self.charge(start)
         if compatible:
             return
@@ -197,11 +198,12 @@ class Engine:
         self.rescan("CURSOR_INVALID")
         task = self.repo.get(self.root)
         start = time.monotonic()
-        if not await self.adapter.prepare(task.plan, task.checkpoint, self.ctx):
+        if not await self.adapter.prepare(plan, task.checkpoint, self.ctx):
             raise CollectorError("PLATFORM_PAGE_CHANGED", "CANNOT_REBUILD_CONDITIONS")
         self.charge(start)
 
-    async def run(self) -> str:
+    async def _bind_registry(self) -> None:
+        """Fail closed when the registered contract/modules moved under this task."""
         required_scopes = {"session", "search", "profile_identity"}
         required_scopes.update(f"profile_module:{key}" for key in self.adapter.module_keys)
         required_scopes.update(f"featured:{key}" for key in self.adapter.featured_keys)
@@ -223,6 +225,12 @@ class Engine:
             current.checkpoint.featured_checkpoint_versions = (
                 self.adapter.featured_checkpoint_versions
             )
+
+    async def run(self) -> str:
+        plan = self.repo.get(self.root).plan
+        if plan is None:
+            raise CollectorError("INVALID_FORM", "COLLECTION_PLAN_REQUIRED")
+        await self._bind_registry()
         self.guard()
         await self.rebuild_conditions()
         while True:
@@ -237,7 +245,7 @@ class Engine:
                 ),
                 None,
             )
-            if candidate is None and task.valid_count < task.plan.target_count:
+            if candidate is None and task.valid_count < task.target_count:
                 candidate = next(
                     (c for c in task.checkpoint.candidates if c.state in {"pending", "collecting"}),
                     None,
@@ -248,7 +256,7 @@ class Engine:
                 if interval:
                     await asyncio.sleep(interval)
                 continue
-            if task.valid_count >= task.plan.target_count:
+            if task.valid_count >= task.target_count:
                 return self.finish()
             if task.checkpoint.pending_page:
                 before = len(task.checkpoint.scanned_ids)
@@ -268,7 +276,7 @@ class Engine:
                 current.state = TaskStatus.SEARCHING
             start = time.monotonic()
             try:
-                page = await self.adapter.search(task.plan, task.checkpoint, self.ctx)
+                page = await self.adapter.search(plan, task.checkpoint, self.ctx)
             except CollectorError as exc:
                 self.charge(start)
                 if exc.code == "SEARCH_CAPABILITY_LIMIT":
@@ -323,6 +331,39 @@ class Engine:
                 # Preserve the observed pages/checkpoint, but do not misreport a changing or
                 # repeated result set as platform exhaustion.
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "SEARCH_NO_PROGRESS")
+
+    async def run_update(self) -> str:
+        """Collect only the seeded creators; never prepare or search.
+
+        The normal collection path is untouched.  Between creators this method yields the unit to
+        a higher-priority runnable task (normal collection, then manual update) by returning
+        ``QUEUED``; the Workflow's existing 30-second loop resumes it later.
+        """
+        await self._bind_registry()
+        self.guard()
+        while True:
+            task = self.repo.get(self.root)
+            candidate = next(
+                (
+                    item
+                    for item in task.checkpoint.candidates
+                    if item.state in {"pending", "collecting"}
+                ),
+                None,
+            )
+            if candidate is None:
+                return self.finish()
+            if self.repo.has_runnable_higher_priority_task(
+                self.ctx.execution_unit_id, self.root, task.task_kind
+            ):
+                with self.repo.edit(self.root, self.ctx) as (current, _):
+                    current.state = TaskStatus.QUEUED
+                    current.failure_reason = None
+                return TaskStatus.QUEUED
+            await self.collect(candidate.ref.platform_creator_id)
+            interval = float(getattr(self.adapter, "creator_interval_seconds", 0.0))
+            if interval:
+                await asyncio.sleep(interval)
 
     async def collect(self, identity: str) -> None:
         """Collect one creator with bounded identity retries and candidate-scoped failure."""
@@ -426,7 +467,12 @@ class Engine:
                         continue
                     module_started = time.monotonic()
                     try:
-                        observation = await self.adapter.collect_module(key, ref, self.ctx)
+                        observation = await self.adapter.collect_module(
+                            key,
+                            ref,
+                            self.ctx,
+                            row_covers=self.store_row_cover if key == "creation" else None,
+                        )
                         self.repo.record_capability_success(
                             self.ctx.contract_version, f"profile_module:{key}"
                         )
@@ -525,7 +571,7 @@ class Engine:
                                 c.failure_reason = "CREATOR_INVALID"
                             else:
                                 if not c.valid:
-                                    if current.valid_count >= current.plan.target_count:
+                                    if current.valid_count >= current.target_count:
                                         raise CollectorError(
                                             "PLATFORM_PAGE_CHANGED", "TARGET_OVERRUN"
                                         )
@@ -639,6 +685,33 @@ class Engine:
             and previous.fingerprint() == observation.fingerprint()
         )
 
+    async def store_row_cover(self, row: RowCoverSource) -> None:
+        """Store one creation-work cover and register its platform key (DATA-02 / CD-08).
+
+        The video works list exposes only an opaque `item_cover` object key, so the stored object is
+        registered under that key: the read side resolves a work's cover through it, and the signed
+        URL the platform gave us is never persisted (it expires).  A failure is swallowed on purpose
+        — the snapshot must still publish, and the work simply stays an unresolved cover rather than
+        being pointed at another work's image.
+        """
+        spec = self.adapter.module_specs["creation"].cover
+        if spec is None or self.covers is None:
+            return
+        try:
+            await self.covers.store(
+                root_task_id=self.root,
+                source_url=row.signed_url,
+                spec=spec,
+                fetch=self.adapter.fetch_cover,
+                source_key=row.source_key,
+            )
+        except CollectorError as exc:
+            self.record_evidence(
+                "failure",
+                operation_id=uid(),
+                failure_reason=f"VIDEO_COVER_STORE_FAILED:{row.field_key}:{exc.code}",
+            )
+
     async def store_covers(self, observation: Any, spec: Any) -> None:
         assert spec.cover and self.covers
         for card in observation.cards:
@@ -682,7 +755,7 @@ class Engine:
             )
             # §14.3: COMPLETED needs the target reached *and* every attempted step complete.
             task.pipeline_complete = (
-                task.valid_count >= task.plan.target_count
+                task.valid_count >= task.target_count
                 and not profile_incomplete
                 and not any(
                     c.valid and not self.repo.pipeline_complete(task, c.ref.platform_creator_id)
@@ -695,21 +768,29 @@ class Engine:
                 task.failure_reason = None
             else:
                 task.state = TaskStatus.PARTIAL_COMPLETED
-                task.failure_reason = (
-                    "SEARCH_CAPABILITY_LIMIT"
-                    if task.checkpoint.search_stop_reason
-                    and task.valid_count < task.plan.target_count
-                    else "PROFILE_SCOPE_INCOMPLETE"
-                    if profile_incomplete and task.profile_requirement is not None
-                    else "MODULE_COLLECTION_FAILED"
-                    if profile_incomplete
-                    or any(c.state == "failed" for c in task.checkpoint.candidates)
-                    else "FEATURED_COLLECTION_INCOMPLETE"
-                    if task.featured_status == "PARTIAL_COMPLETED"
-                    else "FEATURED_NOT_ATTEMPTED"
-                    if task.valid_count >= task.plan.target_count
-                    else "SEARCH_EXHAUSTED"
-                )
+                if task.plan is None:
+                    invalid = any(c.state == "invalid" for c in task.checkpoint.candidates)
+                    task.failure_reason = (
+                        "CREATOR_INVALID"
+                        if task.valid_count == 0 and invalid
+                        else "MODULE_COLLECTION_FAILED"
+                    )
+                else:
+                    task.failure_reason = (
+                        "SEARCH_CAPABILITY_LIMIT"
+                        if task.checkpoint.search_stop_reason
+                        and task.valid_count < task.target_count
+                        else "PROFILE_SCOPE_INCOMPLETE"
+                        if profile_incomplete and task.profile_requirement is not None
+                        else "MODULE_COLLECTION_FAILED"
+                        if profile_incomplete
+                        or any(c.state == "failed" for c in task.checkpoint.candidates)
+                        else "FEATURED_COLLECTION_INCOMPLETE"
+                        if task.featured_status == "PARTIAL_COMPLETED"
+                        else "FEATURED_NOT_ATTEMPTED"
+                        if task.valid_count >= task.target_count
+                        else "SEARCH_EXHAUSTED"
+                    )
         return task.state
 
     @staticmethod

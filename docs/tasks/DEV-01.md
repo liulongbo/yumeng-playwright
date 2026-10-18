@@ -1,7 +1,7 @@
 # DEV-01：星采本地全栈一键启停入口
 
 状态：已完成  
-更新时间：2026-10-14T10:10:00+08:00  
+更新时间：2026-10-17T12:00:00+08:00  
 是否验收：是（本轮范围内全部验收项均有证据；不涉及平台新能力核验）
 
 ## 目标与范围
@@ -62,6 +62,7 @@
 - 本轮未执行：`./dev.sh stop` 后端口释放的独立复核（`restart` 隐含验证）；`logs` 子命令未单独实测。
 - 2026-10-16 08:35～08:37（本地 macOS，真实开发库 + Compose 依赖，Git `ee11254` + 未提交改动 120 项）：按用户要求做**全栈重启**。`./dev.sh stop` → 人工结束 4 个游离进程 → `./.runtime/dev-up.sh down && up`（五个依赖容器重建，healthy）→ `./dev.sh up`：`PREFLIGHT_OK` 12 项、四进程新 PID（api 93446 / frontend 93496 / intake 93470 / collection 93487）5 秒内就绪、两个 Temporal 队列消费者均在线。业务只读抽查：`login(media-a)` 200、`/api/auth/me` 200、`/api/tasks` 20 条、`/api/creator-library` 20 条、`/api/platforms/douyin_xingtu/capabilities` 200、`/api/health/workers` 200、前端 `/` 200。**未运行测试套件、未做浏览器页面级验收**。**新发现（未修，属实现变更需先确认）**：`dev.sh stop` 存在 PID 记录盲区——重启前 API 真实监听者 92119 与另一终端启动的前端（16198/16219）均非脚本记录者，`stop` 按设计只打印端口占用提示、不结束它们，需人工清理。详见[重启证据](../evidence/DEV-01-restart-2026-10-16.md)。
 - 2026-10-16 09:00～09:04（本地 macOS，Git `ee11254` + 未提交改动 121 项）：用户**再次要求重启**（供测试验收）。起始状态与上一轮不同：四个应用进程全部不存在、六个端口全部空闲、**Docker 守护进程 UNAVAILABLE**（Docker Desktop 被退出）。执行：`open -a Docker` → 轮询 `docker info` **30 秒内就绪**（server 29.1.3）→ `./.runtime/dev-up.sh up`（五个容器，两个 postgres healthy）→ `./dev.sh up`：`PREFLIGHT_OK` 12 项、四进程新 PID（api 94968 / intake 94992 / collection 95009 / frontend 95018）就绪、两个 Temporal 队列在线。**本轮专项核对**：`pids.tsv` 四个 PID 与真实进程逐一对应且全部存活（上一轮登记的记录盲区未复现），5174 未监听、前端稳定在 5173。业务只读抽查：`login(media-a)` 200（不带 `Origin` 头时为 403，属 `require_origin` 预期防护）、`/api/auth/me` 200、`/api/tasks` 20 条、`/api/creator-library` 20 条、`/api/health/workers` 200、`capabilities` 200，四进程日志末 3 行 0 条错误。**仍未运行测试套件、未做浏览器页面级验收**。
+- 2026-10-17 11:57～12:00（本地 macOS，Git `a347b06` + 未提交改动 55 项）：用户要求**重启所有服务**。起始状态四进程均在运行，但 `./dev.sh check` 因 `EXECUTION_UNIT_READY=SESSION_UNVERIFIED`（2026-10-16 16:34/16:37 两个任务取消后释放）失败，标准 restart 会先停服务再启动失败。经用户确认，先用产品 API 提交 `target_count=1` 的最小任务（根任务 `26dd6928-cb15-46cb-a281-bb256eb1f768`），由采集 Worker 冷启动实测会话得到 `VALID`/`PROTECTED_PAGE_AND_ACCOUNT_VERIFIED`，单元恢复 `READY` 后取消该任务；随后 `./dev.sh check` **12 项全 ok**、`./dev.sh restart` exit 0，四进程新 PID（api 25515 / intake 25539 / collection 25556 / frontend 25565），两个 Temporal 队列在线（`新鲜消费者=2` 为 poller TTL 残留，进程计数仍为 1），单元重启后仍为 `READY`/`VALID`。只读抽查：`login` 200、`/api/auth/me` 200、`/api/tasks` 20 条、`/api/creator-library` 20 条、`/api/health/workers` 200、`capabilities` 200、前端 `/` 200，重启时间点后四日志 0 条 error/traceback/exception。验证任务在会话验证后搜索时出现一次 `BROWSER_TRANSPORT`（`input[placeholder="按内容关键词找达人"]` 90s 超时）并已取消，**本轮未排查该选择器问题**。**未运行测试套件、未做浏览器页面级验收**。详见[重启证据](../evidence/DEV-01-restart-2026-10-17.md)。
 
 ## 交接信息
 
@@ -69,6 +70,7 @@
 - **前置条件（2026-10-16 补记）**：依赖容器要求 **Docker 守护进程已运行**。本机 Docker Desktop 被退出时 `docker info` 报 `dial unix .../docker.sock: no such file`，此时须先 `open -a Docker` 并等待 `docker info` 成功（实测约 30 秒），再执行 `./.runtime/dev-up.sh up` 与 `./dev.sh up`；否则前置自检会在 `DATABASE_REACHABLE` / `TEMPORAL_REACHABLE` 失败收口。
 - 若改用交互式终端前台运行 `npm run dev`，Vite 与 npm 可能不在同一进程组；本脚本用子进程树递归处理，但外部终端遗留的 Vite 不会被自动接管（`stop` 会提示端口占用者 PID）。
 - **已知盲区（2026-10-16 记录，未修）**：若 API/前端/Worker 由 `dev.sh` 以外的方式启动（或换过启动方式），`.runtime/dev/pids.tsv` 里的 PID 会与真实监听者不一致，此时 `stop` 只打印端口占用提示而不结束该进程。规避方式：重启前先用 `./dev.sh status`（会显示「非本脚本启动」）或 `lsof -nP -iTCP:8000 -sTCP:LISTEN -t` 核对真实监听者，必要时人工结束后再 `./dev.sh up`。是否需要让脚本自动纠正记录，需单独确认。
+- **单元为 `SESSION_UNVERIFIED` 时（2026-10-17 补记）**：标准 `./dev.sh up/restart` 会在 `EXECUTION_UNIT_READY` 处拒绝启动。恢复方式是用一次真实采集让 P2 Worker 冷启动实测会话：任务进入 `LEASED` 后，会话验证成功即把单元释放为 `READY`（`PROTECTED_PAGE_AND_ACCOUNT_VERIFIED`）；验证后即使任务因后续步骤失败或取消，单元仍保持 `READY`。不要用 SQL 直接改状态，也不要绕过自检启动。
 - 遗留（非本卡）：LIB-01 的 F09 指定达人刷新仍无入口；LIB-01 页面级验收本轮借 `dev.sh` 提供了可访问环境，验收结论由 LIB-01 卡片维护。
 
 ## 状态历史
@@ -77,3 +79,4 @@
 - 2026-10-14T10:05:00+08:00：进行中 → 已完成；入口实现、真实停启与浏览器页面验收完成，证据见 `docs/evidence/DEV-01-launcher-2026-10-14.md`。
 - 2026-10-16T08:40:00+08:00：保持已完成；追加本轮全栈重启与就绪复核证据（四进程 + 依赖容器 + 只读业务抽查），并登记 `stop` PID 记录盲区为已知问题（未改代码，未影响原验收）。证据见 `docs/evidence/DEV-01-restart-2026-10-16.md`。
 - 2026-10-16T09:05:00+08:00：保持已完成；追加第二轮重启证据（含 Docker Desktop 恢复步骤、PID 记录一致性专项核对、只读业务抽查），并在交接信息补记「依赖容器要求 Docker 守护进程已运行」这一前置条件。未改代码。
+- 2026-10-17T12:00:00+08:00：保持已完成；追加第三轮重启证据（先把 `SESSION_UNVERIFIED` 恢复为 `READY` 再标准 `./dev.sh restart`，四进程新 PID、只读抽查与日志扫描通过），并在交接信息补记该恢复方式。未改代码。

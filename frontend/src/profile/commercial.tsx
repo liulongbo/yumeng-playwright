@@ -147,7 +147,33 @@ function BizMetric({
 /** 传播价值 · 内容数据 — 7 metrics in the confirmed order. */
 function ContentDataPanel({ payload, index }: { payload: Record<string, unknown>; index: CatalogIndex }) {
   const spread = (key: string) => fieldView(payload, index, "spread", key);
-  const playMedian = spread("play_median");
+  /**
+   * 「播放量中位数」 comes from `spread.item_rate_metrics.play_mid`, **not** from the registered
+   * `spread.play_median` field.
+   *
+   * The same response carries two different median leaves. Live-verified 2026-10-16 against
+   * 巨量星图 for creator 6639192346380468227: the platform's 内容数据 card shows 76.6w / 优于
+   * 99.23% 同类型达人, which is `item_rate_metrics.play_mid` = 766187 / 9923; the top-level
+   * `play_mid` holds 1399516 and the platform renders it nowhere. (The separate 「播放中位数
+   * 133.1w」 card beside 相关视频数 is `conversion.related_video_play_median`, a different metric.)
+   * Reading `play_median` here was CD-08's defect: it printed 140.0w for a 76.6w metric. The
+   * leaf chosen here is also the one `douyin_xingtu_creator_current.play_median_value_raw` is
+   * backfilled from, so the stored value and the displayed value stay the same number.
+   */
+  const itemRate = spread("item_rate_metrics");
+  const playMid = member(itemRate, "play_mid");
+  const playMidValue = member(itemRate, "play_mid", "value");
+  const playMidOvertake = member(itemRate, "play_mid", "overtake");
+  const playMidLabel = record(playMid)?.label;
+  const playMedianState = isBlank(playMidValue)
+    ? itemRate.collected
+      ? typeof playMidLabel === "string" && playMidLabel
+        ? `平台仅返回标签「${playMidLabel}」`
+        : itemRate.blank
+          ? (itemRate.state ?? "平台暂无数据")
+          : "平台未返回中位播放量"
+      : itemRate.statusText
+    : null;
   const completion = spread("completion_rate");
   const interaction = spread("interaction_rate");
   const duration = spread("average_duration");
@@ -184,16 +210,19 @@ function ContentDataPanel({ payload, index }: { payload: Record<string, unknown>
     <Panel
       title="内容数据"
       hint="数据范围：近30天。数值为平台原始观测值；同类型达人对比为该平台返回的百分位原值。"
-      meta={playMedian.collected ? undefined : fieldStatusText(playMedian.status)}
+      meta={itemRate.collected ? undefined : fieldStatusText(itemRate.status)}
     >
       <div className="biz-grid biz-grid-3">
         <BizMetric
           label="播放量中位数"
-          value={playMedian.collected && !playMedian.blank ? countValue(playMedian.data) : "—"}
-          state={rateState(playMedian, playMedian.data)}
-          title={typeof playMedian.data === "string" ? playMedian.data : undefined}
+          value={isBlank(playMidValue) ? "—" : countValue(playMidValue)}
+          compare={compareNote(playMidOvertake)}
+          state={playMedianState}
+          title={isBlank(playMidValue) ? undefined : String(playMidValue)}
           platformNote={
-            !isBlank(playMedian.data) ? `平台原值 ${String(playMedian.data)}` : null
+            isBlank(playMidValue)
+              ? null
+              : `平台原值 ${String(playMidValue)}${isBlank(playMidOvertake) ? "" : ` / 超越原值 ${String(playMidOvertake)}`}`
           }
         />
         <BizMetric

@@ -52,7 +52,8 @@
 | `make m3-up [M3_UP_FLAGS="--with-collection --with-frontend"]` | 同上；模型凭据就绪 | 启动 API + Intake Worker（可选 P2 Worker 与前端），门禁通过后保持前台监督；Ctrl-C 一并停止 |
 | `make api` | 已迁移业务库；`XINGTU_DATABASE_URL`、Redis、登录 HMAC、允许 Origin 等 M3 环境变量 | 启动 FastAPI 产品 API；自动加载 `.runtime/m3-app.env`；不会自动创建任务 |
 | `make intake-worker UNIT_CONFIG=<file>` | 产品 API 环境、Temporal、live 注册表、有效执行单元和 `DEEPSEEK_API_KEY` | 校验模型后消费 `intake_dispatches`；成功才派发现有 P2 |
-| `make collection-worker UNIT_CONFIG=<file>` | 同上 + 真实浏览器与采集授权 | 消费 `xingtu-<unit>` 队列并执行 F04/F05/F06 采集 |
+| `make collection-worker UNIT_CONFIG=<file>` | 同上 + 真实浏览器与采集授权 | 消费 `xingtu-<unit>` 队列并执行 F04/F05/F06 采集；也执行手动/定时更新任务 |
+| `make update-scheduler [UNIT_CONFIG=<file>] [BATCH_SIZE=5]` | 已迁移业务库、live 注册表、执行单元；不需要模型密钥或浏览器 | 按粉丝档位生成 `scheduled_update` 批次任务；不运行则定时更新暂停，正常采集与手动更新不受影响 |
 | `make frontend-dev` | 已执行 `make frontend-install`；本地 API 默认在 `127.0.0.1:8000` | 启动 Vite 界面并同源代理 `/api` |
 | `make frontend-build` | Node.js/npm | TypeScript strict 检查并生成 `frontend/dist/` |
 | `make test-product-e2e` | 前端依赖与 Chromium | 真实 Chromium + 合成 API 验证登录、提交、进度和结果；不访问平台 |
@@ -232,7 +233,7 @@ make m3-up
 - 未登录访问业务 API 与封面返回 401，跨任务读取封面返回 404，均为预期保护行为。
 - **后端代码变更后必须重启 `xingtu-api`**（该入口无 `--reload`）。长期运行的旧进程持有旧 Pydantic 模型：新代码写入带新字段的检查点后（例如安全验证的 `challenge_*` 字段），旧进程读取该任务会因 `TaskRecord`/`checkpoint` 的 `extra_forbidden` 返回 500，而更早的任务仍正常。2026-10-10 本地联调中实际出现，重启为当前代码后同一任务恢复 200。
 - 同一端口只保留一个 API 进程：重复启动会以 `[Errno 48] address already in use` 退出（退出码 3）。先确认占用者（`lsof -nP -iTCP:8000 -sTCP:LISTEN`），不要并跑两个后端。`make m3-up` 会复用已在 8000 上通过 healthcheck 的 API 进程。
-- Worker 进程日志写入 `.runtime/logs/`（`api.log`、`intake-worker.log`、`collection-worker.log`、`frontend.log`）；Intake Worker 启动与派发失败都会记录，消费者不再可能“静默消失”。
+- Worker 进程日志写入 `.runtime/logs/`（`api.log`、`intake-worker.log`、`collection-worker.log`、`update-scheduler.log`、`frontend.log`）；Intake Worker 启动与派发失败都会记录，消费者不再可能“静默消失”。`update-scheduler` 只读写数据库，不运行只影响定时更新。
 
 ## 2026-10-10 M3 本地产品页面启动（历史记录）
 
@@ -273,9 +274,9 @@ npm --prefix frontend run dev        # http://127.0.0.1:5173
 上面 `make m3-up` 的默认清单**不含前端**（需 `M3_UP_FLAGS="--with-collection --with-frontend"`），且它不记录 PID，停止后 API 与前端会成为游离进程。需要「在终端一条命令唤起前后端并打开页面体验」时改用根目录入口：
 
 ```bash
-./dev.sh            # = ./dev.sh up：依赖 → 前置自检 → API + P1 + P2 + 前端 → 就绪校验
+./dev.sh            # = ./dev.sh up：依赖 → 前置自检 → API + P1 + P2 + 更新调度器 + 前端 → 就绪校验
 ./dev.sh status     # 进程 / 端口 / HTTP / 队列消费者新鲜度 / 日志末行
-./dev.sh logs [名称] # 名称：api | intake-worker | collection-worker | frontend
+./dev.sh logs [名称] # 名称：api | intake-worker | collection-worker | update-scheduler | frontend
 ./dev.sh stop       # 只停本脚本记录过的进程（连同 npm run dev 的子进程），保留数据库/对象/profile
 ./dev.sh restart    # stop + up
 ./dev.sh check      # 只做前置自检

@@ -4,6 +4,7 @@ import base64
 import copy
 import hashlib
 import json
+import logging
 from datetime import datetime
 from typing import Any, Literal, cast
 from uuid import UUID
@@ -11,8 +12,18 @@ from uuid import UUID
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
-from .domain import CollectorError, FilterPlan, TaskRecord, TaskStatus, uid, utcnow
+from .creator_update import reconcile_update_task
+from .domain import (
+    CollectorError,
+    FilterPlan,
+    TaskKind,
+    TaskRecord,
+    TaskStatus,
+    uid,
+    utcnow,
+)
 from .product_models import (
+    BrowserTakeoverView,
     ChallengeSummary,
     CreatorLibraryDetail,
     CreatorLibraryHistory,
@@ -22,15 +33,21 @@ from .product_models import (
     CreatorLibrarySummary,
     CreatorPage,
     CreatorSummary,
+    CreatorVideoObservation,
+    CreatorVideoPage,
+    ExecutionUnitView,
     FieldError,
     IntakeProgress,
     LibraryMetric,
+    ManualProbeCreator,
     P1WorkflowState,
     RequirementForm,
     TaskCounts,
     TaskDetail,
     TaskPage,
     TaskSummary,
+    UpdateTargetView,
+    VerificationEventView,
 )
 from .repository import TERMINAL_COMPLETED_AT_CLAUSE, TERMINAL_TASK_STATES, Repository
 from .worker_health import INTAKE_QUEUE, WorkerHealthMonitor
@@ -38,6 +55,7 @@ from .worker_health import INTAKE_QUEUE, WorkerHealthMonitor
 # The same terminal set the task write path uses to stamp `completed_at`; kept as the query layer's
 # public name because the API and result-action rules already refer to it.
 TERMINAL_STATES = set(TERMINAL_TASK_STATES)
+logger = logging.getLogger(__name__)
 
 INTAKE_STAGE_STATES = {TaskStatus.RECEIVED, TaskStatus.PARSING}
 # A healthy dispatch loop flips `sent` within ~2 s and retries every 2 s, so an unsent row that has
@@ -129,12 +147,130 @@ class ProductQueries:
         self.intake_block_after_seconds = intake_block_after_seconds
 
     @staticmethod
+    def _mask_reference(value: str | None) -> str:
+        if not value:
+            return "未配置"
+        tail = value[-4:] if len(value) > 4 else value
+        return "•••" + tail
+
+    @staticmethod
+    def _browser_status(
+        row: dict[str, Any],
+    ) -> Literal["ONLINE", "MAINTENANCE", "STOPPED", "SUSPECTED_OFFLINE", "QUARANTINED"]:
+        if row["state"] == "QUARANTINED":
+            return "QUARANTINED"
+        if row["browser_stopped"]:
+            return "STOPPED"
+        if row["lease_until"] and row["lease_until"] <= utcnow():
+            return "SUSPECTED_OFFLINE"
+        if row["mode"] == "maintenance":
+            return "MAINTENANCE"
+        return "ONLINE"
+
+    def _execution_unit_view(self, row: dict[str, Any]) -> ExecutionUnitView:
+        deadline = row.get("event_deadline_at")
+        return ExecutionUnitView(
+            unit_id=row["unit_id"],
+            account_label=self._mask_reference(row.get("account_ref")),
+            line_label=self._mask_reference(row.get("line_ref")),
+            state=row["state"],
+            mode=row.get("mode"),
+            allowed_task_kinds=list(row.get("allowed_task_kinds") or []),
+            current_root_task_id=str(row["current_root_task_id"])
+            if row.get("current_root_task_id")
+            else None,
+            browser_status=self._browser_status(row),
+            verification_state=row.get("event_state"),
+            takeover_state=row.get("takeover_state"),
+            verification_deadline_at=deadline,
+            last_heartbeat_at=row.get("last_heartbeat_at"),
+            actionable_reason=row.get("event_reason") or row.get("failure_reason"),
+        )
+
+    def list_execution_units(self) -> list[ExecutionUnitView]:
+        with self.repository.connect() as conn:
+            rows = conn.execute(
+                """SELECT u.*,e.state AS event_state,e.reason AS event_reason,
+                e.deadline_at AS event_deadline_at,t.state AS takeover_state
+                FROM execution_units u
+                LEFT JOIN LATERAL (
+                  SELECT * FROM verification_events WHERE unit_id=u.unit_id
+                  AND state IN ('OPEN','ACKNOWLEDGED') ORDER BY detected_at DESC LIMIT 1
+                ) e ON true
+                LEFT JOIN LATERAL (
+                  SELECT * FROM browser_takeover_sessions WHERE unit_id=u.unit_id
+                  AND state IN ('REQUESTED','ACTIVE','VERIFYING') ORDER BY created_at DESC LIMIT 1
+                ) t ON true ORDER BY u.unit_id"""
+            ).fetchall()
+            return [self._execution_unit_view(dict(row)) for row in rows]
+
+    def execution_unit(self, unit_id: str) -> ExecutionUnitView:
+        rows = [row for row in self.list_execution_units() if row.unit_id == unit_id]
+        if not rows:
+            raise CollectorError("INVALID_FORM", "EXECUTION_UNIT_NOT_FOUND")
+        return rows[0]
+
+    def verification_events(self, *, open_only: bool = True) -> list[VerificationEventView]:
+        events = self.repository.list_verification_events(open_only=open_only)
+        now = utcnow()
+        return [
+            VerificationEventView(
+                event_id=str(row["event_id"]),
+                unit_id=row["unit_id"],
+                root_task_id=str(row["root_task_id"]),
+                state=row["state"],
+                reason=row["reason"],
+                detected_at=row["detected_at"],
+                last_detected_at=row["last_detected_at"],
+                deadline_at=row["deadline_at"],
+                reappearance_count=row["reappearance_count"],
+                remaining_seconds=max(0, int((row["deadline_at"] - now).total_seconds())),
+            )
+            for row in events
+        ]
+
+    def takeover_view(
+        self, row: dict[str, Any], *, viewer_url: str | None = None
+    ) -> BrowserTakeoverView:
+        probes: list[ManualProbeCreator] = []
+        try:
+            task = self.repository.get(str(row["root_task_id"]))
+        except CollectorError:
+            task = None
+        if task:
+            for candidate in task.checkpoint.candidates:
+                if candidate.state not in {"done", "collecting"}:
+                    probes.append(
+                        ManualProbeCreator(
+                            platform_creator_id=candidate.ref.platform_creator_id,
+                            display_name=None,
+                            state=candidate.state,
+                        )
+                    )
+                if len(probes) == 3:
+                    break
+        return BrowserTakeoverView(
+            takeover_id=str(row["takeover_id"]),
+            unit_id=row["unit_id"],
+            root_task_id=str(row["root_task_id"]),
+            state=row["state"],
+            expires_at=row["expires_at"],
+            failure_reason=row.get("failure_reason"),
+            viewer_url=viewer_url,
+            manual_probe_creators=probes,
+        )
+
+    @staticmethod
     def _scope(
-        status: TaskStatus | None, created_from: datetime | None, created_to: datetime | None
+        status: TaskStatus | None,
+        created_from: datetime | None,
+        created_to: datetime | None,
+        task_kind: TaskKind | None = None,
     ) -> str:
         value = "|".join(
             [
                 status.value if status else "",
+                task_kind.value if task_kind else "",
                 created_from.isoformat() if created_from else "",
                 created_to.isoformat() if created_to else "",
             ]
@@ -145,6 +281,7 @@ class ProductQueries:
         self,
         *,
         status: TaskStatus | None = None,
+        task_kind: TaskKind | None = None,
         created_from: datetime | None = None,
         created_to: datetime | None = None,
         cursor: str | None = None,
@@ -152,12 +289,15 @@ class ProductQueries:
     ) -> TaskPage:
         if not 1 <= limit <= 100:
             raise CollectorError("INVALID_FORM", "INVALID_PAGE_SIZE")
-        scope = self._scope(status, created_from, created_to)
+        scope = self._scope(status, created_from, created_to, task_kind)
         clauses = [sql.SQL("true")]
         params: list[Any] = []
         if status:
             clauses.append(sql.SQL("r.state=%s"))
             params.append(status.value)
+        if task_kind:
+            clauses.append(sql.SQL("r.task_kind=%s"))
+            params.append(task_kind.value)
         if created_from:
             clauses.append(sql.SQL("r.created_at>=%s"))
             params.append(created_from)
@@ -233,6 +373,7 @@ class ProductQueries:
         if not row:
             raise CollectorError("INVALID_FORM", "TASK_NOT_FOUND")
         summary = self._summary(row)
+        task = self._task_record(row)
         root_payload = row["payload"]
         intake_checkpoint = row.get("intake_checkpoint") or {}
         errors = intake_checkpoint.get("final_error") or root_payload.get("field_errors") or []
@@ -248,9 +389,31 @@ class ProductQueries:
             origin_root_task_id=str(row["origin_root_task_id"])
             if row["origin_root_task_id"]
             else None,
-            challenge=self._challenge_summary(self._task_record(row)),
+            challenge=self._challenge_summary(task),
             intake=self._intake_progress(row),
+            update_targets=self._update_targets(task),
         )
+
+    @staticmethod
+    def _update_targets(task: TaskRecord | None) -> list[UpdateTargetView]:
+        if task is None or task.plan is not None:
+            return []
+        candidates = {
+            candidate.ref.platform_creator_id: candidate for candidate in task.checkpoint.candidates
+        }
+        targets: list[UpdateTargetView] = []
+        for target in task.update_targets:
+            candidate = candidates.get(target.platform_creator_id)
+            targets.append(
+                UpdateTargetView(
+                    creator_id=target.creator_id,
+                    platform_creator_id=target.platform_creator_id,
+                    first_position=target.first_position,
+                    state=candidate.state if candidate else "pending",
+                    failure_reason=candidate.failure_reason if candidate else None,
+                )
+            )
+        return targets
 
     def _intake_progress(self, row: dict[str, Any]) -> IntakeProgress | None:
         """Explain an intake-stage task that has not been picked up yet.
@@ -335,7 +498,7 @@ class ProductQueries:
             recovery_count=cp.challenge_recovery_count,
             current_creator_id=cp.challenge_current_creator,
             completed_creator_count=completed,
-            remaining_creator_count=max(0, task.plan.target_count - task.valid_count),
+            remaining_creator_count=max(0, task.target_count - task.valid_count),
             waiting_seconds=waiting_seconds,
             account_matches=(
                 False
@@ -365,7 +528,7 @@ class ProductQueries:
         requirement = row.get("requirement_payload")
         if task:
             counts = TaskCounts(
-                target_count=task.plan.target_count,
+                target_count=task.target_count,
                 discovered_count=len(task.checkpoint.candidates),
                 valid_count=task.valid_count,
                 profile_complete_count=task.profile_complete_count,
@@ -374,13 +537,17 @@ class ProductQueries:
                     candidate.state == "failed" for candidate in task.checkpoint.candidates
                 ),
             )
-            keyword = next(
-                (
-                    str(item.value)
-                    for item in task.plan.filters
-                    if item.field == "keyword" and isinstance(item.value, str)
-                ),
-                None,
+            keyword = (
+                next(
+                    (
+                        str(item.value)
+                        for item in task.plan.filters
+                        if item.field == "keyword" and isinstance(item.value, str)
+                    ),
+                    None,
+                )
+                if task.plan is not None
+                else None
             )
             failure = task.failure_reason
         else:
@@ -393,6 +560,7 @@ class ProductQueries:
             failure = row["payload"].get("failure_reason")
         return TaskSummary(
             root_task_id=str(row["root_task_id"]),
+            task_kind=TaskKind(row.get("task_kind") or "collection"),
             status=status,
             stage=task_stage(status),
             version=int(row["version"]),
@@ -439,6 +607,7 @@ class ProductQueries:
         actor = "product:" + user_id
         operation = "product.task." + action
         digest = hashlib.sha256(f"{root_task_id}:{action}:{expected_version}".encode()).hexdigest()
+        terminal_update = False
         with self.repository.connect() as conn:
             conn.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
@@ -582,6 +751,9 @@ class ProductQueries:
                         VALUES(%s,%s,%s,false)""",
                         (root_task_id, task.segment, f"collect/{root_task_id}"),
                     )
+                terminal_update = (
+                    task.task_kind != TaskKind.COLLECTION and task.state in TERMINAL_STATES
+                )
                 task.version += 1
                 task.checkpoint.revision += 1
                 conn.execute(
@@ -621,6 +793,13 @@ class ProductQueries:
                 VALUES(%s,%s,%s,%s)""",
                 (root_task_id, actor, user_id, action),
             )
+        if terminal_update:
+            try:
+                reconcile_update_task(self.repository, root_task_id)
+            except Exception as exc:  # noqa: BLE001 - the command already committed
+                logger.warning(
+                    "update schedule reconcile failed root=%s: %s", root_task_id, type(exc).__name__
+                )
         return self.get_task(root_task_id)
 
     def list_creators(
@@ -793,6 +972,11 @@ class ProductQueries:
                     "monthly_follower_growth_rate_raw": "basic.monthly_follower_growth_rate",
                     "interaction_rate_value_raw": "spread.interaction_rate",
                     "completion_rate_value_raw": "spread.completion_rate",
+                    "play_median_value_raw": "spread.item_rate_metrics",
+                    "average_duration_value_raw": "spread.average_duration",
+                    "average_likes_value_raw": "spread.average_likes",
+                    "average_comments_value_raw": "spread.average_comments",
+                    "average_shares_value_raw": "spread.average_shares",
                     "expected_cpm_21_60_raw": "spread.expected_cpm",
                     "expected_cpm_60_plus_raw": "spread.expected_cpm",
                     "expected_cpe_21_60_raw": "spread.expected_cpe",
@@ -855,6 +1039,21 @@ class ProductQueries:
             ),
             completion_rate=metric(
                 row, column="completion_rate_value_raw", source_key="completion_rate_value_raw"
+            ),
+            play_median=metric(
+                row, column="play_median_value_raw", source_key="play_median_value_raw"
+            ),
+            average_duration=metric(
+                row, column="average_duration_value_raw", source_key="average_duration_value_raw"
+            ),
+            average_likes=metric(
+                row, column="average_likes_value_raw", source_key="average_likes_value_raw"
+            ),
+            average_comments=metric(
+                row, column="average_comments_value_raw", source_key="average_comments_value_raw"
+            ),
+            average_shares=metric(
+                row, column="average_shares_value_raw", source_key="average_shares_value_raw"
             ),
             expected_cpm_21_60=metric(
                 row, column="expected_cpm_21_60_raw", source_key="expected_cpm_21_60_raw"
@@ -1165,9 +1364,16 @@ class ProductQueries:
     ) -> dict[str, Any] | None:
         """Authenticated cover access for the library entry: the object must belong to this creator.
 
-        Same shape as `Repository.cover_reference`, but scoped to a creator instead of a root task:
-        `media_objects` → `featured_cards` → `featured_collections.creator_id`.  Returns `None` for
-        any mismatch, so a caller cannot reach another creator's cover by guessing an object id.
+        Same shape as `Repository.cover_reference`, but scoped to a creator instead of a root task.
+        Two ownership paths exist and both are checked:
+
+        * `media_objects` → `featured_cards` → `featured_collections.creator_id` (精选集合 covers);
+        * `media_objects.source_key` → `douyin_xingtu_creator_video_observations.cover_source_uri`
+          → `creator_id` (the DATA-02 work covers, whose platform object key is the stable link and
+          whose signed URL is short-lived).
+
+        Returns `None` for any mismatch, so a caller cannot reach another creator's cover by
+        guessing an object id.
         """
         creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
         with self.repository.connect() as conn:
@@ -1178,9 +1384,149 @@ class ProductQueries:
                 JOIN featured_cards c ON c.cover_object_id=m.object_id
                 JOIN featured_collections f
                 ON f.collection_observation_id=c.collection_observation_id
-                WHERE m.object_id=%s AND m.kind='cover' AND f.creator_id=%s LIMIT 1""",
-                (object_id, creator_id),
+                WHERE m.object_id=%s AND m.kind='cover' AND f.creator_id=%s
+                UNION ALL
+                SELECT m.object_id,m.checksum,m.kind,m.content_type,m.byte_size,NULL,NULL
+                FROM media_objects m
+                JOIN douyin_xingtu_creator_video_observations v
+                  ON v.cover_source_uri=m.source_key AND v.creator_id=%s
+                WHERE m.object_id=%s AND m.kind='cover' AND m.source_key IS NOT NULL
+                LIMIT 1""",
+                (object_id, creator_id, creator_id, object_id),
             ).fetchone()
+
+    @staticmethod
+    def _video_observation(row: dict[str, Any]) -> CreatorVideoObservation:
+        return CreatorVideoObservation(
+            module_key=row["module_key"],
+            position=int(row["position"]),
+            content_id=str(row["content_id"]) if row.get("content_id") else None,
+            platform_item_id=row.get("platform_item_id"),
+            platform_video_id=row.get("platform_video_id"),
+            platform_author_id=row.get("platform_author_id"),
+            title=row.get("title"),
+            subtitle=row.get("subtitle"),
+            published_at=row.get("published_at"),
+            published_raw=row.get("published_raw"),
+            play_count=row.get("play_count"),
+            like_count=row.get("like_count"),
+            comment_count=row.get("comment_count"),
+            favorite_count=row.get("favorite_count"),
+            share_count=row.get("share_count"),
+            cover_source_uri=row.get("cover_source_uri"),
+            cover_object_id=row.get("cover_object_id"),
+            cover_status=row["cover_status"],
+            work_url=row.get("work_url"),
+            field_statuses=row.get("field_statuses") or {},
+            observed_at=row["observed_at"],
+        )
+
+    def _video_page(
+        self,
+        conn: Any,
+        creator_id: str,
+        snapshot_id: str | None,
+        module_key: str | None,
+    ) -> CreatorVideoPage:
+        """One snapshot's ordered work observations, with each cover resolved read-side.
+
+        `cover_status` distinguishes the three states the page must not blur: the platform returned
+        no cover key at all (`NOT_PROVIDED`), the key exists but no verified object is stored yet
+        (`UNRESOLVED`), or the stored object is available (`STORED`).
+        """
+        if not snapshot_id:
+            return CreatorVideoPage(
+                creator_id=creator_id, snapshot_id=None, view_kind="unavailable"
+            )
+        clause = "" if module_key is None else " AND v.module_key=%(module_key)s"
+        rows = conn.execute(
+            f"""SELECT v.module_key,v.position,v.content_id,v.platform_item_id,v.platform_video_id,
+            v.platform_author_id,v.title,v.subtitle,v.published_at,v.published_raw,
+            v.play_count,v.like_count,v.comment_count,v.favorite_count,v.share_count,
+            v.cover_source_uri,v.work_url,v.field_statuses,v.observed_at,
+            m.object_id AS cover_object_id,
+            CASE WHEN v.cover_source_uri IS NULL THEN 'NOT_PROVIDED'
+                 WHEN m.object_id IS NOT NULL THEN 'STORED'
+                 ELSE 'UNRESOLVED' END AS cover_status
+            FROM douyin_xingtu_creator_video_observations v
+            LEFT JOIN LATERAL (
+              SELECT object_id FROM media_objects
+              WHERE kind='cover' AND source_key=v.cover_source_uri
+              ORDER BY created_at DESC, object_id LIMIT 1
+            ) m ON true
+            WHERE v.creator_id=%(creator_id)s AND v.snapshot_id=%(snapshot_id)s{clause}
+            ORDER BY v.module_key,v.position""",
+            {
+                "creator_id": creator_id,
+                "snapshot_id": snapshot_id,
+                "module_key": module_key,
+            },
+        ).fetchall()
+        return CreatorVideoPage(
+            creator_id=creator_id,
+            snapshot_id=snapshot_id,
+            view_kind="published",
+            items=[self._video_observation(row) for row in rows],
+        )
+
+    def creator_library_videos(
+        self,
+        creator_id: str,
+        *,
+        module_key: str | None = None,
+        snapshot_id: str | None = None,
+    ) -> CreatorVideoPage:
+        """The work observations of the creator's current snapshot, or of an explicit one."""
+        creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
+        with self.repository.connect() as conn:
+            if snapshot_id:
+                snapshot_id = _validated_uuid(snapshot_id, "SNAPSHOT_NOT_FOUND")
+                owned = conn.execute(
+                    "SELECT 1 FROM creator_snapshots WHERE snapshot_id=%s AND creator_id=%s",
+                    (snapshot_id, creator_id),
+                ).fetchone()
+                if not owned:
+                    raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+            else:
+                row = conn.execute(
+                    "SELECT latest_snapshot_id FROM douyin_xingtu_creator_current "
+                    "WHERE creator_id=%s",
+                    (creator_id,),
+                ).fetchone()
+                if not row:
+                    raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+                snapshot_id = str(row["latest_snapshot_id"]) if row["latest_snapshot_id"] else None
+            return self._video_page(conn, creator_id, snapshot_id, module_key)
+
+    def task_creator_videos(
+        self,
+        root_task_id: str,
+        creator_id: str,
+        *,
+        module_key: str | None = None,
+        snapshot_id: str | None = None,
+    ) -> CreatorVideoPage:
+        """The work observations of the snapshot this task collected for this creator."""
+        root_task_id = _validated_uuid(root_task_id, "TASK_NOT_FOUND")
+        creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
+        with self.repository.connect() as conn:
+            row = conn.execute(
+                "SELECT latest_snapshot_id FROM task_creators "
+                "WHERE root_task_id=%s AND creator_id=%s",
+                (root_task_id, creator_id),
+            ).fetchone()
+            if not row:
+                raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+            if snapshot_id:
+                snapshot_id = _validated_uuid(snapshot_id, "SNAPSHOT_NOT_FOUND")
+                task_snapshot_id = (
+                    str(row["latest_snapshot_id"]) if row["latest_snapshot_id"] else None
+                )
+                if snapshot_id != task_snapshot_id:
+                    raise CollectorError("INVALID_FORM", "SNAPSHOT_NOT_FOUND")
+            else:
+                snapshot_id = str(row["latest_snapshot_id"]) if row["latest_snapshot_id"] else None
+            return self._video_page(conn, creator_id, snapshot_id, module_key)
 
     def creator_library_history(self, creator_id: str) -> CreatorLibraryHistory:
         creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")

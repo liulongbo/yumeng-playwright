@@ -181,6 +181,8 @@ class ChallengeHandler:
         session_spec: Any,
         expected_account_id: str,
         timeout_seconds: float | None = None,
+        *,
+        return_on_challenge_visible: bool = False,
     ) -> SessionHealth:
         """Wait for a continuously valid registered surface, using read-only observations."""
 
@@ -209,6 +211,13 @@ class ChallengeHandler:
                     if await self._locator(page, locator).is_visible()
                 }
                 if "PLATFORM_SECURITY_CHALLENGE" in visible_errors:
+                    if return_on_challenge_visible:
+                        # A human explicitly handed control back.  Do not consume the entire
+                        # 15-minute maintenance window polling a challenge they can still see;
+                        # return it to the product as a reappearance instead.
+                        raise CollectorError(
+                            "SECURITY_CHALLENGE_STILL_PRESENT", "CHALLENGE_VISIBLE_AFTER_HANDOFF"
+                        )
                     stable_since = None
                     protected_since = None
                     last_challenge_visible_at = now

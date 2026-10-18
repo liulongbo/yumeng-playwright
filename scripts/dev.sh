@@ -43,7 +43,7 @@ usage() {
   stop    停止本脚本启动的进程（保留数据库、对象、profile 与浏览器数据）
   restart 先 stop 再 up
   status  查看进程 / 端口 / API 健康 / 队列消费者新鲜度
-  logs    跟踪全部日志；logs api / intake-worker / collection-worker / frontend 看单个
+  logs    跟踪全部日志；logs api / intake-worker / collection-worker / update-scheduler / frontend 看单个
   check   只做前置自检，不启动任何进程
 
 环境变量：UNIT_CONFIG 可覆盖执行单元配置（默认 .runtime/units/local-dev-mac-02.json）。
@@ -132,6 +132,7 @@ worker_pattern() {
   case "$1" in
     intake-worker) printf 'xingtu-product intake-worker' ;;
     collection-worker) printf 'xingtu worker --config' ;;
+    update-scheduler) printf 'xingtu-product update-scheduler' ;;
   esac
 }
 
@@ -159,6 +160,8 @@ reconcile_worker() {
         start_bg intake-worker "$ROOT/.venv/bin/xingtu-product" intake-worker --unit-config "$UNIT_CONFIG" ;;
       collection-worker)
         start_bg collection-worker "$ROOT/.venv/bin/xingtu" worker --config "$UNIT_CONFIG" ;;
+      update-scheduler)
+        start_bg update-scheduler "$ROOT/.venv/bin/xingtu-product" update-scheduler --unit-config "$UNIT_CONFIG" ;;
     esac
     return 0
   fi
@@ -213,8 +216,10 @@ cmd_up() {
   reconcile_worker intake-worker
   # 3) P2 采集 Worker（缺它任务会停在 QUEUED；采集时会打开真实 Chrome）
   reconcile_worker collection-worker
+  # 4) 定时更新调度器（只读写数据库；不运行则仅定时更新暂停，不影响采集）
+  reconcile_worker update-scheduler
 
-  # 4) 前端页面
+  # 5) 前端页面
   if port_open "$FRONTEND_PORT"; then
     record_pid frontend "$(listener_pid "$FRONTEND_PORT")"
     log "接管已在 $FRONTEND_PORT 监听的前端（pid $(listener_pid "$FRONTEND_PORT")）"
@@ -302,6 +307,7 @@ cmd_status() {
   svc_line frontend "$FRONTEND_PORT"
   worker_line intake-worker
   worker_line collection-worker
+  worker_line update-scheduler
 
   echo "== 端口 =="
   local p
@@ -358,6 +364,7 @@ cmd_stop() {
     # 先停消费者与前端，最后停 API，避免页面先断连。
     stop_pid intake-worker
     stop_pid collection-worker
+    stop_pid update-scheduler
     stop_pid frontend
     stop_pid api
     : >"$PID_FILE"

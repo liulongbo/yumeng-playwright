@@ -27,6 +27,7 @@ import {
 } from "./ui";
 import { buildVideoItems, VideoPerformance } from "./videoPerformance";
 import { fieldView, periodSuffix, type FieldView } from "./views";
+import type { CreatorVideoPage } from "../types";
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -129,6 +130,10 @@ export function OverviewPanel({ payload, index }: { payload: Record<string, unkn
     "content_theme_labels",
     "introduction",
   ];
+  // 该「商业传播表现」条带属于已被 CD-05 取消挂载的「达人概览」章节。注意 `spread.play_median`
+  // 是顶层 `play_mid`，**不是**平台上名为「播放量中位数」的那张卡片（后者见 ContentDataPanel
+  // 里的 `item_rate_metrics.play_mid`，CD-08 已更正）；这里保留原读取方式仅因该面板当前不渲染，
+  // 一旦重新挂载必须同步改成 `item_rate_metrics`。
   const spread = [
     "play_median",
     "average_likes",
@@ -314,24 +319,43 @@ export function QuoteTable({ payload, index }: { payload: Record<string, unknown
   );
 }
 
+/**
+ * 「创作能力」章节。
+ *
+ * 视频表现来自独立存储的作品观测（DATA-02）：调用方按入口把 `videos` 页面传进来（任务入口读本任务
+ * 快照的观测，达人库入口读该达人当前快照的观测），本组件只按当前选中的集合过滤并归一化。快照 JSONB
+ * 里的两个视频字段不再参与图表与列表，避免封面/链接两处不一致；其余创作能力字段（内容类型分布、
+ * 评论热词）仍从快照读取。
+ */
 export function CreationPanel({
   payload,
   index,
   featured,
+  videos,
+  videosLoading,
+  videosError,
+  onRetryVideos,
+  coverUrl,
 }: {
   payload: Record<string, unknown>;
   index: CatalogIndex;
   featured?: ReactNode;
+  /** 两个集合的作品观测；缺失时为 null，页面按空集降级。 */
+  videos?: CreatorVideoPage | null;
+  videosLoading?: boolean;
+  videosError?: unknown;
+  onRetryVideos?: () => void;
+  /** 该入口的授权封面端点构造器；不构造平台 CDN 地址。 */
+  coverUrl: (objectId: string) => string;
 }) {
   const [kind, setKind] = useState<"recent_video_performance" | "recent_xingtu_video_performance">(
     "recent_video_performance",
   );
-  const source = viewFor(payload, index, "creation", kind);
-  // CD-05：柱状图与下方作品列表共用同一份规范化数据，避免两处数值/封面/链接不一致。
-  const videos = useMemo(
-    () => buildVideoItems(source.collected ? source.data : null),
-    [source.collected, source.data],
-  );
+  // CD-05 / DATA-02：柱状图与下方作品列表共用同一份规范化数据，避免两处数值/封面/链接不一致。
+  const items = useMemo(() => {
+    const rows = Array.isArray(videos?.items) ? videos.items : [];
+    return buildVideoItems(rows.filter((item) => item.module_key === kind));
+  }, [videos, kind]);
 
   const contentDistribution = rows(viewFor(payload, index, "creation", "video_content_distribution").data);
   const contentItems: DistributionItem[] = contentDistribution
@@ -351,6 +375,12 @@ export function CreationPanel({
     display: Number(token.hot_rate ?? 0).toLocaleString("zh-CN"),
   }));
 
+  const videoStatus = videosLoading
+    ? "读取中"
+    : videosError
+      ? "读取失败"
+      : "平台未返回作品记录";
+
   return (
     <div className="profile-sections">
       {featured}
@@ -359,7 +389,7 @@ export function CreationPanel({
         hint="每根柱子对应一条真实视频作品，柱高与标签取该作品真实播放量；X 轴为平台返回的发布时间。点击柱或作品卡片在新标签页打开抖音作品页。"
         wide
         id="content"
-        meta={videos.length ? `${videos.length} 条` : source.state ?? undefined}
+        meta={items.length ? `${items.length} 条` : videoStatus}
       >
         <div className="profile-controls">
           <div>
@@ -374,12 +404,25 @@ export function CreationPanel({
             </button>
           </div>
         </div>
-        {videos.length ? (
-          <VideoPerformance items={videos} />
-        ) : (
-          <EmptyNote>{source.state ?? "本次没有视频记录。"}</EmptyNote>
+        {items.length ? (
+          <VideoPerformance items={items} coverUrl={coverUrl} />
+        ) : videosLoading ? (
+          <EmptyNote>正在读取作品观测…</EmptyNote>
+        ) : videosError ? null : (
+          <EmptyNote>本次没有视频记录。</EmptyNote>
         )}
+        {videosError ? (
+          <p className="biz-error">
+            作品观测读取失败：{videosError instanceof Error ? videosError.message : String(videosError)}
+            {onRetryVideos ? (
+              <button className="link-button" type="button" onClick={onRetryVideos}>
+                重试
+              </button>
+            ) : null}
+          </p>
+        ) : null}
       </Panel>
+
       <div className="profile-grid">
         <Panel
           title="视频内容类型分布"

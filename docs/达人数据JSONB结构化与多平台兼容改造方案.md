@@ -134,7 +134,8 @@ erDiagram
 ### 4.3 JSONB 策略
 
 - 保留 `creator_snapshots.payload`、`platform_creators.projection`、`featured_* .payload` 原样；它们是可解释性、字段状态、来源、周期、失败原因与未知平台字段的权威记录。
-- 只物化明确进入列表/筛选/趋势的字段。`fans` 趋势、画像、创作作品、转化区间、履约分布和精选作品继续 JSONB/既有专表，避免无业务查询时拆成十余张表。
+- 只物化明确进入列表/筛选/趋势的字段。`fans` 趋势、画像、转化区间、履约分布和精选作品继续 JSONB/既有专表，避免无业务查询时拆成十余张表。
+- **2026-10-16 授权变更（[DATA-02](tasks/DATA-02.md)）**：用户明确要求把「商业能力 → 内容数据」的 7 个指标与「创作能力 → 最新视频表现」的 11 个作品字段从 JSONB 拆为独立字段，因此本节原先「创作作品继续 JSONB」的结论按用户要求被取代：新增 `douyin_xingtu_creator_video_observations`（追加式，主键 `(snapshot_id, module_key, position)`）承载作品字段，并在 `douyin_xingtu_creator_current` / `douyin_xingtu_creator_snapshot_index` 上补齐 5 个 `*_value_raw numeric` 指标列（互动率/完播率沿用 010 既有列）。JSONB、快照与既有专表均未删除或重写。
 - 新表绝不反向重建原始 JSON；回填和运行时写入都从 `FieldObservation`/快照派生。物化失败时整笔事务回滚，不能出现“当前索引已更新但快照未发布”。
 
 ### 4.4 多平台策略
@@ -195,6 +196,8 @@ ORDER BY captured_at;
 ### 阶段 4：回归与上线准备
 
 覆盖新 Mapper 的单位/格式拒绝、报价多项/空项、部分模块、同日多快照、任务乱序完成、历史不可变、跨平台隔离、权限及 Agent 字段白名单。迁移采取只新增表/列/索引，不删除 JSONB、不重写已发布快照。
+
+**2026-10-16 已执行**：迁移 `015_creator_video_and_metric_fields.sql`（5 指标列 + `douyin_xingtu_creator_video_observations` + `media_objects.source_key` + 历史回填）与 `016_creator_metric_field_sources.sql`（回填 5 列的 `field_sources` 字段级来源）。两者都只做加法；实测开发库 3064 条历史作品记录全部回填，回填后 `creator_snapshots.payload` 的 md5 未变化。
 
 回滚：停止新 API/Mapper 写入并回退应用版本；新增表保留供审计。只有另行授权的数据治理任务才能删除新表或历史数据。
 

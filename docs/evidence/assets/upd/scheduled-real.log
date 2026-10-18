@@ -1,0 +1,90 @@
+state: QUEUED
+state: COLLECTING
+state: COMPLETED
+{
+  "target": "6f13771f-b62a-4b6f-b5a4-c3aa85c86edd",
+  "started_at": "2026-10-17T16:41:58.603031+00:00",
+  "before": {
+    "schedule": [
+      {
+        "creator_id": "6f13771f-b62a-4b6f-b5a4-c3aa85c86edd",
+        "next_due_at": "2026-10-20 16:41:37.322868+00:00",
+        "tier": "50w_100w",
+        "interval_days": 3,
+        "last_attempt_at": "2026-10-17 16:40:27.785523+00:00",
+        "last_success_at": "2026-10-17 16:41:37.322868+00:00",
+        "last_success_snapshot_id": "3b6b2273-0414-4592-9667-e5320437e774",
+        "consecutive_failures": 0,
+        "last_failure_reason": null,
+        "in_flight_root_task_id": null,
+        "in_flight_claimed_at": null,
+        "in_flight_expires_at": null,
+        "updated_at": "2026-10-17 16:41:49.441244+00:00"
+      }
+    ],
+    "roots": 53,
+    "snapshots": 4,
+    "platform_creators": 60,
+    "target_identity_count": 1
+  },
+  "due_before_scheduler": [
+    {
+      "creator_id": "6f13771f-b62a-4b6f-b5a4-c3aa85c86edd",
+      "next_due_at": "2026-10-17 16:41:58.644716+00:00"
+    }
+  ],
+  "scheduler_pid": 38629,
+  "created_root": "6871b08c-d446-4825-8d9e-f9da6dfb5408",
+  "scheduler_stopped": true,
+  "created": {
+    "root_task_id": "6871b08c-d446-4825-8d9e-f9da6dfb5408",
+    "task_kind": "scheduled_update",
+    "state": "QUEUED",
+    "unit_id": "unit-local-mac-02",
+    "created_at": "2026-10-17 16:41:59.273548+00:00"
+  },
+  "created_unit": "unit-local-mac-02",
+  "created_kind": "scheduled_update",
+  "schedule_at_creation": {
+    "in_flight_root_task_id": "6871b08c-d446-4825-8d9e-f9da6dfb5408",
+    "next_due_at": "2026-10-17 16:41:58.644716+00:00"
+  },
+  "states": [
+    "QUEUED",
+    "COLLECTING",
+    "COMPLETED"
+  ],
+  "final": {
+    "root_task_id": "6871b08c-d446-4825-8d9e-f9da6dfb5408",
+    "task_kind": "scheduled_update",
+    "state": "COMPLETED",
+    "unit_id": "unit-local-mac-02",
+    "failure_reason": "None",
+    "updated_at": "2026-10-17 16:43:08.691883+00:00",
+    "completed_at": "2026-10-17 16:43:08.691883+00:00"
+  },
+  "schedule_after_terminal": {
+    "last_success_at": "2026-10-17 16:43:08.691883+00:00",
+    "last_success_snapshot_id": "0ac06761-ed37-4113-adb3-5b00fe9288e6",
+    "next_due_at": "2026-10-20 16:43:08.691883+00:00",
+    "tier": "50w_100w",
+    "interval_days": 3,
+    "consecutive_failures": 0,
+    "last_failure_reason": null,
+    "in_flight_root_task_id": null
+  },
+  "terminal_reconciled_without_scheduler": true,
+  "snapshots_after": 5,
+  "current": {
+    "data_updated_at": "2026-10-17 16:43:08.691883+00:00",
+    "latest_snapshot_id": "0ac06761-ed37-4113-adb3-5b00fe9288e6",
+    "profile_complete": true,
+    "pipeline_complete": true
+  },
+  "platform_creators_after": 60,
+  "target_identity_after": 1,
+  "task_creators": 1,
+  "filter_plans": 0,
+  "requirements": 0,
+  "model_runs": 0
+}

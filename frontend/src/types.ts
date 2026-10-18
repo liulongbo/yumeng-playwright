@@ -5,6 +5,8 @@ export type TaskStatus =
   | "CANCELLING" | "CANCELLED" | "COMPLETED" | "PARTIAL_COMPLETED"
   | "FAILED_VALIDATION" | "FAILED";
 
+export type TaskKind = "collection" | "manual_update" | "scheduled_update";
+
 export interface UserView {
   user_id: string;
   username: string;
@@ -122,6 +124,7 @@ export interface TaskCounts {
 
 export interface TaskSummary {
   root_task_id: string;
+  task_kind: TaskKind;
   status: TaskStatus;
   stage: string;
   version: number;
@@ -160,6 +163,53 @@ export interface ChallengeSummary {
   delivered_result: string;
 }
 
+export interface ManualProbeCreator {
+  platform_creator_id: string;
+  display_name: string | null;
+  state: string;
+}
+
+export interface VerificationEvent {
+  event_id: string;
+  unit_id: string;
+  root_task_id: string;
+  state: "OPEN" | "ACKNOWLEDGED" | "RESOLVED" | "EXPIRED";
+  reason: string;
+  detected_at: string;
+  last_detected_at: string;
+  deadline_at: string;
+  reappearance_count: number;
+  remaining_seconds: number;
+}
+
+export interface ExecutionUnit {
+  unit_id: string;
+  platform: "douyin_xingtu";
+  account_label: string;
+  line_label: string;
+  state: string;
+  mode: string | null;
+  allowed_task_kinds: TaskKind[];
+  current_root_task_id: string | null;
+  browser_status: "ONLINE" | "MAINTENANCE" | "STOPPED" | "SUSPECTED_OFFLINE" | "QUARANTINED";
+  verification_state: string | null;
+  takeover_state: string | null;
+  verification_deadline_at: string | null;
+  last_heartbeat_at: string | null;
+  actionable_reason: string | null;
+}
+
+export interface BrowserTakeover {
+  takeover_id: string;
+  unit_id: string;
+  root_task_id: string;
+  state: "REQUESTED" | "ACTIVE" | "VERIFYING" | "RESUMED" | "FAILED" | "EXPIRED" | "RELEASED";
+  expires_at: string;
+  failure_reason: string | null;
+  viewer_url: string | null;
+  manual_probe_creators: ManualProbeCreator[];
+}
+
 export interface IntakeProgress {
   sent: boolean;
   pending_seconds: number | null;
@@ -171,6 +221,15 @@ export interface IntakeProgress {
   blocked_seconds: number | null;
 }
 
+export interface UpdateTargetView {
+  creator_id: string | null;
+  platform_creator_id: string;
+  display_name: string | null;
+  first_position: number;
+  state: "pending" | "collecting" | "done" | "invalid" | "failed";
+  failure_reason: string | null;
+}
+
 export interface TaskDetail extends TaskSummary {
   requirement: RequirementForm | null;
   capability_version: string | null;
@@ -179,6 +238,7 @@ export interface TaskDetail extends TaskSummary {
   origin_root_task_id: string | null;
   challenge: ChallengeSummary | null;
   intake: IntakeProgress | null;
+  update_targets: UpdateTargetView[];
 }
 
 export interface TaskPage { items: TaskSummary[]; next_cursor: string | null }
@@ -245,6 +305,27 @@ export interface CreatorLibraryDetail extends CreatorLibrarySummary {
   profile_payload: Record<string, unknown>;
 }
 
+export interface CreatorUpdateStatus {
+  creator_id: string;
+  in_flight_root_task_id: string | null;
+  task_status: TaskStatus | null;
+  task_stage: string | null;
+  last_write_at: string | null;
+  last_success_at: string | null;
+  last_success_snapshot_id: string | null;
+  next_due_at: string | null;
+  tier: string | null;
+  interval_days: number | null;
+  consecutive_failures: number;
+  last_failure_reason: string | null;
+}
+
+export interface CreatorUpdateResponse {
+  root_task_id: string;
+  status: TaskStatus;
+  reused: boolean;
+}
+
 export interface CreatorLibraryHistoryPoint {
   snapshot_id: string;
   captured_at: string;
@@ -270,6 +351,49 @@ export interface CreatorLibraryQuote {
   origin_price_raw: string | number | null;
   observed_at: string;
   offer_raw: Record<string, unknown>;
+}
+
+/**
+ * 一条「创作能力 → 最新视频表现」的作品观测（独立于快照 JSONB 的视频观测表）。
+ *
+ * 计数保持平台原样：后端以 Decimal 序列化，因此既可能是 JSON 数字也可能是数字字符串；`null`
+ * 表示平台未返回该字段（`field_statuses` 里说明原因），与真实的 `0` 不混淆。
+ */
+export interface CreatorVideoObservation {
+  module_key: "recent_video_performance" | "recent_xingtu_video_performance";
+  position: number;
+  /** 本项目内容行 id；平台自身作品 id 见 `platform_item_id`。 */
+  content_id: string | null;
+  /** 抖音作品 id（平台自有标识）。 */
+  platform_item_id: string | null;
+  platform_video_id: string | null;
+  platform_author_id: string | null;
+  title: string | null;
+  /** 平台从不返回该字段，恒为 null。 */
+  subtitle: string | null;
+  published_at: string | null;
+  published_raw: string | null;
+  play_count: number | string | null;
+  like_count: number | string | null;
+  comment_count: number | string | null;
+  /** 平台从不返回该字段，恒为 null。 */
+  favorite_count: number | string | null;
+  share_count: number | string | null;
+  /** 平台对象存储的不透明 key，不是可渲染地址。 */
+  cover_source_uri: string | null;
+  /** 已入库封面对象 id；仅在 `cover_status === "STORED"` 时非空。 */
+  cover_object_id: string | null;
+  cover_status: "STORED" | "UNRESOLVED" | "NOT_PROVIDED";
+  work_url: string | null;
+  field_statuses: Record<string, string>;
+  observed_at: string;
+}
+
+export interface CreatorVideoPage {
+  creator_id: string;
+  snapshot_id: string | null;
+  view_kind: "published" | "unavailable";
+  items: CreatorVideoObservation[];
 }
 
 export interface ContentPage {

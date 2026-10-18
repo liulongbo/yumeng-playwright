@@ -9,6 +9,7 @@ Usage: .venv/bin/python scripts/acceptance/seed_auth.py
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import sys
 import time
@@ -29,9 +30,11 @@ def qa_password() -> str:
 
 def main() -> int:
     password = qa_password()
+    base = os.environ.get("XINGTU_ACCEPTANCE_BASE", BASE)
+    username = os.environ.get("XINGTU_ACCEPTANCE_USERNAME", "media-a")
     with PlaywrightMcp() as client:
         client.initialize()
-        client.call("browser_navigate", {"url": f"{BASE}/login"}, timeout=120)
+        client.call("browser_navigate", {"url": f"{base}/login"}, timeout=120)
         time.sleep(1.5)
         evaluate(
             client,
@@ -43,7 +46,7 @@ def main() -> int:
           const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
           const username = document.querySelector('input[autocomplete="username"]');
           const input = document.querySelector('.password-field input');
-          setter.call(username, 'media-a');
+          setter.call(username, __ACCEPTANCE_USERNAME__);
           username.dispatchEvent(new Event('input', { bubbles: true }));
           setter.call(input, window.__acceptanceSecret);
           input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -54,7 +57,7 @@ def main() -> int:
             if (location.pathname.startsWith('/tasks')) break;
           }
           return { path: location.pathname, heading: document.querySelector('h1') && document.querySelector('h1').textContent };
-        })()""",
+        })()""".replace("__ACCEPTANCE_USERNAME__", json.dumps(username)),
         )
         print("session:", state)
         return 0 if str(state.get("path", "")).startswith("/tasks") else 1

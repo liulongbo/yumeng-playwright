@@ -1,24 +1,28 @@
+import asyncio
+import json
 import os
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
-from fastapi import Cookie, Depends, FastAPI, Header, Query, Request, Response
+from fastapi import Cookie, Depends, FastAPI, Header, Query, Request, Response, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from redis import Redis
 from starlette.middleware.base import RequestResponseEndpoint
 
 from .contracts import PlatformRegistry
-from .domain import CollectorError, TaskStatus
+from .creator_update import CreatorUpdateService
+from .domain import CollectorError, ProfileRequirement, TaskKind, TaskStatus
 from .product_auth import AuthService, RedisLoginLimiter
 from .product_covers import ProductCoverConfig, ProductCoverReader
 from .product_models import (
     AuthenticatedUser,
+    BrowserTakeoverView,
     CommandRequest,
     CreateTaskResponse,
     CreatorLibraryDetail,
@@ -27,6 +31,10 @@ from .product_models import (
     CreatorLibraryQuote,
     CreatorPage,
     CreatorSummary,
+    CreatorUpdateResponse,
+    CreatorUpdateStatus,
+    CreatorVideoPage,
+    ExecutionUnitView,
     FieldError,
     LoginRequest,
     ProductError,
@@ -35,6 +43,7 @@ from .product_models import (
     TaskDetail,
     TaskPage,
     UserView,
+    VerificationEventView,
 )
 from .product_queries import ProductQueries
 from .product_repository import ProductRepository
@@ -58,6 +67,9 @@ class ProductSettings:
     allowed_origins: tuple[str, ...] = ()
     cover_config: ProductCoverConfig | None = None
     temporal_address: str = "127.0.0.1:57233"
+    remote_viewer_base_url: str | None = None
+    remote_vnc_targets: dict[str, str] | None = None
+    profile_requirement_path: Path = Path("contracts/profile_requirements.json")
 
     @classmethod
     def from_environment(cls) -> "ProductSettings":
@@ -99,6 +111,21 @@ class ProductSettings:
                 ),
                 allowed_root=runtime_root,
             )
+        remote_viewer_base_url = os.environ.get("XINGTU_REMOTE_VIEWER_BASE_URL") or None
+        if remote_viewer_base_url and (
+            not remote_viewer_base_url.startswith("/") or remote_viewer_base_url.startswith("//")
+        ):
+            raise CollectorError("STORAGE_UNAVAILABLE", "REMOTE_VIEWER_MUST_BE_SAME_ORIGIN_PATH")
+        raw_vnc_targets = os.environ.get("XINGTU_REMOTE_VNC_TARGETS_JSON", "{}")
+        try:
+            remote_vnc_targets = json.loads(raw_vnc_targets)
+        except json.JSONDecodeError as exc:
+            raise CollectorError("STORAGE_UNAVAILABLE", "REMOTE_VNC_TARGETS_INVALID") from exc
+        if not isinstance(remote_vnc_targets, dict) or not all(
+            isinstance(unit, str) and isinstance(target, str) and ":" in target
+            for unit, target in remote_vnc_targets.items()
+        ):
+            raise CollectorError("STORAGE_UNAVAILABLE", "REMOTE_VNC_TARGETS_INVALID")
         return cls(
             database_url=database_url,
             redis_url=redis_url,
@@ -110,6 +137,14 @@ class ProductSettings:
             allowed_origins=origins,
             cover_config=cover_config,
             temporal_address=os.environ.get("XINGTU_TEMPORAL_ADDRESS", "127.0.0.1:57233"),
+            remote_viewer_base_url=remote_viewer_base_url,
+            remote_vnc_targets=remote_vnc_targets,
+            profile_requirement_path=Path(
+                os.environ.get(
+                    "XINGTU_PROFILE_REQUIREMENT_PATH",
+                    "contracts/profile_requirements.json",
+                )
+            ),
         )
 
 
@@ -121,6 +156,7 @@ class ProductServices:
     registry: PlatformRegistry
     covers: ProductCoverReader
     settings: ProductSettings
+    updates: CreatorUpdateService | None = None
 
 
 def build_services(
@@ -134,6 +170,11 @@ def build_services(
     auth = AuthService(products, limiter)
     registry = PlatformRegistry.model_validate_json(settings.registry_path.read_text())
     registry.require_enabled(live=True)
+    requirement = (
+        ProfileRequirement.model_validate_json(settings.profile_requirement_path.read_text())
+        if settings.profile_requirement_path.is_file()
+        else None
+    )
     return ProductServices(
         auth=auth,
         products=products,
@@ -141,15 +182,23 @@ def build_services(
         registry=registry,
         covers=ProductCoverReader(settings.cover_config or ProductCoverConfig()),
         settings=settings,
+        updates=CreatorUpdateService(repository, registry, requirement),
     )
 
 
 def _status_for_error(exc: CollectorError) -> int:
     if exc.code == "ACCOUNT_LOGIN_REQUIRED":
         return 401
-    if exc.reason in {"CSRF_CHECK_FAILED", "ORIGIN_CHECK_FAILED"}:
+    if exc.reason in {"CSRF_CHECK_FAILED", "ORIGIN_CHECK_FAILED", "TAKEOVER_ACCESS_DENIED"}:
         return 403
-    if exc.reason in {"TASK_NOT_FOUND", "CREATOR_NOT_FOUND", "COVER_NOT_FOUND"}:
+    if exc.reason in {
+        "TASK_NOT_FOUND",
+        "CREATOR_NOT_FOUND",
+        "COVER_NOT_FOUND",
+        "TAKEOVER_NOT_FOUND",
+        "VERIFICATION_EVENT_NOT_FOUND",
+        "EXECUTION_UNIT_NOT_FOUND",
+    }:
         return 404
     if exc.reason in {
         "IDEMPOTENCY_CONFLICT",
@@ -157,6 +206,10 @@ def _status_for_error(exc: CollectorError) -> int:
         "ACTION_NOT_ALLOWED",
         "NO_RETRYABLE_FAILURE",
         "INTAKE_STATE_CONFLICT",
+        "BROWSER_ALREADY_TAKEN_OVER",
+        "NO_ACTIVE_VERIFICATION_EVENT",
+        "TAKEOVER_NOT_ACTIVE",
+        "TAKEOVER_NOT_RELEASABLE",
     }:
         return 409
     if exc.code == "PLATFORM_RATE_LIMITED":
@@ -346,6 +399,7 @@ def create_app(
     def list_tasks(
         user: Annotated[AuthenticatedUser, Depends(current_user)],
         status: TaskStatus | None = None,
+        task_kind: TaskKind | None = None,
         created_from: datetime | None = None,
         created_to: datetime | None = None,
         cursor: str | None = None,
@@ -354,6 +408,7 @@ def create_app(
         del user
         return services.queries.list_tasks(
             status=status,
+            task_kind=task_kind,
             created_from=created_from,
             created_to=created_to,
             cursor=cursor,
@@ -390,6 +445,182 @@ def create_app(
                 for queue, health in snapshot.items()
             },
         }
+
+    def takeover_view(row: dict[str, Any]) -> BrowserTakeoverView:
+        viewer_url = None
+        if row["state"] == "ACTIVE" and services.settings.remote_viewer_base_url:
+            # The configured viewer is a same-origin noVNC client. It authenticates the WebSocket
+            # separately; no VNC address, debug port or credential is returned here.
+            viewer_url = (
+                services.settings.remote_viewer_base_url.rstrip("/")
+                + "?takeover_id="
+                + str(row["takeover_id"])
+            )
+        return services.queries.takeover_view(row, viewer_url=viewer_url)
+
+    async def proxy_original_vnc(websocket: WebSocket, takeover_id: str) -> None:
+        """Proxy RFB bytes only for the operator's currently ACTIVE original browser.
+
+        The target is an allow-listed private-network address from deployment configuration. It is
+        never sent to the browser, and the stream closes before the Worker runs Playwright's
+        read-only verification after an operator submits completion.
+        """
+        if websocket.headers.get("origin") not in services.settings.allowed_origins:
+            await websocket.close(code=1008)
+            return
+        try:
+            user = services.auth.authenticate(websocket.cookies.get(SESSION_COOKIE))
+            takeover = services.queries.repository.active_takeover_for_viewer(
+                takeover_id, user.user_id
+            )
+        except CollectorError:
+            await websocket.close(code=1008)
+            return
+        target = (services.settings.remote_vnc_targets or {}).get(str(takeover["unit_id"]))
+        host, separator, raw_port = target.rpartition(":") if target else ("", "", "")
+        if not separator or not host or not raw_port.isdigit():
+            await websocket.close(code=1013)
+            return
+        try:
+            reader, writer = await asyncio.open_connection(host, int(raw_port))
+        except OSError:
+            await websocket.close(code=1013)
+            return
+        connection_id = str(uuid4())
+        try:
+            services.queries.repository.claim_takeover_viewer(
+                takeover_id, user.user_id, connection_id
+            )
+        except CollectorError:
+            writer.close()
+            await writer.wait_closed()
+            await websocket.close(code=1008)
+            return
+        await websocket.accept()
+
+        async def vnc_to_viewer() -> None:
+            while chunk := await reader.read(65536):
+                await websocket.send_bytes(chunk)
+
+        async def viewer_to_vnc() -> None:
+            while True:
+                message = await websocket.receive()
+                if message["type"] == "websocket.disconnect":
+                    return
+                if payload := message.get("bytes"):
+                    writer.write(payload)
+                    await writer.drain()
+
+        async def active_guard() -> None:
+            while True:
+                await asyncio.sleep(1)
+                try:
+                    services.queries.repository.active_takeover_for_viewer(
+                        takeover_id, user.user_id
+                    )
+                except CollectorError:
+                    return
+
+        tasks = [
+            asyncio.create_task(vnc_to_viewer()),
+            asyncio.create_task(viewer_to_vnc()),
+            asyncio.create_task(active_guard()),
+        ]
+        try:
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            writer.close()
+            await writer.wait_closed()
+            try:
+                services.queries.repository.release_takeover_viewer(takeover_id, connection_id)
+            finally:
+                with suppress(RuntimeError):
+                    await websocket.close()
+
+    @app.websocket("/api/takeovers/{takeover_id}/viewer")
+    async def original_browser_viewer(websocket: WebSocket, takeover_id: str) -> None:
+        await proxy_original_vnc(websocket, takeover_id)
+
+    @app.get("/api/execution-units", response_model=list[ExecutionUnitView])
+    def execution_units(
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+    ) -> list[ExecutionUnitView]:
+        del user
+        return services.queries.list_execution_units()
+
+    @app.get("/api/execution-units/{unit_id}", response_model=ExecutionUnitView)
+    def execution_unit(
+        unit_id: str, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    ) -> ExecutionUnitView:
+        del user
+        return services.queries.execution_unit(unit_id)
+
+    @app.get("/api/verification-events", response_model=list[VerificationEventView])
+    def verification_events(
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+        open_only: bool = True,
+    ) -> list[VerificationEventView]:
+        del user
+        return services.queries.verification_events(open_only=open_only)
+
+    @app.post(
+        "/api/execution-units/{unit_id}/takeovers",
+        response_model=BrowserTakeoverView,
+        status_code=202,
+    )
+    def request_takeover(
+        unit_id: str,
+        user: Annotated[AuthenticatedUser, Depends(current_user_with_csrf)],
+    ) -> BrowserTakeoverView:
+        takeover = services.queries.repository.request_browser_takeover(unit_id, user.user_id)
+        return takeover_view(takeover)
+
+    @app.get("/api/takeovers/{takeover_id}", response_model=BrowserTakeoverView)
+    def takeover_status(
+        takeover_id: str, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    ) -> BrowserTakeoverView:
+        return takeover_view(services.queries.repository.takeover(takeover_id, user.user_id))
+
+    @app.post("/api/takeovers/{takeover_id}/reappearance", response_model=BrowserTakeoverView)
+    def takeover_reappearance(
+        takeover_id: str,
+        reason: Literal[
+            "PLATFORM_SECURITY_CHALLENGE",
+            "ACCOUNT_LOGIN_REQUIRED",
+            "ACCOUNT_MISMATCH",
+            "NETWORK_OR_PROTECTED_PAGE_UNAVAILABLE",
+            "HUMAN_CANNOT_COMPLETE",
+        ],
+        user: Annotated[AuthenticatedUser, Depends(current_user_with_csrf)],
+    ) -> BrowserTakeoverView:
+        return takeover_view(
+            services.queries.repository.report_takeover_reappearance(
+                takeover_id, user.user_id, reason
+            )
+        )
+
+    @app.post(
+        "/api/takeovers/{takeover_id}/complete",
+        response_model=BrowserTakeoverView,
+        status_code=202,
+    )
+    def complete_takeover(
+        takeover_id: str,
+        user: Annotated[AuthenticatedUser, Depends(current_user_with_csrf)],
+    ) -> BrowserTakeoverView:
+        return takeover_view(
+            services.queries.repository.complete_browser_takeover(takeover_id, user.user_id)
+        )
+
+    @app.delete("/api/takeovers/{takeover_id}", status_code=204)
+    def release_takeover(
+        takeover_id: str,
+        user: Annotated[AuthenticatedUser, Depends(current_user_with_csrf)],
+    ) -> None:
+        services.queries.repository.release_browser_takeover(takeover_id, user.user_id)
 
     def execute_command(
         action: Literal["cancel", "continue", "retry"],
@@ -548,6 +779,36 @@ def create_app(
         del user
         return services.queries.get_creator_library(creator_id)
 
+    @app.post(
+        "/api/creator-library/{creator_id}/updates",
+        response_model=CreatorUpdateResponse,
+        status_code=202,
+    )
+    def request_creator_update(
+        creator_id: str,
+        user: Annotated[AuthenticatedUser, Depends(current_user_with_csrf)],
+        idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
+    ) -> CreatorUpdateResponse:
+        updates = services.updates
+        if updates is None:
+            raise CollectorError("STORAGE_UNAVAILABLE", "UPDATER_NOT_CONFIGURED")
+        return updates.create_manual_update(
+            creator_id, user_id=user.user_id, idempotency_key=idempotency_key
+        )
+
+    @app.get(
+        "/api/creator-library/{creator_id}/update",
+        response_model=CreatorUpdateStatus,
+    )
+    def creator_update_status(
+        creator_id: str, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    ) -> CreatorUpdateStatus:
+        del user
+        updates = services.updates
+        if updates is None:
+            raise CollectorError("STORAGE_UNAVAILABLE", "UPDATER_NOT_CONFIGURED")
+        return updates.status(creator_id)
+
     @app.get("/api/creator-library/{creator_id}/history", response_model=CreatorLibraryHistory)
     def creator_library_history(
         creator_id: str, user: Annotated[AuthenticatedUser, Depends(current_user)]
@@ -578,6 +839,20 @@ def create_app(
             creator_id, collection_type, cursor=cursor, limit=limit
         )
 
+    @app.get("/api/creator-library/{creator_id}/videos", response_model=CreatorVideoPage)
+    def creator_library_videos(
+        creator_id: str,
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+        module_key: Literal["recent_video_performance", "recent_xingtu_video_performance"]
+        | None = None,
+        snapshot_id: str | None = None,
+    ) -> CreatorVideoPage:
+        """Work observations of one snapshot (DATA-02/CD-08); read-only and creator-scoped."""
+        del user
+        return services.queries.creator_library_videos(
+            creator_id, module_key=module_key, snapshot_id=snapshot_id
+        )
+
     @app.get("/api/creator-library/{creator_id}/covers/{object_id:path}")
     def creator_library_cover(
         creator_id: str,
@@ -599,6 +874,24 @@ def create_app(
             byte_size=int(reference["byte_size"]),
         )
         return StreamingResponse(iter([body]), media_type=reference["content_type"])
+
+    @app.get(
+        "/api/tasks/{root_task_id}/creators/{creator_id}/videos",
+        response_model=CreatorVideoPage,
+    )
+    def creator_videos(
+        root_task_id: str,
+        creator_id: str,
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+        module_key: Literal["recent_video_performance", "recent_xingtu_video_performance"]
+        | None = None,
+        snapshot_id: str | None = None,
+    ) -> CreatorVideoPage:
+        """The task snapshot's work observations (DATA-02/CD-08); read-only and task-scoped."""
+        del user
+        return services.queries.task_creator_videos(
+            root_task_id, creator_id, module_key=module_key, snapshot_id=snapshot_id
+        )
 
     @app.get("/api/tasks/{root_task_id}/covers/{object_id:path}")
     def cover(
