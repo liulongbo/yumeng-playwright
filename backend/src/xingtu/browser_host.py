@@ -16,6 +16,7 @@ from .domain import (
     ReleaseDisposition,
     SessionHealth,
     SessionHealthStatus,
+    uid,
 )
 from .repository import Repository
 from .runtime import BrowserRuntime, UnitConfig, ensure_line
@@ -106,6 +107,9 @@ class BrowserHost:
         )
         self.session_health: SessionHealth | None = None
         self.maintenance_reason: str | None = None
+        # This nonce is a durable fence only; it is never a CDP/VNC address and therefore cannot
+        # be used to control the browser outside this Worker-owned host.
+        self.browser_instance_id: str | None = None
 
     @classmethod
     @asynccontextmanager
@@ -142,9 +146,14 @@ class BrowserHost:
         try:
             async with host.runtime.open() as browser:
                 host.browser = browser
+                host.browser_instance_id = uid()
+                repo.register_browser_instance(
+                    config.unit_id, owner, generation, host.browser_instance_id
+                )
                 yield host
         finally:
             host.browser = None
+            host.browser_instance_id = None
             repo.release(
                 config.unit_id,
                 owner,
@@ -187,6 +196,7 @@ class BrowserHost:
         actor: str,
         page: Page | None = None,
         challenge_handler: ChallengeHandler | None = None,
+        return_on_challenge_visible: bool = False,
     ) -> int:
         if self.mode != "maintenance" or not self.browser:
             raise CollectorError("LEASE_LOST", "HOST_NOT_IN_MAINTENANCE")
@@ -194,13 +204,18 @@ class BrowserHost:
         search = self.registry.search
         assert session and search
         await self.heartbeat()
-        maintenance_page = page or (
-            self.browser.pages[0] if self.browser.pages else await self.browser.new_page()
+        provided_page_usable = page is not None and not getattr(page, "is_closed", lambda: False)()
+        maintenance_page = (
+            page
+            if provided_page_usable
+            else (self.browser.pages[0] if self.browser.pages else await self.browser.new_page())
         )
-        if page is None:
+        assert maintenance_page is not None
+        if not provided_page_usable:
             # The SSO entry always renders a login form and therefore cannot prove logout by
             # itself.  A protected business page keeps a reusable session on the signed-in app;
-            # a genuinely logged-out session is redirected to login by the platform.
+            # a genuinely logged-out session is redirected to login by the platform. This also
+            # recovers within the same BrowserContext if the operator closed the original Page.
             await maintenance_page.goto(search.entry_url, wait_until="domcontentloaded")
         if challenge_handler:
             health = await challenge_handler.wait_for_stable_session(
@@ -208,6 +223,7 @@ class BrowserHost:
                 session,
                 self.config.expected_account_id,
                 timeout_seconds=timeout,
+                return_on_challenge_visible=return_on_challenge_visible,
             )
             self.observe_session(health)
             account = health.observed_account_id or ""

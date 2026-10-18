@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
+<title>原浏览器维护</title>
+<div id="screen" aria-label="原 Chromium 浏览器"></div>
+<script type="module">
+  // Served beside a pinned noVNC distribution (`core/rfb.js`). No VNC host, password or ticket
+  // reaches the page: the product API authenticates this same-origin WebSocket and selects it.
+  import RFB from "./core/rfb.js";
+  const id = new URLSearchParams(location.search).get("takeover_id");
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw new Error("invalid takeover id");
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  const rfb = new RFB(document.querySelector("#screen"), `${scheme}://${location.host}/api/takeovers/${id}/viewer`);
+  rfb.scaleViewport = true;
+  rfb.resizeSession = false;
+  rfb.viewOnly = false;
+</script>

@@ -1,0 +1,175 @@
+{
+  "run_id": "20261017_121741_2d6bc6d8",
+  "root_task_id": "cb8e14e6-97d1-4222-b63c-12662cb1dd11",
+  "keyword": "户外",
+  "target_count": 21,
+  "checks": [
+    {
+      "check": "MCP-01",
+      "passed": true,
+      "detail": "server={'name': 'Playwright', 'version': '1.62.0-alpha-2026-06-29'}, tools=23, browser=chrome"
+    },
+    {
+      "check": "AUTH-01",
+      "passed": true,
+      "detail": "login result={'path': '/tasks', 'heading': '任务中心'}"
+    },
+    {
+      "check": "TASK-01",
+      "passed": true,
+      "detail": "task detail renders exact keyword 户外"
+    },
+    {
+      "check": "TASK-02",
+      "passed": true,
+      "detail": "task detail renders target count 21"
+    },
+    {
+      "check": "TASK-03",
+      "passed": true,
+      "detail": "task detail renders WAITING_FOR_VERIFICATION"
+    },
+    {
+      "check": "UNIT-01",
+      "passed": true,
+      "detail": "open event count is 1"
+    },
+    {
+      "check": "UNIT-02",
+      "passed": true,
+      "detail": "unit waiting label is visible"
+    },
+    {
+      "check": "UNIT-03",
+      "passed": true,
+      "detail": "account and line references are masked"
+    },
+    {
+      "check": "UNIT-04",
+      "passed": true,
+      "detail": "actionable reason is visible"
+    },
+    {
+      "check": "TAKEOVER-01",
+      "passed": true,
+      "detail": "takeover request button clicked"
+    },
+    {
+      "check": "TAKEOVER-02",
+      "passed": true,
+      "detail": "REQUESTED state rendered"
+    },
+    {
+      "check": "TAKEOVER-03",
+      "passed": true,
+      "detail": "ACTIVE state rendered"
+    },
+    {
+      "check": "TAKEOVER-04",
+      "passed": true,
+      "detail": "three manual probe creators rendered without automatic navigation"
+    },
+    {
+      "check": "TAKEOVER-05",
+      "passed": true,
+      "detail": "mutual-exclusion notice rendered"
+    },
+    {
+      "check": "REAPPEAR-01",
+      "passed": true,
+      "detail": "feedback opened"
+    },
+    {
+      "check": "REAPPEAR-02",
+      "passed": true,
+      "detail": "reason selector rendered"
+    },
+    {
+      "check": "REAPPEAR-03",
+      "passed": true,
+      "detail": "reappearance submitted"
+    },
+    {
+      "check": "REAPPEAR-04",
+      "passed": true,
+      "detail": "backend count=1"
+    },
+    {
+      "check": "VERIFY-01",
+      "passed": true,
+      "detail": "completion submitted"
+    },
+    {
+      "check": "VERIFY-02",
+      "passed": true,
+      "detail": "VERIFYING rendered"
+    },
+    {
+      "check": "VERIFY-03",
+      "passed": true,
+      "detail": "failed check reason rendered"
+    },
+    {
+      "check": "VERIFY-04",
+      "passed": true,
+      "detail": "failed stable check increments reappearance count without resuming"
+    },
+    {
+      "check": "RETRY-01",
+      "passed": true,
+      "detail": "failed workspace closed"
+    },
+    {
+      "check": "RETRY-02",
+      "passed": true,
+      "detail": "second takeover requested in same window"
+    },
+    {
+      "check": "RETRY-03",
+      "passed": true,
+      "detail": "second takeover became ACTIVE"
+    },
+    {
+      "check": "RESUME-01",
+      "passed": true,
+      "detail": "second completion submitted"
+    },
+    {
+      "check": "RESUME-02",
+      "passed": true,
+      "detail": "RESUMED state rendered"
+    },
+    {
+      "check": "RESUME-03",
+      "passed": true,
+      "detail": "task resumed to COLLECTING"
+    },
+    {
+      "check": "RESUME-04",
+      "passed": true,
+      "detail": "unit returned to collect mode"
+    },
+    {
+      "check": "RESUME-05",
+      "passed": true,
+      "detail": "session version advanced once"
+    },
+    {
+      "check": "RESUME-06",
+      "passed": true,
+      "detail": "event resolved"
+    },
+    {
+      "check": "OBS-01",
+      "passed": true,
+      "detail": "browser console summary=Errors: 0"
+    },
+    {
+      "check": "OBS-02",
+      "passed": true,
+      "detail": "no failed HTTP requests recorded"
+    }
+  ],
+  "passed": 33,
+  "failed": 0
+}

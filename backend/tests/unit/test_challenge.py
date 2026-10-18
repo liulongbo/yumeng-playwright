@@ -130,6 +130,26 @@ async def test_timeout_and_invalid_sessions_are_terminal(page_kwargs, code):
     assert error.value.code == code
 
 
+async def test_handoff_check_returns_immediately_when_the_challenge_is_still_visible():
+    """A worker must give the original page back to the human; it must not poll over them."""
+    clock = Clock()
+    page = ReadOnlyPage(clock, challenge=lambda _now: True)
+    handler = ChallengeHandler(
+        None,  # type: ignore[arg-type]
+        ChallengePolicy(stable_seconds=1, timeout_seconds=8, poll_seconds=0.25),
+        clock=clock,
+        sleeper=clock.sleep,
+    )
+
+    with pytest.raises(CollectorError) as error:
+        await handler.wait_for_stable_session(
+            page, session_spec(), "expected", return_on_challenge_visible=True
+        )
+
+    assert error.value.code == "SECURITY_CHALLENGE_STILL_PRESENT"
+    assert clock.value == 0
+
+
 class MemoryRepository:
     def __init__(self, task):
         self.task = task
