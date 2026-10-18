@@ -23,6 +23,8 @@ make api              Start the authenticated M3 FastAPI process (loads .runtime
 make intake-worker    Start P1 Temporal worker; requires UNIT_CONFIG and model credentials
 make collection-worker Start the P2 per-unit Temporal worker; requires UNIT_CONFIG
                       Both workers must run for a UI submission to reach collection.
+make update-scheduler Create scheduled creator-update batches (UNIT_CONFIG, BATCH_SIZE=5);
+                      no browser/model credentials; absence pauses only periodic updates.
 make frontend-dev     Start the React/Vite product UI with /api development proxy
 make frontend-build   Type-check and build the production frontend bundle
 make check            Backend static/unit + frontend type/component/build checks

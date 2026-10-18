@@ -1,5 +1,10 @@
 # 开发任务索引
 
+# 2026-10-16 CD-08 / DATA-02：作品封面与传播量中位数修复 + 7 指标/11 作品字段结构化（CD-08 待验收 / DATA-02 已完成）
+
+[CD-08](CD-08.md) 修复达人详情「创作能力作品封面」与「商业能力播放量中位数」；[DATA-02](DATA-02.md) 完成 7 项内容数据指标与 11 个作品字段的 JSONB 拆分、历史回填与读写链路。要点：①播放量中位数原读顶层 `spread.play_mid`（`1399516`），线上实测该卡片是 `spread.item_rate_metrics.play_mid`（`766187`＝`76.6w`、优于 `99.23%`），修复后页面与平台一致且另六项不变；②作品 `item_cover` 是不透明对象存储 key，改用已登记的 `get_sign_image`（含实测必需的 `format=webp`）与既有 CDN 白名单签名、受控入库并按平台 key 登记，作品列表 15/15 与 14/14 显示真实封面且与作品一一对应（柱序/链接/封面/播放量/标题逐条核对）；③迁移 015/016/017 新增 5 指标列、追加式作品观测表、`media_objects.source_key`，回填 3064 条作品行与 51 位达人的指标值（缺失保持 NULL、未填 0，副标题/收藏数标注 `NOT_PROVIDED`），JSONB 与快照 md5 未变化；④契约升版 `xingtu-ad-creator-featured-v11`（新增 `cover_signs` 请求与 `item_cover` 规范），`adapter_version` 不变；⑤实现中修复签名回声未校验、`text_value(None)` 变 `"None"`、任务入口封面 404、空 `canonical_link` 冲突、`field_sources` 描述空值共 5 个真实缺陷。验证：后端 `403 passed, 1 skipped`、前端 `82 passed`、`ruff`/`format`/`mypy --strict` 与 lint/build 全部通过；两入口真实 Chrome 验收通过。历史封面全量回填已完成（去重 `1590/1591` key，唯一未解析为平台拒签）；仍待验收的一项为「新采集数据按现有业务流程写入」（采集侧封面链路未做真实新采集回归，用户本轮要求不为此单独触发采集）。详见[验收证据](evidence/CD-08-DATA-02-acceptance-2026-10-16.md)。
+
+
 # 2026-10-15 DIAG-01：巨量星图采集请求行为与验证触发专项诊断（待验收）
 
 [DIAG-01](DIAG-01.md) 只做诊断与归因，**未实施任何修复**，未改动采集主链路（`adapter.py`/`engine.py`/`worker.py`/`workflow.py`/`observer.py`/`challenge.py`/`browser_host.py` 零改动）。为回答"为什么自动采集比人工更容易遇到滑块/风控"，新增**默认关闭**的 Context 级请求普查（`request_census.py` + `runtime.py` 一处挂载点，未设 `XINGTU_REQUEST_CENSUS` 时行为与改动前一致）与人工基线只读脚本，并以**产品前端一次提交**（关键词「汽车」、目标 2 位、发送前硬校验正文、仅提交一次）取得真实样本 `381d628b`。**核心量化结论**：该次**零验证、零失败、零重跑**的健康运行仍产生 **2698 条网络请求**，其中静态资源 1743（64.6%）、平台 API 542、埋点监控安全 SDK 183，而系统自有的"关联请求"计数器只记 **49 条（1.8%）**；跨操作完全重复请求实测 **1966 条**（静态资源占 1345 条）而计数器恒为 **0**（`duplicate_request_count` 只在单操作内计数）——同一个 30 秒失败运行甚至可以同时是"计数器 0 条"与"普查 542 条"。**共登记 11 项问题**，两项 P0：①精选集合整段未采集——两位达人 4 组精选全部 `NOT_ATTEMPTED`、`featured_collections` **0 行**、封面 **0 个**，`verify_identity` 在精选重载后判 `IDENTITY_MISMATCH`，而普查 `url_key` 证明重载加载的确是同一位达人（达人 1 为 13/13、达人 2 为 14/14 完全重合，两位达人之间零重合）；②`WAITING_FOR_RESOURCE`/`RETRY_WAIT` 不在 workflow 显式唤醒集合，Temporal 历史实证**每个 segment 各有 2 次 `collect_segment_v1` 执行、中间各一个 30 秒定时器**（`01a13e24`：0.15→92.5s，TimerStarted 30s，122.5→263.0s），叠加 `resume_supported=false` 每次重跑都清游标重扫第 1 页，使单达人耗时 77s→263s、请求约翻倍。历史线索复核：**159 关联请求不可复现**（全仓仅 DEC-015 一处、无口径无任务 ID，该任务 checkpoint 现为 `observed_requests=201`，`task_checkpoints` 单行可变无历史版本）；**69–84ms 异常恢复完全可复现**（`audit_logs` 五组 84/73/76/69/81 ms）；另有真实自然挑战检测→放行仅 **5.740s** 且等待期 `challenge_samples=0`（15 秒观测窗未生效）、失败证据被固定标注 `network_mode=production_line`（`evidence.py:28` 默认值未被覆盖）等。回归：新增普查单测 7 例通过；`backend/tests/unit` 220 passed、`contract` 33 passed、`integration` 81 passed/1 skipped（1 项为迁移 013 后既有测试期望未同步，非本轮引入）；`ruff`/`format`/`mypy`（strict，32 files）通过。**人工基线已完成**（同两位达人：自动化 1.46× 总请求、2× 主页加载、2.06× 完全重复，业务 API 仅 1.21×）。**ISSUE-001 根因已确认并经用户授权修复（A + C1）**：精选重载后平台 SPA hydration 会令 `div.author-info span.copy-text` 出现约 45–60 ms 的空文本窗口，而 `read_locator` 只拒绝 `None`，空串被当作成功读取 → `'' != creator_id` → `CREATOR_INVALID: IDENTITY_MISMATCH` → 两组精选全中止且零落库。修复为 `adapter.py` 4 处（`read_locator` 可选 `require_non_empty`、`verify_identity` 5s 有界确认、`featured_spec_local_reason` 极窄白名单），未改 Schema/API/调度/执行单元/会话策略。**真实回归（同参数、同一对达人）**：`featured_status` NOT_ATTEMPTED → **COMPLETED**、精选 0 → **4 行**、卡片 0 → **11（全 STORED）**、封面 0 → **11**，零失败/零挑战/零重试、8 模块无退化；单元 **259 passed**、契约 **33 passed**、集成 **81 passed + 1 skipped**（另 1 项既有迁移版本断言失败，与本轮无关）。**未 commit/push/merge**，等待用户审阅。**A3（达人必需字段缺失）已修复并通过真实回归**：根因为 `profile()` 只执行 `modules[0]` 的 `actions`，导致 `seeding`/`conversion` 声明的`capture_on_profile_load=true` 在**不会预取该端点的达人**上永远等不到请求（16 个 `MODULE_TIMEOUT`）。修复为**加法式门控**：同一已登记窗口内，仅当某模块仍有 `required` 响应未到达时才执行其**已核验**的标签交互（选择器全部取自 featured 既有集合），并收窄校验守卫（仍禁止加载型模块 `entry`）。实测达人 2 **`FAILED` 19 → 10、`COLLECTED` 59 → 67、完整率 72.8% → 82.7%**，**达人 1 零字段变化**（预取达人零额外点击），请求 +1.2%、**页面加载次数不变**、无重复/无重试/无挑战；单元 **271 passed**、契约 **33 passed**、集成 **81 passed + 1 skipped**（另 1 项既有迁移断言失败，与本次无关）。**未 commit/push/merge**；5 项 C 级语义事项（`-` 占位值、履约 3 个 `MISSING_SOURCE`、`order_experience`、`contract_version` 是否升版、既有集成断言）已停止待授权。详见[诊断报告](../evidence/DIAG-01-request-diagnosis-2026-10-15.md)、[修复报告](../evidence/DIAG-01-fix-issue001-2026-10-15.md)、[A3 诊断](../evidence/DIAG-01-missing-required-fields-2026-10-15.md)与[A3 修复报告](../evidence/DIAG-01-A3-fix-issue-fields-2026-10-15.md)。
@@ -49,7 +54,7 @@
 
 # 2026-10-14 DEV-01：星采本地全栈一键启停入口（已完成）
 
-[DEV-01](tasks/DEV-01.md) 新增 `./dev.sh`（实现 `scripts/dev.sh`），把「确保依赖 → 前置自检 → API + P1 Intake Worker + P2 采集 Worker + 前端页面 → 就绪校验」收敛为一条 `up` 命令，并提供 `stop` / `restart` / `status` / `logs` / `check`。`up` 采用接管而非叠加（已在监听/运行的进程记录 PID 复用，重复 Worker 清理为每账号一个），`stop` 只结束本脚本记录过的进程并连同 `npm run dev` 的子进程树一并结束。2026-10-14 实跑：`PREFLIGHT_OK`（13 项）、`restart` 完整停启（旧 PID 全部退出、新 PID 5 秒内就绪）、`up` 幂等，Playwright + 本机 Chrome 登录 `media-a` 后任务中心 21 行与达人库「20 位已加载」渲染正常（[证据](evidence/DEV-01-launcher-2026-10-14.md)）。**2026-10-16 追加**：按用户要求做全栈重启（`stop` → 人工清理游离进程 → Compose 依赖 down/up → `up`），`PREFLIGHT_OK` 12 项、四进程新 PID 就绪、两个 Temporal 队列在线，只读抽查 login/tasks(20)/creator-library(20)/capabilities/health 均 200；同时登记**未修**的 `stop` PID 记录盲区（API 与另一终端的前端非脚本记录者，需人工结束）（[重启证据](evidence/DEV-01-restart-2026-10-16.md)）。**同日第二轮**：用户再次要求重启，起始时应用进程与 **Docker 守护进程**均已停止——先 `open -a Docker`（30 秒内就绪，server 29.1.3）、再 `./.runtime/dev-up.sh up` 与 `./dev.sh up`，`PREFLIGHT_OK` 12 项、四进程新 PID（94968/94992/95009/95018）就绪，`pids.tsv` 与真实进程逐一对应（上一轮盲区未复现）、5174 未监听，只读抽查全部 200。属工具入口验证，不构成平台能力或生产就绪证据。
+[DEV-01](tasks/DEV-01.md) 新增 `./dev.sh`（实现 `scripts/dev.sh`），把「确保依赖 → 前置自检 → API + P1 Intake Worker + P2 采集 Worker + 前端页面 → 就绪校验」收敛为一条 `up` 命令，并提供 `stop` / `restart` / `status` / `logs` / `check`。`up` 采用接管而非叠加（已在监听/运行的进程记录 PID 复用，重复 Worker 清理为每账号一个），`stop` 只结束本脚本记录过的进程并连同 `npm run dev` 的子进程树一并结束。2026-10-14 实跑：`PREFLIGHT_OK`（13 项）、`restart` 完整停启（旧 PID 全部退出、新 PID 5 秒内就绪）、`up` 幂等，Playwright + 本机 Chrome 登录 `media-a` 后任务中心 21 行与达人库「20 位已加载」渲染正常（[证据](evidence/DEV-01-launcher-2026-10-14.md)）。**2026-10-16 追加**：按用户要求做全栈重启（`stop` → 人工清理游离进程 → Compose 依赖 down/up → `up`），`PREFLIGHT_OK` 12 项、四进程新 PID 就绪、两个 Temporal 队列在线，只读抽查 login/tasks(20)/creator-library(20)/capabilities/health 均 200；同时登记**未修**的 `stop` PID 记录盲区（API 与另一终端的前端非脚本记录者，需人工结束）（[重启证据](evidence/DEV-01-restart-2026-10-16.md)）。**同日第二轮**：用户再次要求重启，起始时应用进程与 **Docker 守护进程**均已停止——先 `open -a Docker`（30 秒内就绪，server 29.1.3）、再 `./.runtime/dev-up.sh up` 与 `./dev.sh up`，`PREFLIGHT_OK` 12 项、四进程新 PID（94968/94992/95009/95018）就绪，`pids.tsv` 与真实进程逐一对应（上一轮盲区未复现）、5174 未监听，只读抽查全部 200。属工具入口验证，不构成平台能力或生产就绪证据。**2026-10-17 第三轮**：用户要求重启所有服务；起始四进程均在运行，但 `./dev.sh check` 因单元 `SESSION_UNVERIFIED` 拒绝启动。先用产品 API 提交最小任务让 P2 实测会话、把单元恢复为 `READY` 后取消任务，再标准 `./dev.sh restart`：`PREFLIGHT_OK` 12 项、四进程新 PID（25515/25539/25556/25565）就绪、单元重启后仍 `READY`/`VALID`，只读抽查全部 200（[重启证据](evidence/DEV-01-restart-2026-10-17.md)）。
 
 # 2026-10-13 LIB-01：抖音星图达人库（进行中）
 
@@ -181,7 +186,7 @@ B3/C 最终证明自动选号在当前 Playwright 环境中不可靠：目标条
 [AUTO-01](AUTO-01.md)：**进行中／未验收**，为跨现有功能卡的优化跟踪项，不计入原 12 个一期交付单元。2026-09-29 已实现单达人 `IDENTITY_UNREADABLE` 三次尝试后跳过续跑、按能力 scope 的 Contract breaker，并通过合成 20/200 位连续任务；旧“任务结束必回 NEEDS_LOGIN”已被 DEC-013 取代。未验收：真实全字段、第 3 页及终点、真实 5/10/20、50/100 与 7 天观察。
 
 
-> 更新时间：2026-10-10T23:15:00+08:00。具体实现与验收事实只在各卡片及其证据维护；本表同步ID、标题、状态和链接。
+> 更新时间：2026-10-17T12:20:00+08:00。具体实现与验收事实只在各卡片及其证据维护；本表同步ID、标题、状态和链接。
 
 **先看[项目任务进度总览](../项目任务进度总览.md)**：当前进度、推荐顺序、F/T/U覆盖、依赖及AI执行方式。
 
@@ -197,10 +202,21 @@ B3/C 最终证明自动选号在当前 Playwright 环境中不可靠：目标条
 | INTAKE-01 | 筛选表单、P1转换与可靠提交 | 已完成 | [INTAKE-01.md](INTAKE-01.md) |
 | F06 | 主页精选作品采集与封面存储 | 已完成 | [F06.md](F06.md) |
 | CONSOLE-01 | 任务中心与任务内达人结果 | 已完成 | [CONSOLE-01.md](CONSOLE-01.md) |
-| F09 | 手动刷新达人 | 待办 | [F09.md](F09.md) |
-| F10 | 执行单元状态与远程登录维护 | 待办 | [F10.md](F10.md) |
+| F09 | 手动更新达人（达人库入口，UPD-03） | 待验收 | [F09.md](F09.md) |
+| F10 | 执行单元状态与远程登录维护 | 进行中 | [F10.md](F10.md) |
+| F12 | 达人周期性更新（UPD-04） | 待验收 | [F12.md](F12.md) |
 | OPS-01 | 生产运行、资源调度与运维恢复 | 待办 | [OPS-01.md](OPS-01.md) |
 | RELEASE-01 | 一期全链路联调与上线验收 | 待办 | [RELEASE-01.md](RELEASE-01.md) |
+
+## 2026-10-17 达人手动/周期性更新（UPD）
+
+| ID | 标题 | 状态 | 卡片 |
+|---|---|---|---|
+| UPD-01 | 更新任务模型、迁移与执行单元能力配置 | 已完成 | [UPD-01.md](UPD-01.md) |
+| UPD-02 | 统一执行单元池匹配、优先级与更新执行分支 | 待验收 | [UPD-02.md](UPD-02.md) |
+| UPD-03 | 单达人手动更新闭环 | 待验收 | [UPD-03.md](UPD-03.md) |
+| UPD-04 | 达人周期性更新调度器 | 待验收 | [UPD-04.md](UPD-04.md) |
+| UPD-05 | 任务中心统一展示、文档与验收 | 待验收 | [UPD-05.md](UPD-05.md) |
 
 ## 2026-10-14 前端优化任务
 
