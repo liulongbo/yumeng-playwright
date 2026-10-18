@@ -1,6 +1,6 @@
 {
   "schema_version": "platform_registry.v1",
-  "contract_version": "xingtu-ad-creator-featured-v10",
+  "contract_version": "xingtu-ad-creator-featured-v11",
   "adapter_version": "browser-v9",
   "status": "VERIFIED",
   "sample_kind": "live",
@@ -13,7 +13,8 @@
     "docs/evidence/AUTO-01-current-account-inventory-2026-09-28.md",
     "docs/evidence/AUTO-01-profile-pagination-implementation-2026-10-06.md",
     "docs/evidence/F05-six-fields-2026-10-08.md",
-    "docs/evidence/FILTER-01-live-filter-dictionary-2026-10-14.md"
+    "docs/evidence/FILTER-01-live-filter-dictionary-2026-10-14.md",
+    "docs/tasks/CD-08.md"
   ],
   "capabilities": {
     "version": "xingtu-ad-creator-square-v2",
@@ -4666,6 +4667,19 @@
           "success_value": "0",
           "repeats": true,
           "repeat_result_mode": "latest"
+        },
+        {
+          "key": "cover_signs",
+          "method": "GET",
+          "host": "www.xingtu.cn",
+          "path": "/gw/api/fe_common_service/tools/get_sign_image",
+          "request_match": {},
+          "response_match": {},
+          "success_path": "base_resp.status_code",
+          "success_value": "0",
+          "required": false,
+          "repeats": true,
+          "repeat_result_mode": "all"
         }
       ],
       "fields": [
@@ -4707,6 +4721,17 @@
             "kind": "response",
             "request_key": "show_items",
             "path": "latest_item_info"
+          },
+          "item_cover": {
+            "row_path": "item_cover",
+            "request_key": "cover_signs",
+            "response_uri_path": "img.uri",
+            "url_path": "mainURL",
+            "request_path": "uri",
+            "query_defaults": {
+              "durationTS": "86400",
+              "format": "webp"
+            }
           }
         },
         {
@@ -4720,6 +4745,17 @@
             "kind": "response",
             "request_key": "show_items",
             "path": "latest_star_item_info"
+          },
+          "item_cover": {
+            "row_path": "item_cover",
+            "request_key": "cover_signs",
+            "response_uri_path": "img.uri",
+            "url_path": "mainURL",
+            "request_path": "uri",
+            "query_defaults": {
+              "durationTS": "86400",
+              "format": "webp"
+            }
           }
         },
         {
@@ -4733,7 +4769,21 @@
           }
         }
       ],
-      "checkpoint_version": 1
+      "checkpoint_version": 1,
+      "response_settle_seconds": 3,
+      "cover": {
+        "allowed_hosts": [
+          "p3-star-fe-sign.byteimg.com",
+          "p9-star-fe-sign.byteimg.com",
+          "p26-star-fe-sign.byteimg.com"
+        ],
+        "allowed_content_types": [
+          "image/webp"
+        ],
+        "max_bytes": 5242880,
+        "timeout_seconds": 20,
+        "max_redirects": 0
+      }
     }
   ],
   "featured": [

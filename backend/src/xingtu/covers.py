@@ -58,6 +58,7 @@ class CoverStore(Protocol):
         content_type: str,
         checksum: str,
         source_url: str,
+        source_key: str | None = None,
     ) -> str: ...
 
     def verify(self, object_id: str) -> None: ...
@@ -78,13 +79,31 @@ def _register(
     byte_size: int,
     source_url: str,
     root_task_id: str,
+    source_key: str | None = None,
 ) -> None:
+    """Register a stored cover object.
+
+    `source_key` is the platform's own **opaque** object key when the cover came from a record that
+    only exposes one (the creation video works, DATA-02) instead of a signed URL.  It is what the
+    read side can match on later, because the signed URL expires.  An existing row keeps its own key
+    unless it had none, so re-storing a featured cover never drops information.
+    """
     with repository.connect() as conn:
         conn.execute(
             """INSERT INTO media_objects(
-            object_id,checksum,kind,content_type,byte_size,source_url,root_task_id)
-            VALUES(%s,%s,'cover',%s,%s,%s,%s) ON CONFLICT(object_id) DO NOTHING""",
-            (object_id, checksum, content_type, byte_size, source_url, root_task_id),
+            object_id,checksum,kind,content_type,byte_size,source_url,root_task_id,source_key)
+            VALUES(%s,%s,'cover',%s,%s,%s,%s,%s)
+            ON CONFLICT(object_id) DO UPDATE SET
+              source_key=COALESCE(media_objects.source_key,EXCLUDED.source_key)""",
+            (
+                object_id,
+                checksum,
+                content_type,
+                byte_size,
+                source_url,
+                root_task_id,
+                source_key,
+            ),
         )
 
 
@@ -112,6 +131,7 @@ class LocalCoverStore:
         content_type: str,
         checksum: str,
         source_url: str,
+        source_key: str | None = None,
     ) -> str:
         object_id = cover_object_key(root_task_id, checksum)
         target = self.path(object_id)
@@ -130,6 +150,7 @@ class LocalCoverStore:
             byte_size=len(body),
             source_url=source_url,
             root_task_id=root_task_id,
+            source_key=source_key,
         )
         return object_id
 
@@ -188,6 +209,7 @@ class S3CoverStore:
         content_type: str,
         checksum: str,
         source_url: str,
+        source_key: str | None = None,
     ) -> str:
         object_id = cover_object_key(root_task_id, checksum)
         try:
@@ -225,6 +247,7 @@ class S3CoverStore:
             byte_size=len(body),
             source_url=source_url,
             root_task_id=root_task_id,
+            source_key=source_key,
         )
         return object_id
 
@@ -325,6 +348,7 @@ class CoverPipeline:
         source_url: str | None,
         spec: CoverSpec,
         fetch: CoverFetcher,
+        source_key: str | None = None,
     ) -> CoverRef:
         if not source_url:
             return CoverRef(status=CoverStatus.NOT_ATTEMPTED, failure_reason="COVER_SOURCE_MISSING")
@@ -340,6 +364,7 @@ class CoverPipeline:
                 content_type=content_type,
                 checksum=checksum,
                 source_url=fetched.final_url,
+                source_key=source_key,
             )
             self.storage.verify(object_id)
             return CoverRef(

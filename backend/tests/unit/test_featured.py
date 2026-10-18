@@ -277,7 +277,7 @@ class Store:
         self.objects: dict[str, bytes] = {}
         self.verify_failure = verify_failure
 
-    def put(self, *, root_task_id, body, content_type, checksum, source_url):
+    def put(self, *, root_task_id, body, content_type, checksum, source_url, source_key=None):
         object_id = f"cover/{root_task_id}/{checksum}"
         self.objects[object_id] = body
         return object_id

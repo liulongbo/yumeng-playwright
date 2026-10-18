@@ -106,6 +106,32 @@ class SourceSpec(Model):
         return self
 
 
+class ItemCoverSpec(Model):
+    """Per-row cover signing for an array-valued module field (DATA-02 / CD-08).
+
+    A creation video record carries `item_cover`, an **opaque** platform object-store key (measured:
+    0 of 1845 non-empty covers in the development database is a renderable URL).  The platform's own
+    page exchanges that key for a short-lived signed URL through the already registered
+    ``/gw/api/fe_common_service/tools/get_sign_image`` request, joined by equality on the returned
+    ``img.uri``.  This spec registers that exchange for a *list* field, where the
+    featured-collection single-value ``SourceSpec`` join does not apply.
+
+    Nothing here constructs a URL: the signed address is only ever the observed ``url_path`` value,
+    and it stays subject to the module's registered :class:`CoverSpec` host/content-type scope.
+    """
+
+    row_path: str
+    request_key: str
+    response_uri_path: str
+    url_path: str
+    request_path: str
+    # Fixed query parameters the platform's own page always sends with this lookup, registered so
+    # a *cover backfill* (which has no observed request to copy) still issues the platform's own
+    # shape.  `format=webp` is load-bearing: live-verified 2026-10-16, omitting it yields a
+    # `.jpeg` address that falls outside the registered `image/webp` download scope.
+    query_defaults: dict[str, str] = Field(default_factory=dict)
+
+
 class FieldSpec(Model):
     key: str
     name: str
@@ -115,6 +141,8 @@ class FieldSpec(Model):
     fallback_on: list[Literal["MISSING_SOURCE", "MODULE_TIMEOUT"]] = Field(default_factory=list)
     compare_rounding: Literal["nearest"] | None = None
     unit: str | None = None
+    # Array-valued module fields may register a per-row cover exchange; see ItemCoverSpec.
+    item_cover: ItemCoverSpec | None = None
     # Percent is the historical default. ``decimal`` is for an API ratio such as -0.0024, while
     # ``auto`` is explicitly selected when an API decimal has a percent-formatted DOM fallback.
     ratio_input: Literal["percent", "decimal", "auto"] = "percent"
@@ -167,18 +195,41 @@ class ProfileModuleSpec(Model):
     ready: LocatorSpec
     ready_hidden: list[LocatorSpec] = Field(default_factory=list)
     timeout_seconds: float | None = Field(default=None, gt=0)
+    # Bounded grace window for registered repeated auxiliary responses (for example the per-row
+    # signed cover URLs of a lazily rendered works list) after the visible module is ready.
+    response_settle_seconds: float = Field(default=0, ge=0, le=10)
     requests: list[RequestSpec] = Field(default_factory=list)
     fields: list[FieldSpec] = Field(min_length=1)
     period_source: SourceSpec | None = None
     absence: ModuleAbsenceSpec | None = None
+    # Cover download scope for this module's per-row covers (DATA-02 / CD-08).
+    cover: CoverSpec | None = None
     checkpoint_version: int = Field(default=1, ge=1)
     coverage_gaps: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def cover_scope_has_a_row_source(self) -> ProfileModuleSpec:
+        if self.cover and not any(field.item_cover for field in self.fields):
+            raise ValueError("a module cover scope requires at least one field with item_cover")
+        if self.cover and self.cover.field_key:
+            raise ValueError("a module cover scope must not name a single card field")
+        for field in self.fields:
+            if field.item_cover and not self.cover:
+                raise ValueError("item_cover requires the module's cover scope")
+            if field.item_cover and field.kind != "structured":
+                raise ValueError("item_cover is only defined for a structured array field")
+        return self
+
 
 class CoverSpec(Model):
-    """Registered cover download scope; the CDN allowlist is an explicit verified range."""
+    """Registered cover download scope; the CDN allowlist is an explicit verified range.
 
-    field_key: str = "cover"
+    `field_key` names the single card field that carries the cover address in a featured
+    collection. A profile module has no such single field (it uses each field's `item_cover` spec
+    instead), so the key is optional there and a module-level validator requires one such field.
+    """
+
+    field_key: str | None = None
     allowed_hosts: list[str] = Field(min_length=1)
     allowed_content_types: list[str] = Field(min_length=1)
     max_bytes: int = Field(gt=0)

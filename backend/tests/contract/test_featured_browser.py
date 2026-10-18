@@ -179,7 +179,7 @@ class Store:
     def __init__(self):
         self.objects = {}
 
-    def put(self, *, root_task_id, body, content_type, checksum, source_url):
+    def put(self, *, root_task_id, body, content_type, checksum, source_url, source_key=None):
         object_id = f"cover/{root_task_id}/{checksum}"
         self.objects[object_id] = (body, content_type)
         return object_id

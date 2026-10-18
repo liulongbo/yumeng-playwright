@@ -6,7 +6,7 @@ import copy
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any, Protocol
+from typing import Any, NamedTuple, Protocol
 from urllib.parse import urlencode, urljoin, urlsplit, urlunsplit
 
 from playwright.async_api import BrowserContext, Locator, Page
@@ -17,9 +17,11 @@ from .contracts import (
     AttributeFilterEntry,
     CoverSpec,
     FeaturedCollectionSpec,
+    ItemCoverSpec,
     LocatorSpec,
     PlatformRegistry,
     ProfileModuleSpec,
+    RequestSpec,
     SearchSpec,
     SourceSpec,
 )
@@ -119,6 +121,38 @@ async (args) => {
 }
 """
 
+
+def _signed_pair(uri: Any, url: Any) -> tuple[str, str]:
+    """Both members of a signing response, or two empty strings.
+
+    `text_value(None)` is the *string* "None", which is truthy; converting a missing member that way
+    would turn "the platform gave no cover key" into a request for an object literally named `None`.
+    Absence therefore has to be established on the raw value, exactly once, here.
+    """
+    return (
+        uri.strip() if isinstance(uri, str) and uri.strip() else "",
+        url.strip() if isinstance(url, str) and url.strip() else "",
+    )
+
+
+class RowCoverSource(NamedTuple):
+    """One observed per-row cover exchange: the platform's opaque key and its signed URL.
+
+    `source_key` is what the read side can match on later (the signed URL expires); the sink that
+    receives this is responsible for storing the object and for never substituting another work's
+    image when the platform gave none.
+    """
+
+    field_key: str
+    position: int
+    source_key: str
+    signed_url: str
+
+
+# Async sink invoked once per resolvable row cover during module parsing.
+RowCoverSink = Callable[[RowCoverSource], Awaitable[None]]
+
+
 JOIN_LOOKUP_FETCH_JS = """
 async (args) => {
   const response = await fetch(args.url, {
@@ -137,6 +171,7 @@ class Adapter(Protocol):
     module_keys: list[str]
     module_fields: dict[str, list[str]]
     module_checkpoint_versions: dict[str, int]
+    module_specs: dict[str, ProfileModuleSpec]
     featured_keys: list[str]
     featured_card_fields: dict[str, list[str]]
     featured_checkpoint_versions: dict[str, int]
@@ -155,7 +190,11 @@ class Adapter(Protocol):
 
     def profile(self, creator: CreatorRef, ctx: ExecutionContext) -> Any: ...
     async def collect_module(
-        self, key: str, creator: CreatorRef, ctx: ExecutionContext
+        self,
+        key: str,
+        creator: CreatorRef,
+        ctx: ExecutionContext,
+        row_covers: RowCoverSink | None = None,
     ) -> ModuleObservation: ...
     async def collect_featured_collections(
         self, creator: CreatorRef, cp: Checkpoint, ctx: ExecutionContext
@@ -354,6 +393,7 @@ class BrowserAdapter:
         self.module_keys = [m.key for m in registry.modules]
         self.module_fields = {m.key: [f.key for f in m.fields] for m in registry.modules}
         self.module_checkpoint_versions = {m.key: m.checkpoint_version for m in registry.modules}
+        self.module_specs = {m.key: m for m in registry.modules}
         self.featured_specs = {spec.key.value: spec for spec in registry.featured}
         self.featured_keys = [spec.key.value for spec in registry.featured]
         self.featured_card_fields = {
@@ -830,9 +870,13 @@ class BrowserAdapter:
         raise CollectorError(code, health.evidence_reason)
 
     async def recheck_session(self) -> None:
-        if not self.search_page:
+        # An update task has no search page: its protected page is the creator detail page opened
+        # by profile().  Falling back here is what lets an identity re-read prove the session
+        # instead of failing as SEARCH_PAGE_NOT_AVAILABLE.
+        page = self.search_page or self.detail_page
+        if not page:
             raise CollectorError("SESSION_INDETERMINATE", "SEARCH_PAGE_NOT_AVAILABLE")
-        await self.check_session(self.search_page)
+        await self.check_session(page)
 
     async def prepare(self, plan: FilterPlan, cp: Checkpoint, ctx: ExecutionContext) -> bool:
         self.registry.capabilities.validate_plan(plan, live=self.live)
@@ -1307,7 +1351,11 @@ class BrowserAdapter:
         return value
 
     async def collect_module(
-        self, key: str, creator: CreatorRef, ctx: ExecutionContext
+        self,
+        key: str,
+        creator: CreatorRef,
+        ctx: ExecutionContext,
+        row_covers: RowCoverSink | None = None,
     ) -> ModuleObservation:
         assert self.detail_page
         page = self.detail_page
@@ -1341,8 +1389,22 @@ class BrowserAdapter:
             await self.actions(page, spec.actions)
             await self.wait_ready(page, spec.ready, spec.ready_hidden)
             await self.check_session(page)
+            if spec.cover and spec.response_settle_seconds:
+                # A bounded grace window for the registered per-row cover signing requests that the
+                # lazy works list only issues once it renders.
+                await asyncio.sleep(spec.response_settle_seconds)
             data, failures = await capture.read()
-            return await self.parse_module(page, spec, creator, ctx, operation, data, failures)
+            return await self.parse_module(
+                page,
+                spec,
+                creator,
+                ctx,
+                operation,
+                data,
+                failures,
+                replays=dict(capture.replays),
+                row_covers=row_covers,
+            )
 
     async def collection_absence(
         self,
@@ -1862,7 +1924,9 @@ class BrowserAdapter:
         if local and local.status == FieldStatus.COLLECTED and local.value:
             local_key = str(local.value)
         cover = None
-        if spec.cover:
+        if spec.cover and spec.cover.field_key:
+            # A featured collection always registers the single card field that carries the address;
+            # a profile module has no such field (its fields declare `item_cover` instead).
             cover_field = by_key.get(spec.cover.field_key)
             source_url = (
                 cover_field.value
@@ -2053,6 +2117,8 @@ class BrowserAdapter:
         operation: str,
         data: dict[str, Any],
         failures: dict[str, str],
+        replays: dict[str, ReplayRequest] | None = None,
+        row_covers: RowCoverSink | None = None,
     ) -> ModuleObservation:
         gaps = list(spec.coverage_gaps) + self.registry.coverage_gaps
         absence = await self.module_absence(page, spec, operation, data, failures)
@@ -2225,6 +2291,7 @@ class BrowserAdapter:
             except (ValueError, TypeError):
                 observation.failure_reason = "FIELD_SCHEMA_MISMATCH"
             fields.append(observation)
+        gaps.extend(await self.emit_row_covers(page, spec, data, failures, replays, row_covers))
         return ModuleObservation(
             creator_ref=creator,
             module_key=spec.key,
@@ -2235,6 +2302,153 @@ class BrowserAdapter:
             operation_id=operation,
             contract_version=self.registry.contract_version,
         )
+
+    async def emit_row_covers(
+        self,
+        page: Page,
+        spec: ProfileModuleSpec,
+        data: dict[str, Any],
+        failures: dict[str, str],
+        replays: dict[str, ReplayRequest] | None,
+        sink: RowCoverSink | None,
+    ) -> list[str]:
+        """Hand each array row's opaque cover key together with its *observed* signed URL to `sink`.
+
+        The platform never returns a renderable work-cover address: `item_cover` is an opaque object
+        key, and the page exchanges it for a short-lived signed URL through the registered
+        `get_sign_image` request.  Only an observed `mainURL` is ever used — this method never
+        builds a CDN address.  A row whose key could not be signed is skipped (the caller records
+        an unresolved cover, never a substitute image) and the module reports a coverage gap.
+        """
+        if sink is None or spec.cover is None:
+            return []
+        join_specs = [field.item_cover for field in spec.fields if field.item_cover]
+        if not join_specs:
+            return []
+        observed: dict[str, str] = {}
+        bodies_by_key: dict[str, list[Any]] = {}
+        for field in spec.fields:
+            join = field.item_cover
+            if join is None:
+                continue
+            raw_bodies = data.get(join.request_key)
+            bodies = raw_bodies if isinstance(raw_bodies, list) else [raw_bodies]
+            bodies_by_key[join.request_key] = [b for b in bodies if b is not None]
+            for body in bodies_by_key[join.request_key]:
+                uri, url = _signed_pair(
+                    lookup(body, join.response_uri_path), lookup(body, join.url_path)
+                )
+                if uri:
+                    # A later signature for the same key is the current one.
+                    observed[uri] = url
+        if not observed and not any(
+            (replays or {}).get(join.request_key) or join.query_defaults for join in join_specs
+        ):
+            return ["cover_signs_unavailable"]
+        gaps: list[str] = []
+        signed_missing = False
+        for field in spec.fields:
+            join = field.item_cover
+            if join is None or not field.source.request_key or not field.source.path:
+                continue
+            if field.source.request_key in failures:
+                gaps.append("cover_rows_unreadable")
+                continue
+            rows = lookup(data.get(field.source.request_key), field.source.path)
+            if not isinstance(rows, list):
+                continue
+            request_spec = next(
+                (request for request in spec.requests if request.key == join.request_key), None
+            )
+            for position, row in enumerate(rows):
+                if not isinstance(row, dict):
+                    continue
+                source_key, _ = _signed_pair(lookup(row, join.row_path), "placeholder")
+                if not source_key:
+                    # The platform itself returned no cover key for this work: a real absence.
+                    continue
+                signed_url = observed.get(source_key)
+                if signed_url is None:
+                    signed_url = await self.replay_row_cover_sign(
+                        page, join, request_spec, replays, failures, source_key
+                    )
+                if signed_url is None:
+                    signed_missing = True
+                    continue
+                await sink(RowCoverSource(field.key, position, source_key, signed_url))
+        if signed_missing:
+            gaps.append("cover_sign_missing")
+        return gaps
+
+    async def replay_row_cover_sign(
+        self,
+        page: Page,
+        join: ItemCoverSpec,
+        request_spec: RequestSpec | None,
+        replays: dict[str, ReplayRequest] | None,
+        failures: dict[str, str],
+        source_key: str,
+    ) -> str | None:
+        """Re-issue the signing lookup for one key the lazy works list did not render.
+
+        When the platform's own signing request was observed, its exact
+        method/headers/parameters are reused and only the registered URI parameter is replaced —
+        the request shape stays the platform's own.  When it was not observed (for example a
+        bounded window in which the list never rendered that row), the registered
+        `query_defaults` are used instead, which is still contract data rather than a guess.
+        A `None` result means "not signed" and is reported as a coverage gap by the caller
+        rather than guessed at.
+        """
+        if request_spec is None or join.request_key in failures:
+            return None
+        replay = (replays or {}).get(join.request_key)
+        headers: dict[str, str] = {}
+        if replay is not None:
+            if replay.method != "GET":
+                return None
+            params = copy.deepcopy(replay.body)
+            parsed = urlsplit(replay.url)
+            scheme, netloc, path, headers = (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                replay.headers,
+            )
+            try:
+                # The observed request already carries the URI parameter; only its value changes.
+                replace_path(params, join.request_path, source_key)
+            except CollectorError:
+                return None
+        else:
+            if not join.query_defaults:
+                return None
+            params = {**join.query_defaults, join.request_path: source_key}
+            scheme, netloc, path = "https", request_spec.host, request_spec.path
+        try:
+            replay_url = urlunsplit((scheme, netloc, path, urlencode(params, doseq=True), ""))
+            response = await page.evaluate(
+                JOIN_LOOKUP_FETCH_JS, {"url": replay_url, "headers": headers}
+            )
+            encoded = str(response.get("text", "")).encode()
+            if (
+                int(response.get("status", 0)) != 200
+                or "json" not in str(response.get("contentType", "")).lower()
+                or len(encoded) > (self.registry.response_body_max_bytes or 1)
+            ):
+                return None
+            body = json.loads(encoded)
+        except (CollectorError, ValueError, TypeError):
+            return None
+        if request_spec.success_path and (
+            text_value(lookup(body, request_spec.success_path)) != request_spec.success_value
+        ):
+            return None
+        # Equality guard, mirroring the featured card join: a response that echoes a different
+        # object key must never be attached to this row, or the UI would show another work's image.
+        uri, url = _signed_pair(lookup(body, join.response_uri_path), lookup(body, join.url_path))
+        if uri != source_key:
+            return None
+        return url or None
 
     async def close(self) -> None:
         if self.detail_page:
