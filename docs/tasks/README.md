@@ -1,5 +1,13 @@
 # 开发任务索引
 
+# 2026-10-21 LIVE-01：前端「户外 / 10 位」真实采集验收（待验收／部分通过）
+
+[LIVE-01](LIVE-01.md) 使用 Playwright MCP + 真实 Chrome，从「星采」前端以 `media-a` 登录并一次性提交「户外、目标 10 位」（任务 `b94d146b-98f5-41ee-8041-77f2b042d9d2`），真实跑通 P1 DeepSeek 转换、Temporal 排队、巨量星图检索（20 位候选）、F05/F06 采集、PostgreSQL 持久化与前端展示。终态 **`PARTIAL_COMPLETED`**：`valid_count=10/10`，10 位达人均有已发布快照；`profile_complete_count=5`、`featured_complete_count=9`、`failure_reason=PROFILE_SCOPE_INCOMPLETE`，页面如实显示「资料完整 5 / 精选完整 9 / 失败步骤 0」。达人详情展示真实星图 ID、粉丝、月深度用户、内容数据、CPM/CPE 与两组精选视频，封面 9/9 加载、控制台 0 错误。过程中修复 ①HTTP 504 被误判为 `PLATFORM_PAGE_CHANGED` 导致 9 位后整任务失败（改为模块级 `MODULE_COLLECTION_FAILED:PLATFORM_HTTP_5XX` + 契约测试）②API/Worker 封面目录不一致导致 404（对齐运行配置）。回归：单元 303、契约 34、观察器 17 通过；`ruff`/`mypy` 通过。遗留：带 `connection_users` 筛选的真实检索失败根因未确认；lease 丢失根因未证实（已自动恢复）；F05/F06 字段完整度未达 10/10。**未提交、未推送、未合并。** 证据：[LIVE-01 真实端到端验收证据](../evidence/LIVE-01-live-e2e-2026-10-21.md)。
+
+# 2026-10-21 SESSION-01：当前执行单元巨量星图登录状态有效（进行中）
+
+对当前唯一开发执行单元 `unit-local-mac-02` 执行真实 Chrome 只读冷启动核验：`xingtu session-diagnostics` 成功 exit `0`，进程内观测为 **`VALID / PROTECTED_PAGE_AND_ACCOUNT_VERIFIED`**；受保护业务页可用，未出现登录页或安全挑战，实测账号与绑定账号 `ID: 1807978499337419` 精确一致，私有会话快照在首次导航前成功恢复，Chrome `156.0.8078.47` 正常关闭。结论：**当前登录有效，无需重新登录**。应用户追加要求，已再用该单元专属 profile 打开 Chrome 供人工查看，窗口预计保持 30 分钟；期间不得并发启动采集，查看完成后需 `Command-Q` 完全退出。本轮未搜索、未采集、未重登、未写业务库；首次受限沙箱尝试的 macOS Crashpad/Mach 权限失败发生在访问平台前，不是会话失效证据。完整脱敏证据见[实时只读核验](../evidence/SESSION-01-session-live-check-2026-10-21.md)；[SESSION-01](SESSION-01.md) 仍为**进行中／未验收**，会话存活上界与历史漂移根因仍未闭合。
+
 # 2026-10-16 CD-08 / DATA-02：作品封面与传播量中位数修复 + 7 指标/11 作品字段结构化（CD-08 待验收 / DATA-02 已完成）
 
 [CD-08](CD-08.md) 修复达人详情「创作能力作品封面」与「商业能力播放量中位数」；[DATA-02](DATA-02.md) 完成 7 项内容数据指标与 11 个作品字段的 JSONB 拆分、历史回填与读写链路。要点：①播放量中位数原读顶层 `spread.play_mid`（`1399516`），线上实测该卡片是 `spread.item_rate_metrics.play_mid`（`766187`＝`76.6w`、优于 `99.23%`），修复后页面与平台一致且另六项不变；②作品 `item_cover` 是不透明对象存储 key，改用已登记的 `get_sign_image`（含实测必需的 `format=webp`）与既有 CDN 白名单签名、受控入库并按平台 key 登记，作品列表 15/15 与 14/14 显示真实封面且与作品一一对应（柱序/链接/封面/播放量/标题逐条核对）；③迁移 015/016/017 新增 5 指标列、追加式作品观测表、`media_objects.source_key`，回填 3064 条作品行与 51 位达人的指标值（缺失保持 NULL、未填 0，副标题/收藏数标注 `NOT_PROVIDED`），JSONB 与快照 md5 未变化；④契约升版 `xingtu-ad-creator-featured-v11`（新增 `cover_signs` 请求与 `item_cover` 规范），`adapter_version` 不变；⑤实现中修复签名回声未校验、`text_value(None)` 变 `"None"`、任务入口封面 404、空 `canonical_link` 冲突、`field_sources` 描述空值共 5 个真实缺陷。验证：后端 `403 passed, 1 skipped`、前端 `82 passed`、`ruff`/`format`/`mypy --strict` 与 lint/build 全部通过；两入口真实 Chrome 验收通过。历史封面全量回填已完成（去重 `1590/1591` key，唯一未解析为平台拒签）；仍待验收的一项为「新采集数据按现有业务流程写入」（采集侧封面链路未做真实新采集回归，用户本轮要求不为此单独触发采集）。详见[验收证据](evidence/CD-08-DATA-02-acceptance-2026-10-16.md)。

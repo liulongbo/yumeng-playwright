@@ -1,7 +1,7 @@
 # SESSION-01：平台会话真实存活时长核验
 
 状态：进行中
-更新时间：2026-10-14T15:56:00+08:00（Asia/Shanghai）
+更新时间：2026-10-21T17:03:26+08:00（Asia/Shanghai）
 是否验收：否
 
 ## 目标与范围
@@ -73,6 +73,10 @@
 
 2026-10-13 16:39—16:48+08:00：用户明确授权唯一子账号人工确认后，实施 [DEC-016](../decisions/DEC-016-manual-identity-attestation.md)：仅 `local_development`、账号必须精确匹配、必须记录操作者／原因／批准与截止时间、最长 31 天；账号可读但不一致、登录页和安全挑战仍优先拒绝。随后三次真实 Chrome 冷启动诊断均不执行搜索或采集。最终报告 `unit-local-mac-02-20261013T084837Z.json` 为 `VALID / MANUALLY_ATTESTED_UNIQUE_ACCOUNT`，受保护页为真、登录页／挑战为假，且 `session_snapshot.restored_before_navigation=true`；说明上一次私有快照在本次首个导航前已注入并复用。快照路径 `.runtime/profiles/storage-state/unit-local-mac-02.json` 存在，目录 `0700`、文件 `0600`，未向文档、日志或前端写入 Cookie／Token 明文。完整脱敏证据见[本轮快照核验](../evidence/SESSION-01-manual-attestation-snapshot-2026-10-13.md)。
 
+### 2026-10-21 当前登录状态实时核验（未改代码）
+
+用户要求查看当前执行单元的巨量星图登录状态。当前只有一份有效开发单元配置 `.runtime/units/local-dev-mac-02.json`，对应 `unit-local-mac-02`。执行只读 `xingtu session-diagnostics`：首次沙箱内启动在访问平台前被 macOS Crashpad/Mach 权限拒绝（exit 1，不属会话结论）；同一命令在允许 Chrome 正常启动的环境重试成功（exit 0）。报告 `unit-local-mac-02-20261021T085856Z.json` 显示 `VALID / PROTECTED_PAGE_AND_ACCOUNT_VERIFIED`，`observed == expected == ID: 1807978499337419`，受保护页 `true`，登录页／挑战 `false`，私有快照在首次导航前恢复，Chrome `156.0.8078.47` 正常关闭。本轮未搜索、未采集、未重新登录、未写业务库；报告与快照权限均为 `0600`。证据见[实时只读核验](../evidence/SESSION-01-session-live-check-2026-10-21.md)。
+
 ### 2026-10-14 登录状态核验与“快速失效”根因复盘（未改代码）
 
 用户再次询问执行单元星图登录状态是否有效，并在失效时要求唤起 Chrome 人工登录，同时要求记录“为什么登录状态这么快失效”的原因备用。实际执行：
@@ -128,6 +132,8 @@
 - `recover-unit` 的历史 `/bin/ps` 依赖和两步协议已经修复；真实开发单元尚未用新路径执行回收，当前只有自动测试证据。
 
 ## 验证证据
+
+2026-10-21（真实平台，只读会话核验）：`xingtu session-diagnostics --config .runtime/units/local-dev-mac-02.json` 在允许 Chrome 正常启动的本机环境 exit `0`；结果 `VALID`，账号精确一致，受保护页可用，无登录页、无安全挑战，快照在首次导航前恢复，浏览器正常关闭。首次受限沙箱尝试因 macOS Crashpad/Mach 权限在访问平台前失败，不计为会话失效。完整边界与脱敏证据见[实时只读核验](../evidence/SESSION-01-session-live-check-2026-10-21.md)。本轮不改变长期存活上界、漂移根因等未完成验收项，卡片仍为进行中／未验收。
 
 2026-10-13：本轮实现与真实冷启动结果见[唯一子账号人工确认与会话快照核验](../evidence/SESSION-01-manual-attestation-snapshot-2026-10-13.md)。离线验证：定向 `ruff check`、`mypy backend/src/xingtu` 通过，`backend/tests/unit/test_session_snapshot.py` **7 passed**；全量 `make check` exit 0（ruff／format／mypy、后端单元 **189 passed**、前端 typecheck／Vitest **3 passed**／build）。新增浏览器契约覆盖人工确认仅在身份不可读时生效、错误账号／登录页／挑战页必定优先拒绝。本机 Playwright bundled Chromium 未安装，故 `backend/tests/contract/test_session_recovery.py` 的 3 项（含该新增用例）均在启动阶段因可执行文件缺失失败，非断言失败；真实绑定 Chrome 的三次冷启动已经覆盖当前配置的正向复用路径，负向分支保留待具备测试浏览器后复跑。
 
@@ -248,6 +254,7 @@
 ## 交接信息
 
 - 阻塞项：本轮身份不可读阻塞已解除：用户明确授权的、最长 31 天人工确认已受限启用，并完成私有快照的跨冷启动复用验证。不会自动延长或静默替代可读账号校验。
+- **当前会话（2026-10-21T16:58:54+08:00 实测）**：`unit-local-mac-02` 为 `VALID`，账号精确匹配 `ID: 1807978499337419`，受保护页可用，无登录页和挑战，快照恢复成功；无需重新登录。该结论仅代表当前时点，不代表已测出存活上界。
 - 遗留问题：① 账号漂移根因未定（H-A/H-B 优先，本轮仅规避未区分）；② 会话存活上界未测，平台仍可随时使会话失效；③ 人工确认于 `2026-11-12T16:39:32+08:00` 到期；④ 浏览器契约 3 项因本机 Playwright bundled Chromium 缺失未执行到断言；⑤ 真实平台 5/10/20 与新恢复路径尚未验收；⑥ 改绑后尚无一次**真实业务采集**在新身份下跑通。
 - 下一步（按优先级）：
   1. **在新绑定下跑一次真实小规模采集**（如 `target_count ≤ 3`）并观察是否仍出现账号相关维护窗口；这是 F04/F05 后续验收的前置。
@@ -260,6 +267,10 @@
 
 ## 状态历史
 
+
+- 2026-10-21T16:57:51+08:00：进行中 → 进行中（实时核验开始）。用户要求查看当前执行单元的巨量星图登录状态；本轮绑定唯一开发单元 `unit-local-mac-02`，计划使用 `xingtu session-diagnostics` 冷启动真实 Chrome 执行只读进程内观测。不执行搜索、采集、登录或业务库写入；结果及脱敏证据待命令结束后回写。
+- 2026-10-21T17:03:00+08:00：进行中 → 进行中（实时核验完成）。受限沙箱的首次尝试在访问平台前因 macOS Chrome 运行权限失败；同一只读命令重试 exit `0`，真实 Chrome 观测为 `VALID / PROTECTED_PAGE_AND_ACCOUNT_VERIFIED`，实测账号与绑定账号一致，受保护页可用，未见登录页或安全挑战，快照在首导航前恢复，浏览器正常关闭。未搜索、未采集、未重登、未写业务库。本卡长期验收项未闭合，状态保持进行中／未验收。证据：[实时只读核验](../evidence/SESSION-01-session-live-check-2026-10-21.md)。
+- 2026-10-21T17:03:05+08:00：进行中 → 进行中（人工查看窗口启动）。用户追问有效单元并要求打开其 Chrome；已再次确认对象为 `unit-local-mac-02`，绑定 `ID: 1807978499337419`，专属 profile 启动前无 `Singleton*` 锁。以同一 `BrowserRuntime` 恢复私有快照后打开已登记受保护页，Chrome PID `61698` 持有专属 profile 锁，进入 1800 秒人工查看等待。未启动采集、未自动点击或搜索；窗口期间不可同时启动该单元采集，查看完成后需 `Command-Q` 完全退出。证据：[实时只读核验](../evidence/SESSION-01-session-live-check-2026-10-21.md)。
 
 - 2026-09-29T11:05:00+08:00：建立 → 待办。原"会话不能跨重启恢复"结论被判定证据不足并撤回；用户需求"登录一次可存活 1 个月"与现有实现存在差距，独立建卡核验。
 - 2026-09-29T11:55:00+08:00：待办 → 进行中。完成首次两段式真实验收（4 次运行）：确认**会话跨任务复用机制成立**（`READY` 单元以 `collect` 复用、无 promote、无登录要求），但发现**账号在同一 profile 内漂移**（run 3 `1865332309937515` → run 4 `1832740070238347`），成为任务失败直接原因；同时登记 P1 错误归因、P3 回收协议与 `/bin/ps` 缺陷。完整证据见[两段式验收证据](../evidence/SESSION-01-acceptance-2026-09-29.md)。因根因未定，状态为进行中，不勾选整卡。
