@@ -192,6 +192,11 @@ export interface ExecutionUnit {
   allowed_task_kinds: TaskKind[];
   current_root_task_id: string | null;
   browser_status: "ONLINE" | "MAINTENANCE" | "STOPPED" | "SUSPECTED_OFFLINE" | "QUARANTINED";
+  worker_status: "ONLINE" | "OFFLINE" | "UNKNOWN";
+  worker_checked_at: string | null;
+  unit_availability: "AVAILABLE" | "BUSY" | "UNAVAILABLE";
+  line_health: "VERIFIED" | "UNKNOWN" | "LOCAL_DEVELOPMENT";
+  browser_lease_status: "IDLE" | "LEASED" | "SUSPECTED_STALE";
   verification_state: string | null;
   takeover_state: string | null;
   verification_deadline_at: string | null;

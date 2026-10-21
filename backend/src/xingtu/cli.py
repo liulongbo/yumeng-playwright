@@ -36,7 +36,7 @@ from .runtime import (
 from .video_covers import backfill_video_covers
 from .worker import dispatch, run_worker
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(os.environ.get("XINGTU_PROJECT_ROOT", Path(__file__).resolve().parents[3])).resolve()
 
 
 def repository() -> Repository:
@@ -48,6 +48,33 @@ def repository() -> Repository:
 
 def login_timeout_default() -> float:
     return 900.0
+
+
+async def worker_preflight(path: Path) -> dict[str, Any]:
+    """Validate the configured worker without weakening production-line checks.
+
+    Production units still require their NetworkProof and live line probe.  A
+    local-development unit is accepted only as an explicitly labelled test
+    unit; ``UnitConfig`` rejects proxy and production proof fields for that
+    mode, so this cannot turn Wi-Fi into a production line.
+    """
+    config = load_unit(path)
+    registry = PlatformRegistry.model_validate_json(config.registry_path.read_text())
+    registry.require_enabled(live=True)
+    await ensure_line(config)
+    executable = config.browser_executable_path
+    if executable and (not executable.is_file() or not os.access(executable, os.X_OK)):
+        raise CollectorError("RESOURCE_UNAVAILABLE", "BROWSER_EXECUTABLE_NOT_RUNNABLE")
+    return {
+        "unit_id": config.unit_id,
+        "network_mode": config.network_mode.value,
+        "line_id": config.line_id,
+        "line_verification": "not_applicable_test_only"
+        if config.is_local_development
+        else "verified",
+        "test_only": config.is_local_development,
+        "contract": registry.contract_version,
+    }
 
 
 async def wait_for_manual_login(page: Any, spec: Any, timeout: float) -> str:
@@ -75,7 +102,9 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor")
     migrate = commands.add_parser("migrate")
-    migrate.add_argument("--environment", choices=["development", "test"], required=True)
+    migrate.add_argument(
+        "--environment", choices=["development", "test", "production"], required=True
+    )
     recover = commands.add_parser("recover-unit")
     recover.add_argument("--config", type=Path, required=True)
     recover.add_argument("--actor", required=True)
@@ -119,6 +148,8 @@ def main() -> None:
     )
     preflight = commands.add_parser("production-preflight")
     preflight.add_argument("--config", type=Path, required=True)
+    worker_preflight_command = commands.add_parser("worker-preflight")
+    worker_preflight_command.add_argument("--config", type=Path, required=True)
     cover_gc = commands.add_parser("cover-gc")
     cover_gc.add_argument("--config", type=Path, required=True)
     cover_init = commands.add_parser("cover-init")
@@ -301,6 +332,13 @@ def main() -> None:
                         "probe": "verified",
                         "contract": registry.contract_version,
                     },
+                    ensure_ascii=False,
+                )
+            )
+        elif args.command == "worker-preflight":
+            print(
+                json.dumps(
+                    asyncio.run(worker_preflight(args.config)),
                     ensure_ascii=False,
                 )
             )

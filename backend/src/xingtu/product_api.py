@@ -244,6 +244,10 @@ def create_app(
     app.state.services = services
     app.state.worker_health = worker_health
 
+    @app.get("/api/health/live", include_in_schema=False)
+    def live() -> dict[str, str]:
+        return {"status": "ok"}
+
     @app.middleware("http")
     async def request_context(request: Request, call_next: RequestResponseEndpoint) -> Response:
         request_id = request.headers.get("X-Request-Id") or str(uuid4())

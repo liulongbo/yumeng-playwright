@@ -181,7 +181,7 @@ class WorkerHealthMonitor:
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
         self.address = address
-        self.queues = list(queues)
+        self.queues = list(dict.fromkeys(queues))
         self.freshness_seconds = freshness_seconds
         self.interval_seconds = interval_seconds
         self.timeout_seconds = timeout_seconds
@@ -215,24 +215,37 @@ class WorkerHealthMonitor:
         with self._lock:
             return dict(self._snapshot)
 
-    def _store(self, results: dict[str, QueueHealth]) -> None:
+    def watch(self, queues: Iterable[str]) -> None:
+        """Add queues without restarting the monitor.
+
+        Execution units are database-backed and may appear after API startup. Keeping this list
+        dynamic lets the control plane observe each unit's actual collection queue rather than
+        inferring Worker liveness from the unit's durable READY state.
+        """
         with self._lock:
-            self._snapshot = results
+            self.queues = list(dict.fromkeys([*self.queues, *queues]))
+
+    def queue_health(self, queue: str) -> QueueHealth | None:
+        return self.snapshot().get(queue)
 
     def _run(self) -> None:
         loop = asyncio.new_event_loop()
         try:
             asyncio.set_event_loop(loop)
             while not self._stop.is_set():
+                with self._lock:
+                    queues = list(self.queues)
                 results = loop.run_until_complete(
                     check_queues(
                         self.address,
-                        self.queues,
+                        queues,
                         freshness_seconds=self.freshness_seconds,
                         timeout_seconds=self.timeout_seconds,
                     )
                 )
-                self._store(results)
+                with self._lock:
+                    # Do not erase observations for queues added while this poll was running.
+                    self._snapshot.update(results)
                 self._stop.wait(self.interval_seconds)
         except Exception as exc:  # noqa: BLE001 - a monitor defect must not kill the API
             logger.warning("worker health monitor stopped: %s", type(exc).__name__)

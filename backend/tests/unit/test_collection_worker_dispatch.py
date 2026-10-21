@@ -10,6 +10,7 @@ running".
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -74,14 +75,18 @@ class FakeRepository:
         dispatches: list[dict[str, Any]] | None = None,
         cancelling: list[dict[str, Any]] | None = None,
         connect_error: Exception | None = None,
+        connect_delay: float = 0.0,
     ) -> None:
         self.dispatches = dispatches or []
         self.cancelling = cancelling or []
         self.connect_error = connect_error
+        self.connect_delay = connect_delay
         self.statements: list[tuple[str, tuple[Any, ...]]] = []
         self.states: dict[str, str] = {}
 
     def connect(self) -> FakeConnection:
+        if self.connect_delay:
+            time.sleep(self.connect_delay)
         if self.connect_error:
             raise self.connect_error
         return FakeConnection(self)
@@ -223,6 +228,22 @@ async def test_dispatch_records_the_start_moment_for_started_collections():
     assert client.started == [ROOT]
     updates = [sql for sql, _ in repository.statements if "workflow_started_at=now()" in sql]
     assert updates, repository.statements
+
+
+async def test_dispatch_database_poll_does_not_block_temporal_event_loop():
+    repository = FakeRepository(connect_delay=0.05)
+    client = FakeClient()
+    dispatch_task = asyncio.create_task(dispatch(repository, client, QUEUE))  # type: ignore[arg-type]
+    marker = asyncio.Event()
+
+    async def mark() -> None:
+        await asyncio.sleep(0.01)
+        marker.set()
+
+    marker_task = asyncio.create_task(mark())
+    await asyncio.wait_for(marker.wait(), timeout=0.03)
+    await dispatch_task
+    await marker_task
 
 
 async def test_a_failing_tick_never_kills_the_consumer(monkeypatch):

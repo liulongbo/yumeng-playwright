@@ -468,6 +468,11 @@ class ExecutionUnitView(Model):
     allowed_task_kinds: list[str] = Field(default_factory=list)
     current_root_task_id: str | None = None
     browser_status: Literal["ONLINE", "MAINTENANCE", "STOPPED", "SUSPECTED_OFFLINE", "QUARANTINED"]
+    worker_status: Literal["ONLINE", "OFFLINE", "UNKNOWN"] = "UNKNOWN"
+    worker_checked_at: datetime | None = None
+    unit_availability: Literal["AVAILABLE", "BUSY", "UNAVAILABLE"] = "UNAVAILABLE"
+    line_health: Literal["VERIFIED", "UNKNOWN", "LOCAL_DEVELOPMENT"] = "UNKNOWN"
+    browser_lease_status: Literal["IDLE", "LEASED", "SUSPECTED_STALE"] = "IDLE"
     verification_state: str | None = None
     takeover_state: str | None = None
     verification_deadline_at: datetime | None = None

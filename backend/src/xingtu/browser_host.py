@@ -125,7 +125,8 @@ class BrowserHost:
         maintenance: bool,
         runtime: BrowserRuntime | None = None,
     ) -> AsyncIterator[BrowserHost]:
-        generation, session = repo.acquire(
+        generation, session = await asyncio.to_thread(
+            repo.acquire,
             config.unit_id,
             owner,
             maintenance=maintenance,
@@ -147,14 +148,19 @@ class BrowserHost:
             async with host.runtime.open() as browser:
                 host.browser = browser
                 host.browser_instance_id = uid()
-                repo.register_browser_instance(
-                    config.unit_id, owner, generation, host.browser_instance_id
+                await asyncio.to_thread(
+                    repo.register_browser_instance,
+                    config.unit_id,
+                    owner,
+                    generation,
+                    host.browser_instance_id,
                 )
                 yield host
         finally:
             host.browser = None
             host.browser_instance_id = None
-            repo.release(
+            await asyncio.to_thread(
+                repo.release,
                 config.unit_id,
                 owner,
                 generation,
@@ -185,9 +191,27 @@ class BrowserHost:
             SessionHealthStatus.INDETERMINATE: ReleaseDisposition.SESSION_UNVERIFIED,
         }[health.status]
 
+    def heartbeat_lease(self) -> None:
+        """Renew only the database lease (safe to run in a worker thread)."""
+        self.repo.heartbeat(
+            self.config.unit_id,
+            self.owner,
+            self.generation,
+            # The outer asyncio wait is 10 s; fail before it and leave no late writer behind.
+            # A publish can legitimately hold the row for a few seconds, so keep headroom.
+            lock_timeout_seconds=8.0,
+        )
+
     async def heartbeat(self) -> None:
-        self.repo.heartbeat(self.config.unit_id, self.owner, self.generation)
-        await ensure_line(self.config)
+        try:
+            await asyncio.wait_for(asyncio.to_thread(self.heartbeat_lease), timeout=10.0)
+            await asyncio.wait_for(ensure_line(self.config), timeout=10.0)
+        except TimeoutError as exc:
+            raise CollectorError("RESOURCE_UNAVAILABLE", "HEARTBEAT_TIMEOUT") from exc
+        except CollectorError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - transport failures must fail closed
+            raise CollectorError("RESOURCE_UNAVAILABLE", f"HEARTBEAT_{type(exc).__name__}") from exc
 
     async def maintain_and_promote(
         self,
@@ -267,7 +291,8 @@ class BrowserHost:
         self.observe_session(health)
         await self.runtime.export_session_snapshot(self.browser)
         await self.heartbeat()
-        self.session_version = self.repo.promote_maintenance_to_collect(
+        self.session_version = await asyncio.to_thread(
+            self.repo.promote_maintenance_to_collect,
             self.config.unit_id,
             self.owner,
             self.generation,
@@ -293,10 +318,11 @@ class BrowserHost:
         page, self._collection_page = self._collection_page, None
         return page
 
-    def enter_maintenance(self, reason: str, actor: str) -> None:
+    async def enter_maintenance(self, reason: str, actor: str) -> None:
         if self.mode != "collect":
             raise CollectorError("LEASE_LOST", "HOST_NOT_IN_COLLECT")
-        self.repo.transition_collect_to_maintenance(
+        await asyncio.to_thread(
+            self.repo.transition_collect_to_maintenance,
             self.config.unit_id,
             self.owner,
             self.generation,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Any
 
@@ -23,6 +24,8 @@ from .domain import (
 )
 from .evidence import EvidenceSink, EvidenceSummary, schema_keys
 from .repository import Repository
+
+logger = logging.getLogger(__name__)
 
 # Diagnostics worth an isolated, allowlisted artifact; pauses and cancellation are not failures.
 EVIDENCE_ERROR_CODES = frozenset(
@@ -78,6 +81,8 @@ class Engine:
         task = repository.get(self.root)
         self.last_tick = time.monotonic()
         self.last_metrics: dict[str, int] = {}
+        # Kept in memory so the per-module budget guard does not re-read the checkpoint.
+        self.active_seconds = float(task.checkpoint.active_seconds)
         # Appendix A defaults live in the execution context budget, not in this class.
         self.active_budget = (
             active_budget if active_budget is not None else ctx.budget.active_seconds
@@ -122,26 +127,35 @@ class Engine:
 
     def guard(self) -> None:
         self.charge(time.monotonic())
-        if self.repo.get(self.root).checkpoint.active_seconds >= self.active_budget:
+        if self.active_seconds >= self.active_budget:
             raise CollectorError("BUDGET_EXHAUSTED", "ACTIVE_TIME")
 
     def charge(self, start: float) -> None:
         # Charge only while this activity is active; waiting between activities is excluded.
+        # A progress charge changes two small counters, never the collected data.  Sending it
+        # through the full checkpoint read-modify-write path made every module (and every adapter
+        # guard) transfer the complete JSONB over the Worker link.
         now = time.monotonic()
-        with self.repo.edit(self.root, self.ctx) as (task, _):
-            task.checkpoint.active_seconds += max(0, now - self.last_tick)
-            metrics = getattr(self.adapter, "operation_metrics", {})
-            for source, target in (
-                ("requests", "observed_requests"),
-                ("responses", "observed_responses"),
-                ("navigations", "navigation_count"),
-                ("duplicate_requests", "duplicate_request_count"),
-                ("featured_loads", "featured_load_count"),
-                ("cover_requests", "cover_request_count"),
-            ):
-                value = int(metrics.get(source, 0))
-                delta = max(0, value - self.last_metrics.get(source, 0))
-                setattr(task.checkpoint, target, getattr(task.checkpoint, target) + delta)
+        elapsed = max(0.0, now - self.last_tick)
+        metrics = getattr(self.adapter, "operation_metrics", {})
+        counters: dict[str, int] = {}
+        for source, target in (
+            ("requests", "observed_requests"),
+            ("responses", "observed_responses"),
+            ("navigations", "navigation_count"),
+            ("duplicate_requests", "duplicate_request_count"),
+            ("featured_loads", "featured_load_count"),
+            ("cover_requests", "cover_request_count"),
+        ):
+            value = int(metrics.get(source, 0))
+            delta = max(0, value - self.last_metrics.get(source, 0))
+            if delta:
+                counters[target] = delta
+        active = self.repo.record_progress(
+            self.root, self.ctx, active_seconds=elapsed, counters=counters
+        )
+        if active is not None:
+            self.active_seconds = active
         self.last_metrics = dict(metrics)
         self.last_tick = now
 
@@ -255,6 +269,8 @@ class Engine:
                 interval = float(getattr(self.adapter, "creator_interval_seconds", 0.0))
                 if interval:
                     await asyncio.sleep(interval)
+                else:
+                    await asyncio.sleep(0.001)
                 continue
             if task.valid_count >= task.target_count:
                 return self.finish()
@@ -452,18 +468,20 @@ class Engine:
         start = time.monotonic()
         try:
             async with self.adapter.profile(ref, self.ctx):
+                # One small query per creator instead of a full task read per module.
+                complete_modules = self.repo.candidate_module_complete(self.root, identity)
                 for key in self.adapter.module_keys:
+                    # Yield between modules.  The remaining full checkpoint edit is still a
+                    # synchronous multi-second call, but the lease heartbeat and cancellation
+                    # must be able to run between modules instead of waiting for the whole run.
+                    # A tiny positive sleep also lets ready timers (lease heartbeat, loop-lag
+                    # monitor, Temporal SDK maintenance) run; sleep(0) can let the next sync call
+                    # win the ready queue again.
+                    await asyncio.sleep(0.001)
                     self.charge(start)
                     start = time.monotonic()
                     self.guard()
-                    task = self.repo.get(self.root)
-                    candidate = next(
-                        c
-                        for c in task.checkpoint.candidates
-                        if c.ref.platform_creator_id == identity
-                    )
-                    old = candidate.modules.get(key)
-                    if old and old.complete:
+                    if complete_modules.get(key):
                         continue
                     module_started = time.monotonic()
                     try:
@@ -529,9 +547,31 @@ class Engine:
                             contract_version=self.ctx.contract_version,
                         )
                     finally:
-                        with self.repo.edit(self.root, self.ctx) as (current, _):
-                            times = current.checkpoint.module_seconds
-                            times[key] = times.get(key, 0.0) + time.monotonic() - module_started
+                        module_elapsed = time.monotonic() - module_started
+                        try:
+                            self.repo.record_progress(
+                                self.root,
+                                self.ctx,
+                                module_seconds={key: module_elapsed},
+                            )
+                        except CollectorError:
+                            # The following observation write will fail closed if the lease is
+                            # genuinely gone; never mask the module's own exception with a timing
+                            # write failure.
+                            logger.warning(
+                                "module timing not persisted root=%s creator=%s module=%s",
+                                self.root,
+                                identity,
+                                key,
+                            )
+                        if module_elapsed >= 1.0:
+                            logger.info(
+                                "module collected root=%s creator=%s module=%s elapsed=%.2fs",
+                                self.root,
+                                identity,
+                                key,
+                                module_elapsed,
+                            )
                     if (
                         observation.creator_ref.platform_creator_id != identity
                         or observation.module_key != key
@@ -580,13 +620,7 @@ class Engine:
                                 self.repo.persist_creators(
                                     conn, current, publish=False, only_creator=identity
                                 )
-                    fresh = self.repo.get(self.root)
-                    c = next(
-                        c
-                        for c in fresh.checkpoint.candidates
-                        if c.ref.platform_creator_id == identity
-                    )
-                    if not c.valid:
+                    if not self.repo.candidate_valid(self.root, identity):
                         return
                 if self.adapter.featured_keys:
                     await self.collect_featured(identity)
@@ -633,8 +667,17 @@ class Engine:
                 ref, task.checkpoint, self.ctx
             )
         finally:
+            elapsed = time.monotonic() - start
             self.charge(start)
+            if elapsed >= 1.0:
+                logger.info(
+                    "featured collected root=%s creator=%s elapsed=%.2fs",
+                    self.root,
+                    identity,
+                    elapsed,
+                )
         for observation in observations:
+            await asyncio.sleep(0.001)
             key = observation.collection_type.value
             if (
                 observation.creator_ref.platform_creator_id != identity
@@ -647,8 +690,20 @@ class Engine:
                 if self.covers is None:
                     observation = observation.with_gap("cover_pipeline_unavailable")
                 else:
+                    cover_started = time.monotonic()
                     await self.store_covers(observation, spec)
+                    cover_elapsed = time.monotonic() - cover_started
                     observation = observation.apply_cover_outcomes(cover_registered=True)
+                    if cover_elapsed >= 1.0:
+                        logger.info(
+                            "featured covers root=%s creator=%s collection=%s "
+                            "cards=%s elapsed=%.2fs",
+                            self.root,
+                            identity,
+                            key,
+                            len(observation.cards),
+                            cover_elapsed,
+                        )
             with self.repo.edit(self.root, self.ctx) as (current, _):
                 c = next(
                     c
@@ -746,8 +801,11 @@ class Engine:
         else:
             task.featured_status = "PARTIAL_COMPLETED"
 
-    def finish(self) -> str:
-        with self.repo.edit(self.root, self.ctx) as (task, conn):
+    def finish(self, *, force: bool = False, failure_reason: str | None = None) -> str:
+        # ``force`` is used only when the Activity is being cancelled after its lease may already
+        # have expired.  It skips the lease fence but retains the task/attempt fence inside
+        # Repository.edit, so a terminal task is never overwritten by a late cancellation.
+        with self.repo.edit(self.root, self.ctx, require_lease=not force) as (task, conn):
             self.refresh_counts(task)
             profile_incomplete = any(
                 c.valid and not self.repo.profile_complete(task, c.ref.platform_creator_id)
@@ -768,7 +826,9 @@ class Engine:
                 task.failure_reason = None
             else:
                 task.state = TaskStatus.PARTIAL_COMPLETED
-                if task.plan is None:
+                if failure_reason:
+                    task.failure_reason = failure_reason
+                elif task.plan is None:
                     invalid = any(c.state == "invalid" for c in task.checkpoint.candidates)
                     task.failure_reason = (
                         "CREATOR_INVALID"

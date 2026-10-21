@@ -32,11 +32,22 @@ from .product_models import (
 
 
 class LLMFailure(Exception):
-    def __init__(self, code: str, message: str, *, retryable: bool, indeterminate: bool = False):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        retryable: bool,
+        indeterminate: bool = False,
+        provider_status: int | None = None,
+        provider_detail: str | None = None,
+    ):
         self.code = code
         self.message = message
         self.retryable = retryable
         self.indeterminate = indeterminate
+        self.provider_status = provider_status
+        self.provider_detail = provider_detail
         super().__init__(f"{code}: {message}")
 
 
@@ -186,17 +197,40 @@ class DeepSeekAdapter:
         finally:
             if owns_client:
                 await client.aclose()
-        if response.status_code in {401, 402, 403}:
-            raise LLMFailure("AI_AUTH_OR_QUOTA", "provider rejected credentials", retryable=False)
+        if response.status_code in {401, 403}:
+            raise LLMFailure(
+                "AI_AUTH_REJECTED",
+                "provider rejected credentials",
+                retryable=False,
+                provider_status=response.status_code,
+                provider_detail=_provider_error_detail(response),
+            )
+        if response.status_code == 402:
+            # DeepSeek uses HTTP 402 for an exhausted balance.  Model listing (used by the
+            # startup check) stays available in that state, so it must not be reported as an
+            # invalid key: operators need the billing signal, not an auth red herring.
+            raise LLMFailure(
+                "AI_QUOTA_EXHAUSTED",
+                "provider balance exhausted",
+                retryable=False,
+                provider_status=402,
+                provider_detail=_provider_error_detail(response),
+            )
         if response.status_code == 429 or response.status_code >= 500:
             raise LLMFailure(
                 "AI_PROVIDER_RETRYABLE",
                 f"provider status {response.status_code}",
                 retryable=True,
+                provider_status=response.status_code,
+                provider_detail=_provider_error_detail(response),
             )
         if response.status_code >= 400:
             raise LLMFailure(
-                "AI_PROVIDER_REJECTED", f"provider status {response.status_code}", retryable=False
+                "AI_PROVIDER_REJECTED",
+                f"provider status {response.status_code}",
+                retryable=False,
+                provider_status=response.status_code,
+                provider_detail=_provider_error_detail(response),
             )
         try:
             body = response.json()
@@ -232,6 +266,22 @@ class DeepSeekAdapter:
                 output_tokens=usage.get("output_tokens"),
             ),
         )
+
+
+def _provider_error_detail(response: httpx.Response) -> str | None:
+    """Return a bounded, non-secret provider error description for diagnostics."""
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    error = body.get("error") if isinstance(body, dict) else None
+    if isinstance(error, dict):
+        code = error.get("code") or error.get("type")
+        message = error.get("message")
+        if code or message:
+            return str(f"{code}: {message}" if code and message else code or message)[:300]
+    message = body.get("message") if isinstance(body, dict) else None
+    return str(message)[:300] if message else None
 
 
 def build_expected_plan(
@@ -641,6 +691,12 @@ class IntakeGraph:
                     "code": exc.code,
                     "message": exc.message,
                     "retryable": exc.retryable,
+                    **(
+                        {"provider_status": exc.provider_status}
+                        if exc.provider_status is not None
+                        else {}
+                    ),
+                    **({"provider_detail": exc.provider_detail} if exc.provider_detail else {}),
                 },
                 latency_ms=int((time.monotonic() - started) * 1000),
                 delivery_status="indeterminate" if exc.indeterminate else "received",
@@ -695,6 +751,8 @@ class IntakeGraph:
         nonrepairable = {
             "CAPABILITY_VERSION_CHANGED",
             "AI_AUTH_OR_QUOTA",
+            "AI_AUTH_REJECTED",
+            "AI_QUOTA_EXHAUSTED",
             "AI_PROVIDER_REJECTED",
         }
         errors = [*state.schema_errors, *state.business_errors]
@@ -722,6 +780,8 @@ class IntakeGraph:
             "AI_TRANSPORT_ERROR",
             "AI_PROVIDER_RETRYABLE",
             "AI_AUTH_OR_QUOTA",
+            "AI_AUTH_REJECTED",
+            "AI_QUOTA_EXHAUSTED",
             "AI_PROVIDER_REJECTED",
             "AI_INCOMPLETE_RESPONSE",
             "AI_EMPTY_OUTPUT",

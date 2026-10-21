@@ -8,12 +8,16 @@ pollers listed for minutes, so only a fresh ``last_access_time`` proves a live c
 from __future__ import annotations
 
 from datetime import timedelta
+from types import SimpleNamespace
 
 from xingtu.domain import utcnow
+from xingtu.product_queries import ProductQueries
 from xingtu.worker_health import (
     DEFAULT_FRESHNESS_SECONDS,
     INTAKE_QUEUE,
     PollerObservation,
+    QueueHealth,
+    WorkerHealthMonitor,
     collection_queue,
     observe_pollers,
 )
@@ -89,3 +93,58 @@ def test_queue_health_is_unobserved_when_transport_failed():
 
 def test_collection_queue_name_is_derived_from_unit():
     assert collection_queue("unit-local-mac-02") == "xingtu-unit-local-mac-02"
+
+
+def test_monitor_can_watch_new_collection_queues_without_duplicates():
+    monitor = WorkerHealthMonitor("temporal:7233", [INTAKE_QUEUE])
+    monitor.watch([collection_queue("unit-mac-cell-01"), INTAKE_QUEUE])
+
+    assert monitor.queues == [INTAKE_QUEUE, "xingtu-unit-mac-cell-01"]
+
+
+def unit_row(state: str = "READY") -> dict[str, object]:
+    return {
+        "unit_id": "unit-mac-cell-01",
+        "account_ref": "account-secret-ref",
+        "line_ref": "cell-01",
+        "state": state,
+        "mode": None,
+        "allowed_task_kinds": ["collection"],
+        "current_root_task_id": None,
+        "browser_stopped": True,
+        "owner": None,
+        "lease_until": None,
+        "network_mode": "production_line",
+        "event_deadline_at": None,
+        "event_state": None,
+        "takeover_state": None,
+        "last_heartbeat_at": None,
+        "event_reason": None,
+        "failure_reason": None,
+    }
+
+
+def test_ready_database_state_is_not_reported_available_without_live_worker():
+    monitor = SimpleNamespace(
+        queue_health=lambda queue: QueueHealth(queue=queue, alive=False),
+    )
+    queries = ProductQueries(SimpleNamespace(), monitor)  # type: ignore[arg-type]
+
+    view = queries._execution_unit_view(unit_row())
+
+    assert view.worker_status == "OFFLINE"
+    assert view.unit_availability == "UNAVAILABLE"
+    assert view.line_health == "UNKNOWN"
+
+
+def test_live_worker_and_ready_unit_are_reported_separately():
+    monitor = SimpleNamespace(
+        queue_health=lambda queue: QueueHealth(queue=queue, alive=True, fresh_pollers=1),
+    )
+    queries = ProductQueries(SimpleNamespace(), monitor)  # type: ignore[arg-type]
+
+    view = queries._execution_unit_view(unit_row())
+
+    assert view.worker_status == "ONLINE"
+    assert view.unit_availability == "AVAILABLE"
+    assert view.browser_lease_status == "IDLE"

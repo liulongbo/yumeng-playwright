@@ -29,6 +29,21 @@ def repository() -> ProductRepository:
     return ProductRepository(Repository(dsn))
 
 
+def resolve_intake_config(
+    unit_config: Path | None,
+    execution_unit_id: str | None,
+    registry_path: Path,
+) -> tuple[str, Path]:
+    """Resolve the old Mac-local config or the decoupled cloud control-plane inputs."""
+    if unit_config:
+        unit = load_unit(unit_config)
+        return execution_unit_id or unit.unit_id, unit.registry_path
+    resolved_unit_id = execution_unit_id or os.environ.get("XINGTU_DEFAULT_EXECUTION_UNIT_ID", "")
+    if not resolved_unit_id:
+        raise CollectorError("RESOURCE_UNAVAILABLE", "DEFAULT_EXECUTION_UNIT_ID_REQUIRED")
+    return resolved_unit_id, registry_path
+
+
 def _new_password() -> str:
     password = getpass.getpass("New product password: ")
     confirmation = getpass.getpass("Confirm product password: ")
@@ -38,17 +53,19 @@ def _new_password() -> str:
 
 
 def run_api() -> None:
+    forwarded_allow_ips = os.environ.get("XINGTU_FORWARDED_ALLOW_IPS", "127.0.0.1")
     uvicorn.run(
         "xingtu.product_api:get_application",
         factory=True,
         host=os.environ.get("XINGTU_API_HOST", "127.0.0.1"),
         port=int(os.environ.get("XINGTU_API_PORT", "8000")),
-        proxy_headers=False,
+        proxy_headers=True,
+        forwarded_allow_ips=forwarded_allow_ips,
     )
 
 
 async def _run_update_scheduler(
-    unit_config: Path,
+    registry_path: Path,
     profile_requirement_path: Path | None,
     *,
     batch_size: int,
@@ -58,8 +75,7 @@ async def _run_update_scheduler(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    config = load_unit(unit_config)
-    registry = PlatformRegistry.model_validate_json(config.registry_path.read_text())
+    registry = PlatformRegistry.model_validate_json(registry_path.read_text())
     registry.require_enabled(live=True)
     requirement = (
         ProfileRequirement.model_validate_json(profile_requirement_path.read_text())
@@ -87,15 +103,18 @@ async def _run_update_scheduler(
         await asyncio.sleep(tick_seconds)
 
 
-async def _run_intake(unit_config: Path, profile_requirement: Path | None) -> None:
+async def _run_intake(
+    execution_unit_id: str,
+    registry_path: Path,
+    profile_requirement: Path | None,
+) -> None:
     # Worker lifecycle and dispatch failures must be visible in the process log; without this the
     # consumer could die silently and look identical to "no worker is running".
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    config = load_unit(unit_config)
-    registry = PlatformRegistry.model_validate_json(config.registry_path.read_text())
+    registry = PlatformRegistry.model_validate_json(registry_path.read_text())
     registry.require_enabled(live=True)
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
@@ -116,7 +135,7 @@ async def _run_intake(unit_config: Path, profile_requirement: Path | None) -> No
         products,
         registry,
         adapter,
-        execution_unit_id=config.unit_id,
+        execution_unit_id=execution_unit_id,
         profile_requirement=requirement,
     )
     await run_intake_worker(
@@ -141,14 +160,29 @@ def main() -> None:
     reset.add_argument("--username", required=True)
     reset.add_argument("--actor", required=True)
     intake = commands.add_parser("intake-worker")
-    intake.add_argument("--unit-config", type=Path, required=True)
+    intake.add_argument("--unit-config", type=Path)
+    intake.add_argument("--execution-unit-id")
+    intake.add_argument(
+        "--registry",
+        type=Path,
+        default=Path(
+            os.environ.get("XINGTU_REGISTRY_PATH", ROOT / "contracts/douyin_xingtu.verified.json")
+        ),
+    )
     intake.add_argument(
         "--profile-requirement",
         type=Path,
         default=ROOT / "contracts/profile_requirements.json",
     )
     scheduler = commands.add_parser("update-scheduler")
-    scheduler.add_argument("--unit-config", type=Path, required=True)
+    scheduler.add_argument("--unit-config", type=Path)
+    scheduler.add_argument(
+        "--registry",
+        type=Path,
+        default=Path(
+            os.environ.get("XINGTU_REGISTRY_PATH", ROOT / "contracts/douyin_xingtu.verified.json")
+        ),
+    )
     scheduler.add_argument(
         "--profile-requirement",
         type=Path,
@@ -186,16 +220,22 @@ def main() -> None:
             )
             print(user_id)
         elif args.command == "update-scheduler":
+            registry_path = (
+                load_unit(args.unit_config).registry_path if args.unit_config else args.registry
+            )
             asyncio.run(
                 _run_update_scheduler(
-                    args.unit_config,
+                    registry_path,
                     args.profile_requirement,
                     batch_size=args.batch_size,
                     tick_seconds=args.tick_seconds,
                 )
             )
         else:
-            asyncio.run(_run_intake(args.unit_config, args.profile_requirement))
+            execution_unit_id, registry_path = resolve_intake_config(
+                args.unit_config, args.execution_unit_id, args.registry
+            )
+            asyncio.run(_run_intake(execution_unit_id, registry_path, args.profile_requirement))
     except CollectorError as exc:
         raise SystemExit(f"{exc.code}: {exc.reason}") from None
 

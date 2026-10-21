@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
+import threading
+import time
 from contextlib import suppress
 from pathlib import Path
+from typing import Any
 
 from playwright.async_api import Error as BrowserError
 from temporalio import activity
@@ -127,6 +131,168 @@ def adopt_compatible_update_checkpoint(task: TaskRecord, registry: PlatformRegis
     return True
 
 
+def should_finalize_cancelled(
+    details: object | None,
+    heartbeat_error: object | None,
+    *,
+    attempt: int,
+    max_attempts: int = 4,
+) -> bool:
+    """Whether a cancellation is terminal *and* the Temporal retry budget is exhausted.
+
+    Temporal exposes why the Activity was cancelled:
+    - worker_shutdown: the Worker is going away; Temporal will retry after restart.  Do not
+      prematurely mark the task terminal.
+    - timed_out: heartbeat timeout; re-raise while Temporal still has retry budget, and
+      finalize only on the last allowed attempt.
+    - cancel_requested: a user/product cancel owns the state; let the cancel path finish it.
+    - paused/reset: Temporal lifecycle operations; do not finalize.
+    - not_found: the server no longer accepts the Activity token.  On the final configured
+      attempt this is also how a heartbeat timeout can surface locally, so let the durable
+      attempt/generation fences decide whether finalization is still safe.
+    A locally detected heartbeat error is also deferred until the last attempt, unless the
+    server explicitly reports a user cancel/shutdown/lifecycle operation.
+    """
+    if attempt < max_attempts:
+        return False
+    if details is not None:
+        if getattr(details, "worker_shutdown", False):
+            return False
+        if getattr(details, "timed_out", False):
+            return True
+        if getattr(details, "cancel_requested", False):
+            return False
+        if any(getattr(details, name, False) for name in ("paused", "reset")):
+            return False
+        if getattr(details, "not_found", False):
+            return True
+    return heartbeat_error is not None
+
+
+async def renew_lease(host: BrowserHost, *, timeout: float = 10.0) -> None:
+    """Renew the database lease without blocking the Activity heartbeat loop.
+
+    The synchronous psycopg call runs in a worker thread and is bounded.  A network/database
+    stall becomes a stable CollectorError instead of silently killing the heartbeat coroutine.
+    """
+    try:
+        await asyncio.wait_for(asyncio.to_thread(host.heartbeat_lease), timeout=timeout)
+        await asyncio.wait_for(ensure_line(host.config), timeout=timeout)
+    except TimeoutError as exc:
+        raise CollectorError("RESOURCE_UNAVAILABLE", "HEARTBEAT_TIMEOUT") from exc
+    except CollectorError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - psycopg/network errors are lease failures too
+        raise CollectorError("RESOURCE_UNAVAILABLE", f"HEARTBEAT_{type(exc).__name__}") from exc
+
+
+class TemporalHeartbeat:
+    """Schedule Temporal heartbeats for one Activity attempt.
+
+    ``temporalio.activity.heartbeat`` is not thread-safe for asynchronous Activities: it hands the
+    payload to ``asyncio.create_task``, so it must run on the thread that owns the event loop.
+    Calling it directly from a daemon thread raised ``RuntimeError: no running event loop`` on the
+    first tick, left ``_heartbeat_async`` un-awaited, and silently stopped every heartbeat -- the
+    45-second heartbeat timeout then re-dispatched the Activity on every attempt.
+
+    The daemon thread therefore only *schedules* the SDK call on the owning loop with the Activity
+    context captured at start.  Heartbeats travel as fast as the loop drains callbacks, so a
+    multi-second PostgreSQL checkpoint stall still delays them; the async lease heartbeat task
+    remains responsible for fail-closed lease renewal, and the loop watchdog reports a wedged loop
+    instead of hiding it.
+    """
+
+    def __init__(
+        self,
+        root: str,
+        *,
+        interval: float = 10.0,
+        loop_watchdog_seconds: float = 60.0,
+    ):
+        self.root, self.interval = root, interval
+        self.loop_watchdog_seconds = loop_watchdog_seconds
+        self._stop = threading.Event()
+        self._loop_alive_at = time.monotonic()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._context: contextvars.Context | None = None
+        self._thread: threading.Thread | None = None
+        self._failed = False
+
+    def start(self) -> None:
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Unit tests or a non-async caller: there is no event loop to schedule onto.
+            self._loop = None
+        self._loop_alive_at = time.monotonic()
+        self._context = contextvars.copy_context()
+        self._thread = threading.Thread(
+            target=self._run,
+            name="temporal-activity-heartbeat",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def _mark_loop_alive(self) -> None:
+        self._loop_alive_at = time.monotonic()
+
+    def _send(self) -> None:
+        """Run on the loop thread: the SDK schedules its own coroutine from there."""
+        try:
+            activity.heartbeat(self.root)
+        except Exception as exc:  # noqa: BLE001 - stop quietly once the Activity is gone
+            self._failed = True
+            if not self._stop.is_set():
+                logger.warning(
+                    "temporal heartbeat failed root=%s type=%s",
+                    self.root,
+                    type(exc).__name__,
+                )
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            # Heartbeat first, then the loop-liveness probe.  The SDK call is scheduled on the
+            # loop thread because it is not safe to call from this daemon thread.
+            started = time.monotonic()
+            if self._loop is not None and self._context is not None:
+                try:
+                    self._loop.call_soon_threadsafe(self._context.run, self._send)
+                except RuntimeError:  # loop already closed
+                    return
+            else:
+                self._send()
+            if self._failed:
+                return
+            if time.monotonic() - started > 2.0:
+                logger.warning(
+                    "temporal heartbeat scheduling delayed root=%s elapsed=%.1fs",
+                    self.root,
+                    time.monotonic() - started,
+                )
+            if self._loop is not None:
+                try:
+                    self._loop.call_soon_threadsafe(self._mark_loop_alive)
+                except RuntimeError:
+                    return
+                unresponsive_for = time.monotonic() - self._loop_alive_at
+                if unresponsive_for > self.loop_watchdog_seconds:
+                    logger.error(
+                        "activity event loop unresponsive root=%s for=%.1fs watchdog=%.0fs; "
+                        "stopping Temporal heartbeats",
+                        self.root,
+                        unresponsive_for,
+                        self.loop_watchdog_seconds,
+                    )
+                    return
+            self._stop.wait(self.interval)
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5.0)
+            self._thread = None
+
+
 class Activities:
     def __init__(
         self,
@@ -246,9 +412,79 @@ class Activities:
                     return "timeout"
                 await asyncio.sleep(0.5)
 
+    def _finalize_interrupted(
+        self,
+        root: str,
+        task: TaskRecord,
+        reason: str,
+        engine: Engine | None,
+        host: BrowserHost | None,
+    ) -> str:
+        """Lease-free, generation-fenced terminal write used after retry/cancel exhaustion."""
+        lease_generation = (
+            engine.ctx.lease_generation
+            if engine is not None
+            else host.generation
+            if host is not None
+            else None
+        )
+        logger.warning(
+            "collection activity interrupted root=%s reason=%s engine=%s generation=%s",
+            root,
+            reason,
+            engine is not None,
+            lease_generation,
+        )
+        try:
+            if engine is not None:
+                return engine.finish(force=True, failure_reason=reason)
+            return self.repo.finalize_interrupted(
+                root,
+                task.attempt_id,
+                reason,
+                lease_generation=lease_generation,
+            )
+        except CollectorError:
+            try:
+                return self.repo.finalize_interrupted(
+                    root,
+                    task.attempt_id,
+                    reason,
+                    lease_generation=lease_generation,
+                )
+            except CollectorError:
+                try:
+                    return self.repo.finalize_interrupted(
+                        root,
+                        task.attempt_id,
+                        reason,
+                        publish=False,
+                        lease_generation=lease_generation,
+                    )
+                except CollectorError as final_error:
+                    logger.error(
+                        "collection activity finalization failed root=%s reason=%s error=%s:%s",
+                        root,
+                        reason,
+                        final_error.code,
+                        final_error.reason,
+                    )
+                    return self.repo.get(root).state
+
     @activity.defn(name="collect_segment_v1")
     async def collect(self, root: str) -> str:
-        task = self.repo.get(root)
+        # The heartbeat thread is independent of the asyncio loop.  The Activity's synchronous
+        # checkpoint reads/writes can stall the loop for seconds, which previously also stalled
+        # the only Temporal heartbeat sender and produced a false heartbeat timeout.
+        heartbeat = TemporalHeartbeat(root)
+        heartbeat.start()
+        try:
+            return await self._collect(root)
+        finally:
+            heartbeat.stop()
+
+    async def _collect(self, root: str) -> str:
+        task = await asyncio.to_thread(self.repo.get, root)
         if task.state == TaskStatus.CANCELLING:
             with self.repo.edit(root) as (current, _):
                 current.state = TaskStatus.CANCELLED
@@ -261,15 +497,19 @@ class Activities:
             TaskStatus.FAILED,
         }:
             return task.state
-        unit = self.repo.unit(task.execution_unit_id)
+        unit = await asyncio.to_thread(self.repo.unit, task.execution_unit_id)
         if task.task_kind.value not in (unit.get("allowed_task_kinds") or []):
             with self.repo.edit(root) as (current, _):
                 current.state = TaskStatus.FAILED
                 current.failure_reason = "TASK_KIND_NOT_ALLOWED"
             return TaskStatus.FAILED
-        if task.task_kind != TaskKind.COLLECTION and self.repo.has_runnable_higher_priority_task(
-            task.execution_unit_id, root, task.task_kind
-        ):
+        higher_priority = task.task_kind != TaskKind.COLLECTION and await asyncio.to_thread(
+            self.repo.has_runnable_higher_priority_task,
+            task.execution_unit_id,
+            root,
+            task.task_kind,
+        )
+        if higher_priority:
             # Do not acquire or open the browser while normal collection (or a manual update for
             # a scheduled batch) is runnable.  The Workflow's 30-second loop retries this activity.
             with self.repo.edit(root) as (current, _):
@@ -294,11 +534,13 @@ class Activities:
                     )
                     if not adopted:
                         raise CollectorError("PLATFORM_PAGE_CHANGED", "VERSION_MISMATCH")
-                task = self.repo.get(root)
+                task = await asyncio.to_thread(self.repo.get, root)
             required_scopes = {"session", "search", "profile_identity"}
             required_scopes.update(f"profile_module:{item.key}" for item in registry.modules)
             required_scopes.update(f"featured:{item.key.value}" for item in registry.featured)
-            self.repo.require_contract(registry.contract_version, required_scopes)
+            await asyncio.to_thread(
+                self.repo.require_contract, registry.contract_version, required_scopes
+            )
             await ensure_line(self.config)
         except CollectorError as exc:
             with self.repo.edit(root) as (current, _):
@@ -327,19 +569,59 @@ class Activities:
         async def guard() -> None:
             if not host:
                 raise CollectorError("LEASE_LOST", "BROWSER_HOST_NOT_STARTED")
-            await host.heartbeat()
-            activity.heartbeat(root)
+            await renew_lease(host)
             if engine and host.mode == "collect":
-                engine.guard()
+                await asyncio.to_thread(engine.guard)
 
         async def heartbeat() -> None:
             nonlocal heartbeat_error
             while True:
+                scheduled = time.monotonic()
                 await asyncio.sleep(15)
+                # If the loop was blocked (typically by a synchronous checkpoint transfer), the
+                # sleep overshoots by exactly that stall.  Log it so the next incident has a
+                # measured event-loop lag instead of an unexplained heartbeat timeout.
+                lag = time.monotonic() - scheduled - 15
+                if lag >= 2.0:
+                    logger.warning("activity event loop stalled root=%s lag=%.1fs", root, lag)
+                started = time.monotonic()
                 try:
+                    # Restored loop-side Temporal heartbeat.  The dedicated thread above can only
+                    # schedule on this loop; this direct call is the path that actually reaches the
+                    # server whenever the loop is running.  A send failure must not be treated as a
+                    # lease failure: Temporal owns the heartbeat timeout and retry budget.
+                    try:
+                        activity.heartbeat(root)
+                    except Exception as exc:  # noqa: BLE001 - activity may already be gone
+                        logger.warning(
+                            "temporal heartbeat send failed root=%s type=%s",
+                            root,
+                            type(exc).__name__,
+                        )
                     await guard()
                 except CollectorError as exc:
                     heartbeat_error = exc
+                    logger.warning(
+                        "activity heartbeat failed root=%s reason=%s elapsed=%.1fs",
+                        root,
+                        exc,
+                        time.monotonic() - started,
+                    )
+                    if main_task:
+                        main_task.cancel()
+                    return
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - diagnostics must never kill the loop silently
+                    heartbeat_error = CollectorError(
+                        "RESOURCE_UNAVAILABLE", f"HEARTBEAT_{type(exc).__name__}"
+                    )
+                    logger.warning(
+                        "activity heartbeat unexpected root=%s type=%s elapsed=%.1fs",
+                        root,
+                        type(exc).__name__,
+                        time.monotonic() - started,
+                    )
                     if main_task:
                         main_task.cancel()
                     return
@@ -485,7 +767,7 @@ class Activities:
                                     maintenance_page = adapter.detail_page or adapter.search_page
                                     if maintenance_page:
                                         adapter.detach_page(maintenance_page)
-                                    host.enter_maintenance(
+                                    await host.enter_maintenance(
                                         exc.code, "browser-host:" + task.attempt_id
                                     )
                                     engine.record_error(exc)
@@ -572,9 +854,33 @@ class Activities:
                         with suppress(asyncio.CancelledError):
                             await pulse
             except asyncio.CancelledError:
-                if heartbeat_error and engine:
-                    return engine.record_error(heartbeat_error)
-                raise
+                # Distinguish a terminal heartbeat/attempt failure from a transient worker
+                # shutdown or a user cancel.  Temporal retries worker-shutdown cancellations;
+                # finalizing here would be an incorrect terminal state and could lose a retry.
+                try:
+                    details = activity.cancellation_details()
+                except Exception:  # noqa: BLE001 - keep the Activity fail-closed if details are unavailable
+                    details = None
+                if not should_finalize_cancelled(
+                    details, heartbeat_error, attempt=activity.info().attempt
+                ):
+                    logger.warning(
+                        "collection activity cancellation deferred root=%s details=%s heartbeat=%s",
+                        root,
+                        details,
+                        heartbeat_error,
+                    )
+                    raise
+                # Temporal can cancel an Activity after its heartbeat timeout, and the lease may
+                # already have been released by the interrupted attempt.  Never leave the root
+                # task in COLLECTING: finalize from the persisted checkpoint, publishing any
+                # complete creator data that was already collected.
+                reason = (
+                    (heartbeat_error.reason or heartbeat_error.code)
+                    if heartbeat_error
+                    else "ACTIVITY_CANCELLED_OR_HEARTBEAT_TIMEOUT"
+                )
+                return self._finalize_interrupted(root, task, reason, engine, host)
             except CollectorError as exc:
                 if engine:
                     return engine.record_error(exc)
@@ -599,18 +905,57 @@ class Activities:
                     )
                     current.failure_reason = str(exc)
                     return current.state
+            except Exception as exc:  # noqa: BLE001 - retry budget is owned by the Workflow
+                logger.warning(
+                    "unhandled collection activity failure root=%s attempt=%s type=%s",
+                    root,
+                    activity.info().attempt,
+                    type(exc).__name__,
+                )
+                if activity.info().attempt < 4:
+                    raise
+                return self._finalize_interrupted(
+                    root, task, f"ACTIVITY_{type(exc).__name__}", engine, host
+                )
 
 
-async def dispatch(repo: Repository, client: Client, queue: str) -> None:
+def _pending_dispatches(repo: Repository, unit_id: str) -> list[dict[str, Any]]:
     with repo.connect() as conn:
-        rows = conn.execute(
+        return conn.execute(
             "SELECT d.* FROM task_dispatches d JOIN root_tasks r USING(root_task_id) "
             "WHERE d.sent=false AND r.unit_id=%s "
             "ORDER BY CASE r.task_kind "
             "WHEN 'collection' THEN 0 WHEN 'manual_update' THEN 1 "
             "WHEN 'scheduled_update' THEN 2 ELSE 3 END, r.updated_at,d.segment",
-            (queue.removeprefix("xingtu-"),),
+            (unit_id,),
         ).fetchall()
+
+
+def _mark_dispatch_started(repo: Repository, root: str, segment: object) -> None:
+    with repo.connect() as conn:
+        # ``workflow_started_at`` is the durable fact the cancel path uses to decide whether a
+        # collection process can still be holding this task (FIX-01 P1-B).
+        conn.execute(
+            """UPDATE task_dispatches SET sent=true,workflow_started_at=now()
+            WHERE root_task_id=%s AND segment=%s""",
+            (root, segment),
+        )
+
+
+def _cancelling_roots(repo: Repository, unit_id: str) -> list[dict[str, Any]]:
+    with repo.connect() as conn:
+        return conn.execute(
+            "SELECT root_task_id FROM root_tasks WHERE state='CANCELLING' AND unit_id=%s",
+            (unit_id,),
+        ).fetchall()
+
+
+async def dispatch(repo: Repository, client: Client, queue: str) -> None:
+    unit_id = queue.removeprefix("xingtu-")
+    # This poll loop shares the Temporal SDK event loop with async Activities.  All psycopg work
+    # must therefore stay off that loop; a slow Tailnet connection previously starved Activity
+    # heartbeats even though the browser itself was still making progress.
+    rows = await asyncio.to_thread(_pending_dispatches, repo, unit_id)
     for row in rows:
         root, workflow_id = str(row["root_task_id"]), row["workflow_id"]
         handle = client.get_workflow_handle(workflow_id)
@@ -627,20 +972,9 @@ async def dispatch(repo: Repository, client: Client, queue: str) -> None:
             # not take the worker down.
             with suppress(RPCError):
                 await handle.signal(CollectionWorkflow.wake)
-        with repo.connect() as conn:
-            # ``workflow_started_at`` is the durable fact the cancel path uses to decide whether a
-            # collection process can still be holding this task (FIX-01 P1-B).
-            conn.execute(
-                """UPDATE task_dispatches SET sent=true,workflow_started_at=now()
-                WHERE root_task_id=%s AND segment=%s""",
-                (root, row["segment"]),
-            )
+        await asyncio.to_thread(_mark_dispatch_started, repo, root, row["segment"])
     # Cancellation must also wake workflows paused on a signal.
-    with repo.connect() as conn:
-        cancelling = conn.execute(
-            "SELECT root_task_id FROM root_tasks WHERE state='CANCELLING' AND unit_id=%s",
-            (queue.removeprefix("xingtu-"),),
-        ).fetchall()
+    cancelling = await asyncio.to_thread(_cancelling_roots, repo, unit_id)
     for row in cancelling:
         root = str(row["root_task_id"])
         handle = client.get_workflow_handle(f"collect/{root}")
@@ -655,9 +989,9 @@ async def dispatch(repo: Repository, client: Client, queue: str) -> None:
                 # The workflow finished between describe and signal. Nothing is running for this
                 # root, so the cancellation is finalised here instead of killing the worker.
                 logger.info("collect workflow for %s ended before the wake signal", root)
-                _finalise_cancelled(repo, root)
+                await asyncio.to_thread(_finalise_cancelled, repo, root)
             continue
-        _finalise_cancelled(repo, root)
+        await asyncio.to_thread(_finalise_cancelled, repo, root)
 
 
 def _finalise_cancelled(repo: Repository, root: str) -> None:
@@ -684,7 +1018,7 @@ async def run_worker(
                 # Local (normal collection/manual) dispatches start first.  Only then does this
                 # worker claim one unassigned update task from the shared pool.
                 await dispatch(repo, client, queue)
-                if repo.claim_unassigned_update(config.unit_id):
+                if await asyncio.to_thread(repo.claim_unassigned_update, config.unit_id):
                     await dispatch(repo, client, queue)
             except Exception as exc:  # noqa: BLE001 - the consumer must survive any tick error
                 logger.warning("collection dispatch tick failed: %s", type(exc).__name__)

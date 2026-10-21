@@ -337,6 +337,7 @@ def test_authenticated_api_shared_tasks_idempotency_and_audit(repo):
         )
     )
     client = TestClient(app, base_url="https://app.test")
+    assert client.get("/api/health/live").json() == {"status": "ok"}
     login = client.post(
         "/api/auth/login",
         headers={"Origin": "https://app.test"},

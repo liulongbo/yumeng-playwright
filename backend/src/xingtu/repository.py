@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -44,6 +45,20 @@ RUNNING = {
     TaskStatus.RETRY_WAIT,
     TaskStatus.WAITING_FOR_VERIFICATION,
 }
+RUNNING_VALUES = frozenset(status.value for status in RUNNING)
+
+# Only these checkpoint counters may be advanced by the small progress write.  Collected data
+# (candidate modules/collections) never goes through this path.
+PROGRESS_COUNTERS = frozenset(
+    {
+        "observed_requests",
+        "observed_responses",
+        "navigation_count",
+        "duplicate_request_count",
+        "featured_load_count",
+        "cover_request_count",
+    }
+)
 
 # Statuses in which a task has stopped progressing. The set matches the product query layer's
 # `TERMINAL_STATES`; it is defined here as well so the task write path can stamp `completed_at`
@@ -74,12 +89,45 @@ def scoped_contract_health_enabled() -> bool:
     }
 
 
+# Hybrid deployment diagnostic.  The Collection Worker reaches PostgreSQL over a private
+# network, so a slow full-checkpoint transfer must be visible in the Worker log instead of only
+# showing up later as a starved Temporal heartbeat.  Default 1000 ms keeps local development
+# quiet while making every remote multi-second round trip auditable.
+def slow_database_ms() -> float:
+    try:
+        return max(0.0, float(os.environ.get("XINGTU_DB_SLOW_MS", "1000")))
+    except ValueError:
+        return 1000.0
+
+
+def log_slow_database(operation: str, started: float, detail: str = "") -> None:
+    elapsed_ms = (time.monotonic() - started) * 1000
+    if elapsed_ms >= slow_database_ms():
+        logger.warning(
+            "slow database operation op=%s detail=%s elapsed_ms=%.0f",
+            operation,
+            detail or "-",
+            elapsed_ms,
+        )
+
+
 class Repository:
     def __init__(self, dsn: str):
         self.dsn = dsn
 
     def connect(self) -> psycopg.Connection[dict[str, Any]]:
-        return psycopg.connect(self.dsn, row_factory=dict_row)
+        # Collection Workers reach PostgreSQL over a private network.  libpq's default network
+        # waits can outlive Temporal's 45-second Activity heartbeat and freeze the shared asyncio
+        # loop.  Bound connection establishment and unacknowledged TCP data while leaving SQL
+        # statement duration unchanged (migrations and legitimate bulk writes may take longer).
+        connect_timeout = max(1, int(os.environ.get("XINGTU_DB_CONNECT_TIMEOUT_SECONDS", "10")))
+        tcp_user_timeout = max(1, int(os.environ.get("XINGTU_DB_TCP_USER_TIMEOUT_MS", "10000")))
+        return psycopg.connect(
+            self.dsn,
+            row_factory=dict_row,
+            connect_timeout=connect_timeout,
+            tcp_user_timeout=tcp_user_timeout,
+        )
 
     def migrate(self, directory: Path) -> None:
         """Apply every pending versioned migration in order, inside one transaction."""
@@ -637,16 +685,36 @@ class Repository:
             raise CollectorError("RESOURCE_UNAVAILABLE", "old browser requires isolation")
         raise AssertionError("unreachable")
 
-    def heartbeat(self, unit: str, owner: str, generation: int) -> None:
-        with self.connect() as conn:
-            row = conn.execute(
-                """UPDATE execution_units SET lease_until=%s,last_heartbeat_at=now()
-              WHERE unit_id=%s AND owner=%s AND generation=%s AND lease_until>now()
-              AND state='LEASED' RETURNING unit_id""",
-                (utcnow() + timedelta(seconds=120), unit, owner, generation),
-            ).fetchone()
-            if not row:
-                raise CollectorError("LEASE_LOST")
+    def heartbeat(
+        self,
+        unit: str,
+        owner: str,
+        generation: int,
+        *,
+        lock_timeout_seconds: float | None = None,
+    ) -> None:
+        started = time.monotonic()
+        try:
+            with self.connect() as conn:
+                if lock_timeout_seconds is not None:
+                    # A business write may hold the unit row while it transfers a large
+                    # checkpoint.  The lease heartbeat must fail closed in bounded time instead of
+                    # queueing behind it (a late renewal would also extend a lease whose Activity
+                    # is already gone).
+                    conn.execute(
+                        "SELECT set_config('lock_timeout', %s, true)",
+                        (f"{max(1, int(lock_timeout_seconds * 1000))}ms",),
+                    )
+                row = conn.execute(
+                    """UPDATE execution_units SET lease_until=%s,last_heartbeat_at=now()
+                  WHERE unit_id=%s AND owner=%s AND generation=%s AND lease_until>now()
+                  AND state='LEASED' RETURNING unit_id""",
+                    (utcnow() + timedelta(seconds=120), unit, owner, generation),
+                ).fetchone()
+                if not row:
+                    raise CollectorError("LEASE_LOST")
+        finally:
+            log_slow_database("heartbeat", started, unit)
 
     def register_browser_instance(
         self, unit: str, owner: str, generation: int, browser_instance_id: str
@@ -1368,8 +1436,185 @@ class Repository:
         return TaskRecord.model_validate({**data, "checkpoint": cp["payload"]})
 
     def get(self, root: str) -> TaskRecord:
+        started = time.monotonic()
+        try:
+            with self.connect() as conn:
+                return self._load(conn, root)
+        finally:
+            log_slow_database("get", started, root)
+
+    def record_progress(
+        self,
+        root: str,
+        ctx: ExecutionContext,
+        *,
+        active_seconds: float = 0.0,
+        counters: dict[str, int] | None = None,
+        module_seconds: dict[str, float] | None = None,
+    ) -> float | None:
+        """Persist charge/metric deltas without transferring the checkpoint payload.
+
+        The normal ``edit`` path reads and rewrites the entire JSONB checkpoint, which is the
+        correct choice for business mutations but very expensive for the tiny progress writes the
+        collector performs on every module.  In the hybrid deployment PostgreSQL is reached over a
+        private link, so a 0.5 MiB checkpoint cost several seconds per read *and* per write.  This
+        method applies the same fenced update server-side and returns the new active seconds.
+
+        The lease is checked with a plain SELECT (not ``FOR UPDATE``): a writer must never hold the
+        unit lease row while waiting for a multi-second checkpoint transfer, otherwise the
+        independent lease heartbeat blocks behind it.  Fencing is still the same generation /
+        owner / attempt / state check; the root task row is locked to serialize task writes.
+        """
+
+        counter_deltas = {
+            str(key): int(value)
+            for key, value in (counters or {}).items()
+            if key in PROGRESS_COUNTERS and int(value) > 0
+        }
+        module_seconds = {
+            str(key): float(value) for key, value in (module_seconds or {}).items() if value > 0
+        }
+        if active_seconds <= 0 and not counter_deltas and not module_seconds:
+            return None
+        started = time.monotonic()
+        try:
+            with self.connect() as conn:
+                row = conn.execute(
+                    """SELECT r.payload AS task,
+                              c.payload->>'adapter_version' AS adapter_version,
+                              c.payload->>'contract_version' AS contract_version
+                       FROM root_tasks r
+                       JOIN task_checkpoints c ON c.task_id=(r.payload->>'task_id')::uuid
+                       WHERE r.root_task_id=%s
+                       FOR UPDATE OF r""",
+                    (root,),
+                ).fetchone()
+                if not row:
+                    raise CollectorError("INVALID_FORM", "TASK_NOT_FOUND")
+                task = row["task"]
+                lease = conn.execute(
+                    "SELECT generation,owner,state,lease_until,mode,session_version "
+                    "FROM execution_units WHERE unit_id=%s",
+                    (ctx.execution_unit_id,),
+                ).fetchone()
+                if (
+                    not lease
+                    or lease["generation"] != ctx.lease_generation
+                    or lease["owner"] != ctx.attempt_id
+                    or lease["state"] != "LEASED"
+                    or lease["lease_until"] <= utcnow()
+                    or lease["mode"] != "collect"
+                    or lease["session_version"] != ctx.session_version
+                ):
+                    raise CollectorError("LEASE_LOST")
+                if (
+                    task["attempt_id"] != ctx.attempt_id
+                    or task["state"] not in RUNNING_VALUES
+                    or task["execution_unit_id"] != ctx.execution_unit_id
+                    or task["root_task_id"] != ctx.root_task_id
+                    or task["task_id"] != ctx.task_id
+                ):
+                    raise CollectorError("TASK_CANCELLED", "STALE_ATTEMPT_OR_STATE")
+                plan = task.get("plan") or {}
+                if (
+                    plan.get("capability_version") not in (None, ctx.capability_version)
+                    or row["adapter_version"] != ctx.adapter_version
+                    or row["contract_version"] != ctx.contract_version
+                ):
+                    raise CollectorError("PLATFORM_PAGE_CHANGED", "VERSION_MISMATCH")
+                expressions = [
+                    "'active_seconds', coalesce((payload->>'active_seconds')::float8, 0) + %s"
+                ]
+                params: list[Any] = [float(active_seconds)]
+                for key, delta in counter_deltas.items():
+                    expressions.append(f"'{key}', coalesce((payload->>'{key}')::bigint, 0) + %s")
+                    params.append(delta)
+                params.append(task["task_id"])
+                updated = conn.execute(
+                    "UPDATE task_checkpoints SET revision=revision+1,"
+                    " payload=jsonb_set(payload,'{revision}',to_jsonb(revision+1),true)"
+                    " || jsonb_build_object(" + ", ".join(expressions) + ") WHERE task_id=%s"
+                    " RETURNING (payload->>'active_seconds')::float8 AS active",
+                    tuple(params),
+                ).fetchone()
+                for key, seconds in module_seconds.items():
+                    conn.execute(
+                        """UPDATE task_checkpoints SET payload=jsonb_set(payload,
+                        ARRAY['module_seconds',%s],
+                        to_jsonb(coalesce((payload->'module_seconds'->>%s)::float8,0)+%s),true)
+                        WHERE task_id=%s""",
+                        (key, key, seconds, task["task_id"]),
+                    )
+                conn.execute(
+                    "UPDATE root_tasks SET version=version+1,updated_at=now(),"
+                    " payload=jsonb_set(payload,'{version}',to_jsonb(version+1),true) "
+                    "WHERE root_task_id=%s",
+                    (root,),
+                )
+                return float(updated["active"]) if updated else None
+        finally:
+            log_slow_database("progress", started, root)
+
+    def candidate_module_complete(self, root: str, identity: str) -> dict[str, bool]:
+        """Return only ``module_key -> complete`` for one candidate.
+
+        The collector uses this to skip already committed modules.  Reading the whole task for
+        that decision transferred the complete checkpoint (every field of every module) over the
+        network on every module iteration.
+        """
         with self.connect() as conn:
-            return self._load(conn, root)
+            rows = conn.execute(
+                """WITH candidate AS (
+                     SELECT cand
+                     FROM task_checkpoints c
+                     JOIN root_tasks r ON c.task_id=(r.payload->>'task_id')::uuid
+                     CROSS JOIN LATERAL jsonb_array_elements(c.payload->'candidates') cand
+                     WHERE r.root_task_id=%s
+                       AND cand->'ref'->>'platform_creator_id'=%s
+                   )
+                   SELECT m.key AS module_key,
+                     (
+                       coalesce(jsonb_array_length(m.value->'expected_fields'),0) > 0
+                       AND coalesce(jsonb_array_length(m.value->'coverage_gaps'),0) = 0
+                       AND (
+                         SELECT array_agg(f->>'field_key' ORDER BY f->>'field_key')
+                         FROM jsonb_array_elements(coalesce(m.value->'fields','[]'::jsonb)) f
+                       ) IS NOT DISTINCT FROM (
+                         SELECT array_agg(e ORDER BY e)
+                         FROM jsonb_array_elements_text(
+                           coalesce(m.value->'expected_fields','[]'::jsonb)
+                         ) e
+                       )
+                       AND NOT EXISTS (
+                         SELECT 1
+                         FROM jsonb_array_elements(coalesce(m.value->'fields','[]'::jsonb)) f
+                         WHERE f->>'status' IN ('FAILED','NOT_ATTEMPTED')
+                       )
+                     ) AS complete
+                   FROM candidate
+                   CROSS JOIN LATERAL jsonb_each(
+                     coalesce(candidate.cand->'modules','{}'::jsonb)
+                   ) m""",
+                (root, identity),
+            ).fetchall()
+        return {str(row["module_key"]): bool(row["complete"]) for row in rows}
+
+    def candidate_valid(self, root: str, identity: str) -> bool:
+        """Return the candidate's durable validity flag without loading the checkpoint."""
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT coalesce((cand->>'valid')::bool,false) AS valid
+                   FROM task_checkpoints c
+                   JOIN root_tasks r ON c.task_id=(r.payload->>'task_id')::uuid
+                   CROSS JOIN LATERAL jsonb_array_elements(c.payload->'candidates') cand
+                   WHERE r.root_task_id=%s
+                     AND cand->'ref'->>'platform_creator_id'=%s
+                   LIMIT 1""",
+                (root, identity),
+            ).fetchone()
+        if row is None:
+            raise CollectorError("INVALID_FORM", "CANDIDATE_NOT_FOUND")
+        return bool(row["valid"])
 
     def _save(self, conn: psycopg.Connection[dict[str, Any]], task: TaskRecord) -> None:
         task.version += 1
@@ -1400,55 +1645,120 @@ class Repository:
 
     @contextmanager
     def edit(
-        self, root: str, ctx: ExecutionContext | None = None
+        self,
+        root: str,
+        ctx: ExecutionContext | None = None,
+        *,
+        require_lease: bool = True,
     ) -> Iterator[tuple[TaskRecord, psycopg.Connection[dict[str, Any]]]]:
-        with self.connect() as conn:
-            task = self._load(conn, root, lock=True)
-            if ctx:
-                lease = conn.execute(
-                    "SELECT * FROM execution_units WHERE unit_id=%s FOR UPDATE",
-                    (ctx.execution_unit_id,),
-                ).fetchone()
-                if (
-                    not lease
-                    or lease["generation"] != ctx.lease_generation
-                    or lease["owner"] != ctx.attempt_id
-                    or lease["state"] != "LEASED"
-                    or lease["lease_until"] <= utcnow()
-                    or lease["mode"] != "collect"
-                    or lease["session_version"] != ctx.session_version
-                ):
-                    raise CollectorError("LEASE_LOST")
-                if (
-                    task.attempt_id != ctx.attempt_id
-                    or task.state not in RUNNING
-                    or task.execution_unit_id != ctx.execution_unit_id
-                    or task.root_task_id != ctx.root_task_id
-                    or task.task_id != ctx.task_id
-                ):
-                    raise CollectorError("TASK_CANCELLED", "STALE_ATTEMPT_OR_STATE")
-                if (
-                    task.plan is not None and task.plan.capability_version != ctx.capability_version
-                ) or (
-                    task.checkpoint.adapter_version != ctx.adapter_version
-                    or task.checkpoint.contract_version != ctx.contract_version
-                ):
-                    raise CollectorError("PLATFORM_PAGE_CHANGED", "VERSION_MISMATCH")
-            yield task, conn
-            self._save(conn, task)
-        # The task write path is the single terminal boundary for every caller (Activity,
-        # API command, CLI).  Reconcile the update schedule after the task transaction commits,
-        # so manual updates do not depend on a later UI read or scheduler tick.  The call is
-        # idempotent and only touches rows whose in-flight root is this task.
-        if task.task_kind != TaskKind.COLLECTION and task.state in TERMINAL_TASK_STATES:
-            try:
-                from .creator_update import reconcile_update_task
+        started = time.monotonic()
+        try:
+            with self.connect() as conn:
+                task = self._load(conn, root, lock=True)
+                if ctx:
+                    if require_lease:
+                        lease = conn.execute(
+                            "SELECT * FROM execution_units WHERE unit_id=%s FOR UPDATE",
+                            (ctx.execution_unit_id,),
+                        ).fetchone()
+                        if (
+                            not lease
+                            or lease["generation"] != ctx.lease_generation
+                            or lease["owner"] != ctx.attempt_id
+                            or lease["state"] != "LEASED"
+                            or lease["lease_until"] <= utcnow()
+                            or lease["mode"] != "collect"
+                            or lease["session_version"] != ctx.session_version
+                        ):
+                            raise CollectorError("LEASE_LOST")
+                    else:
+                        # Forced finalization after Activity cancellation still must not let a
+                        # stale Worker overwrite a newer Worker.  A new acquire always increments
+                        # generation; the old generation is therefore a safe durable fence even
+                        # when the lease row has already been released.
+                        lease = conn.execute(
+                            "SELECT generation FROM execution_units WHERE unit_id=%s",
+                            (ctx.execution_unit_id,),
+                        ).fetchone()
+                        if not lease or lease["generation"] != ctx.lease_generation:
+                            raise CollectorError("LEASE_LOST", "GENERATION_FENCED")
+                    if (
+                        task.attempt_id != ctx.attempt_id
+                        or task.state not in RUNNING
+                        or task.execution_unit_id != ctx.execution_unit_id
+                        or task.root_task_id != ctx.root_task_id
+                        or task.task_id != ctx.task_id
+                    ):
+                        raise CollectorError("TASK_CANCELLED", "STALE_ATTEMPT_OR_STATE")
+                    if (
+                        task.plan is not None
+                        and task.plan.capability_version != ctx.capability_version
+                    ) or (
+                        task.checkpoint.adapter_version != ctx.adapter_version
+                        or task.checkpoint.contract_version != ctx.contract_version
+                    ):
+                        raise CollectorError("PLATFORM_PAGE_CHANGED", "VERSION_MISMATCH")
+                yield task, conn
+                self._save(conn, task)
+            # The task write path is the single terminal boundary for every caller (Activity,
+            # API command, CLI).  Reconcile the update schedule after the task transaction
+            # commits, so manual updates do not depend on a later UI read or scheduler tick.
+            # The call is idempotent and only touches rows whose in-flight root is this task.
+            if task.task_kind != TaskKind.COLLECTION and task.state in TERMINAL_TASK_STATES:
+                try:
+                    from .creator_update import reconcile_update_task
 
-                reconcile_update_task(self, root)
-            except Exception as exc:  # noqa: BLE001 - a committed task must not be re-failed
-                logger.warning(
-                    "update schedule reconcile failed root=%s: %s", root, type(exc).__name__
+                    reconcile_update_task(self, root)
+                except Exception as exc:  # noqa: BLE001 - a committed task must not be re-failed
+                    logger.warning(
+                        "update schedule reconcile failed root=%s: %s", root, type(exc).__name__
+                    )
+        finally:
+            log_slow_database("edit", started, root)
+
+    def finalize_interrupted(
+        self,
+        root: str,
+        attempt_id: str,
+        reason: str,
+        *,
+        publish: bool = True,
+        lease_generation: int | None = None,
+    ) -> str:
+        """Finalize a running task after its Activity was cancelled or heartbeat timed out.
+
+        The lease may already be gone (Temporal cancellation can arrive after the last lease
+        renewal), so this path deliberately does not require the unit lease.  It still fences on
+        the task attempt and refuses to overwrite a task that another command has already
+        finalized.  Persisted checkpoint data is published so a partial result is not lost.
+        """
+        started = time.monotonic()
+        try:
+            with self.connect() as conn:
+                task = self._load(conn, root, lock=True)
+                if task.attempt_id != attempt_id or task.state not in RUNNING:
+                    return task.state
+                if lease_generation is not None:
+                    unit = conn.execute(
+                        "SELECT generation FROM execution_units WHERE unit_id=%s",
+                        (task.execution_unit_id,),
+                    ).fetchone()
+                    if not unit or unit["generation"] != lease_generation:
+                        return task.state
+                task.state = (
+                    TaskStatus.PARTIAL_COMPLETED if task.valid_count > 0 else TaskStatus.FAILED
                 )
+                task.failure_reason = reason
+                if publish:
+                    self.persist_creators(conn, task, publish=True)
+                self._save(conn, task)
+                return task.state
+        finally:
+            log_slow_database(
+                "finalize_interrupted" if publish else "finalize_interrupted_no_publish",
+                started,
+                root,
+            )
 
     def command(self, root: str, action: str, version: int, actor: str) -> None:
         with self.edit(root) as (task, conn):

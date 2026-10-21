@@ -50,7 +50,7 @@ from .product_models import (
     VerificationEventView,
 )
 from .repository import TERMINAL_COMPLETED_AT_CLAUSE, TERMINAL_TASK_STATES, Repository
-from .worker_health import INTAKE_QUEUE, WorkerHealthMonitor
+from .worker_health import INTAKE_QUEUE, WorkerHealthMonitor, collection_queue
 
 # The same terminal set the task write path uses to stamp `completed_at`; kept as the query layer's
 # public name because the API and result-action rules already refer to it.
@@ -169,6 +169,31 @@ class ProductQueries:
 
     def _execution_unit_view(self, row: dict[str, Any]) -> ExecutionUnitView:
         deadline = row.get("event_deadline_at")
+        health = (
+            self.worker_health.queue_health(collection_queue(str(row["unit_id"])))
+            if self.worker_health
+            else None
+        )
+        worker_status: Literal["ONLINE", "OFFLINE", "UNKNOWN"] = (
+            "UNKNOWN"
+            if health is None or health.alive is None
+            else "ONLINE"
+            if health.alive
+            else "OFFLINE"
+        )
+        lease_active = bool(row.get("owner") and not row["browser_stopped"])
+        lease_stale = bool(
+            lease_active and row.get("lease_until") and row["lease_until"] <= utcnow()
+        )
+        unit_availability: Literal["AVAILABLE", "BUSY", "UNAVAILABLE"]
+        if worker_status != "ONLINE" or row["state"] == "QUARANTINED":
+            unit_availability = "UNAVAILABLE"
+        elif lease_active and row["state"] == "LEASED":
+            unit_availability = "BUSY"
+        elif row["state"] == "READY" and row["browser_stopped"]:
+            unit_availability = "AVAILABLE"
+        else:
+            unit_availability = "UNAVAILABLE"
         return ExecutionUnitView(
             unit_id=row["unit_id"],
             account_label=self._mask_reference(row.get("account_ref")),
@@ -180,6 +205,19 @@ class ProductQueries:
             if row.get("current_root_task_id")
             else None,
             browser_status=self._browser_status(row),
+            worker_status=worker_status,
+            worker_checked_at=health.checked_at if health else None,
+            unit_availability=unit_availability,
+            # The current schema does not persist a fresh NetworkProbe. Never relabel session or
+            # database READY state as live line health; production stays UNKNOWN until the
+            # execution process performs its fail-closed preflight. The control plane therefore
+            # reports UNKNOWN, not a fabricated negative or positive observation.
+            line_health=(
+                "LOCAL_DEVELOPMENT" if row.get("network_mode") == "local_development" else "UNKNOWN"
+            ),
+            browser_lease_status=(
+                "SUSPECTED_STALE" if lease_stale else "LEASED" if lease_active else "IDLE"
+            ),
             verification_state=row.get("event_state"),
             takeover_state=row.get("takeover_state"),
             verification_deadline_at=deadline,
@@ -202,6 +240,8 @@ class ProductQueries:
                   AND state IN ('REQUESTED','ACTIVE','VERIFYING') ORDER BY created_at DESC LIMIT 1
                 ) t ON true ORDER BY u.unit_id"""
             ).fetchall()
+            if self.worker_health:
+                self.worker_health.watch(collection_queue(str(row["unit_id"])) for row in rows)
             return [self._execution_unit_view(dict(row)) for row in rows]
 
     def execution_unit(self, unit_id: str) -> ExecutionUnitView:

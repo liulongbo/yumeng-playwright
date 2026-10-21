@@ -4,7 +4,7 @@ from pathlib import Path
 import httpx
 import pytest
 from xingtu.contracts import PlatformRegistry
-from xingtu.intake import DeepSeekAdapter, IntakeGraph, LLMResult, build_expected_plan
+from xingtu.intake import DeepSeekAdapter, IntakeGraph, LLMFailure, LLMResult, build_expected_plan
 from xingtu.product_models import ModelUsage, P1WorkflowState, RequirementForm
 
 
@@ -167,3 +167,72 @@ async def test_deepseek_startup_verifies_configured_model():
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         await DeepSeekAdapter("secret", client=client).verify_model()
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "expected_code", "expected_detail"),
+    [
+        (
+            401,
+            {"error": {"code": "invalid_api_key", "message": "Authentication Fails"}},
+            "AI_AUTH_REJECTED",
+            "invalid_api_key: Authentication Fails",
+        ),
+        (
+            402,
+            {
+                "error": {
+                    "code": "invalid_request_error",
+                    "message": "Insufficient Balance",
+                }
+            },
+            "AI_QUOTA_EXHAUSTED",
+            "invalid_request_error: Insufficient Balance",
+        ),
+        (400, {"error": {"message": "Invalid schema"}}, "AI_PROVIDER_REJECTED", "Invalid schema"),
+    ],
+)
+async def test_deepseek_adapter_classifies_provider_rejections(
+    status, body, expected_code, expected_detail
+):
+    async def handler(request):
+        assert request.url.path == "/responses"
+        return httpx.Response(status, json=body)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(LLMFailure) as caught:
+            await DeepSeekAdapter("secret", client=client).generate_filter_plan(
+                form=RequirementForm(keyword="宠物"),
+                capabilities=live_capabilities(),
+                expected_constraints=expected_payload(),
+                prompt_version="v1",
+                repair_errors=[],
+            )
+    failure = caught.value
+    assert failure.code == expected_code
+    assert failure.provider_status == status
+    assert failure.provider_detail == expected_detail
+    assert failure.retryable is False
+
+
+async def test_quota_failure_is_persisted_in_model_run_payload():
+    class QuotaAdapter:
+        provider = "deepseek"
+        model = "deepseek-flash"
+
+        async def generate_filter_plan(self, **kwargs):
+            raise LLMFailure(
+                "AI_QUOTA_EXHAUSTED",
+                "provider balance exhausted",
+                retryable=False,
+                provider_status=402,
+                provider_detail="Insufficient Balance",
+            )
+
+    runs = MemoryRuns()
+    result = await IntakeGraph(live_capabilities(), QuotaAdapter(), runs).run(initial_state())
+    assert result.outcome == "failed_model"
+    assert result.final_error[0].code == "AI_QUOTA_EXHAUSTED"
+    stored = next(iter(runs.rows.values()))
+    assert stored["error_payload"]["provider_status"] == 402
+    assert stored["error_payload"]["provider_detail"] == "Insufficient Balance"
