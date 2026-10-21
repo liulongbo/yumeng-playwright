@@ -1,8 +1,8 @@
 # CMP-01：main 单机基线部署与混合架构对比
 
 状态：进行中
-更新时间：2026-10-21T11:00:00+08:00
-是否验收：否；部署脚手架已建立，等待目标服务器 SSH 授权后实机执行。
+更新时间：2026-10-21T11:40:00+08:00
+是否验收：否；本地 main 已跑通控制台，服务器部署等待 SSH 授权。
 
 ## 目标与范围
 
@@ -42,6 +42,8 @@
 ## 验证证据
 
 - 2026-10-21：`git archive`/部署文件静态检查完成；实机验证被 SSH 授权阻塞（`ubuntu@101.42.14.225` 返回 `Permission denied (publickey)`），未在服务器执行任何变更。
+- 2026-10-21 本地：`main` 本地快进到 `5182c09` 后用原生进程（无 Docker）跑通：PostgreSQL 18 `55432`、Redis `56379`、Temporal dev 1.9.1 `57233`、API `8000`、Vite `5173`；迁移成功，`create-user` 建 `admin`，经 Vite 代理登录 200、`/api/auth/me` 200、`/api/tasks` 200（空）。步骤见 [本地 main 运行手册](../deployment/local-main-runbook.md)。
+- 2026-10-21：发现 `main` 没有 `/api/health/live`（该路由仅在 `lln_1018`），Compose 的 API healthcheck 已改为 TCP 探活，避免 api 被误判 unhealthy 而 web 永不启动。
 
 ## 交接信息
 

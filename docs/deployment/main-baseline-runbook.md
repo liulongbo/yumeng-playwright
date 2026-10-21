@@ -88,7 +88,8 @@ approved decision; the platform may treat the new egress IP as a risk event.
 ## 5. Verification
 
 ```sh
-curl -fsS http://127.0.0.1:18000/api/health/live
+# `main` has no /api/health/live route; a TCP probe is the liveness check.
+python3 -c "import socket; socket.create_connection(('127.0.0.1', 18000), 3)"
 curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/
 curl -fsS http://127.0.0.1:18080/api/health/workers
 docker compose --env-file deploy/single-node.env -f deploy/single-node.compose.yaml ps
@@ -97,7 +98,7 @@ ss -lntp | grep -E '18080|18000'
 ```
 
 Acceptance evidence to record: Compose config parse, image build log, `ps` healthy states, login
-page HTTP 200 through `web`, `/api/health/live` 200, worker registered, per-container memory.
+page HTTP 200 through `web`, API port reachable, worker registered, per-container memory.
 
 ## 6. Isolation rules
 
