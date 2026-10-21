@@ -1,0 +1,45 @@
+# 修复部署与运行版本
+时间：2026-10-20 21:28–21:30 (UTC+08)
+
+## 代码改动
+- backend/src/xingtu/intake.py
+- backend/tests/unit/test_intake.py
+（详见修复报告；本地与服务器 release 的 intake.py SHA-256 一致，前缀 5dfac62c9405）
+
+## 镜像
+- 基础镜像：xingtu-app:20261019-5182c09-wip（sha256:c54a4be6ee1c…）
+- 新镜像：xingtu-app:20261020-p1fix-wip
+  image id：sha256:aff2c94432b9018da514a4a3ed139590edc0d58a039697947017b2d63a3e16d5
+  created：2026-10-20T21:28:55+08:00；docker images 大小 637 MB（与基础镜像共享层）
+  构建方式：基于旧镜像 + 单文件 COPY 的派生镜像（32.8kB 补丁层）
+- 完整 Dockerfile 构建曾尝试：在 `pip install uv==0.13.0` 处等待 PyPI 超过 13 分钟未完成，
+  为避免长时间停机和资源压力中止；改用上述可追溯的派生镜像。
+  后续应在 PyPI 可达时用 `deploy/Dockerfile.app` 重建，并记录 digest。
+
+## 服务更新
+- 更新前备份：
+  /opt/yumeng-xingtu/shared/config/production.env.bak.20261020-p1fix
+  release 内 backend/src/xingtu/intake.py.bak.20261020-p1fix
+- production.env：XINGTU_APP_IMAGE=xingtu-app:20261020-p1fix-wip
+- 重建并启动：
+  api、intake-worker、update-scheduler 三个应用服务
+- 未重启：app-postgres、temporal、temporal-postgres、redis、objects；未执行迁移
+- compose config --quiet：exit 0
+- API /api/health/live：200
+- 所有应用容器运行同一新镜像；数据库/对象存储/Temporal 容器保持原状
+
+## 影响
+- 无 Schema 迁移、无字段变更、无历史数据修改。
+- API 重启会中断数秒 HTTP/WebSocket；会话存于 PostgreSQL，重启后登录/会话检查通过。
+- 历史 FAILED 任务 1cfaecbc... 未被重试、删除或改写。
+
+## 部署后代码行为核验（容器内 Mock 402）
+deployed_mapping AI_QUOTA_EXHAUSTED 402 invalid_request_error: Insufficient Balance False
+- 使用运行容器内 `/app/.venv/bin/python` + `httpx.MockTransport(402)`，只验证分类代码，
+  不发起真实供应商请求；证明运行镜像确实包含修复，而不是只改了本地文件。
+705d9554733dd5203e6333aef84563537b4f817bdcd0fda66508a8ebfd794dcd  production.compose.yaml
+ff3e4598b0965f602df6f424c67693cd3f3c45394fcae8ddaf8b18129c76b0f4  -
+
+## 本地/服务器部署文件一致性
+production.compose.yaml sha256 705d9554733dd5203e6333aef84563537b4f817bdcd0fda66508a8ebfd794dcd（本地=服务器）
+Dockerfile.app          sha256 7749dffc2ebeaf83517e9449101bbd6b4ae448a9ad03529da4b50f8f2f4a87f7（本地=服务器）

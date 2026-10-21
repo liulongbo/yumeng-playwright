@@ -1,0 +1,41 @@
+# 本地回归 + 隔离 PostgreSQL 集成测试
+时间：2026-10-20（UTC+08）
+
+## 隔离测试数据库
+- Docker: postgres:18.3，仅本机 127.0.0.1:55439，库名 xingtu_test_p1fix
+- 用途：测试 fixture 创建随机 schema、迁移、drop；不使用正式业务库
+- XINGTU_TEST_DATABASE_URL 仅用于测试进程
+
+## 结果
+- 后端单元：332 passed
+- 后端契约：33 passed
+- 后端集成（真实 PostgreSQL）：95 passed, 4 skipped
+- mypy：34 source files, Success
+- ruff check：All checks passed
+- ruff format：87 files already formatted
+- 前端：6 files / 83 tests passed；build exit 0
+
+## 新增单元测试
+- backend/tests/unit/test_engine_finish.py：6 passed
+  - force finish 跳过 lease、PARTIAL/COMPLETED、正常 finish 仍要求 lease
+  - finalize_interrupted PARTIAL/FAILED、幂等、generation fence
+- backend/tests/unit/test_worker_heartbeat.py：4 passed
+  - success / timeout / RuntimeError 包装 / CollectorError 保留
+- backend/tests/unit/test_worker_cancellation.py：7 passed
+  - timed_out 仅在第 4 次尝试收口；worker_shutdown/cancel/paused/reset/not_found 不收口
+  - 本地 heartbeat 错误在重试预算内延迟收口
+
+## 新增真实 PostgreSQL 集成测试
+backend/tests/integration/test_interrupted_finalize.py：4 passed
+- finalize_interrupted 终态 + 幂等
+- require_lease=False 仍受 generation fence 保护
+- checkpoint 数据发布快照且重复收口不重复发布
+- Engine.finish(force=True) 在 lease 已释放后发布快照/终态
+
+## 未执行
+- 真实 Playwright + Chrome F10 复验：Mac Worker 已部署，待下一轮授权
+- 真实宠物/10采集：未创建任务
+
+## 测试环境清理
+- Docker test container xingtu-p1fix-postgres 已删除；Docker Desktop 已停止，恢复测试前状态
+- 未接触正式业务数据库

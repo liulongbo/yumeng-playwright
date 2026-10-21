@@ -1,0 +1,62 @@
+{
+  "probe": "hybrid_db_latency",
+  "root_task_id": "b5a01709-8a4b-46bd-aa31-6494b0d9ce24",
+  "task_state": "CANCELLED",
+  "checkpoint": {
+    "column_bytes": 131091,
+    "text_bytes": 521870,
+    "active_seconds": 672.728720414998
+  },
+  "candidate": {
+    "identity": "6983857505726103560",
+    "modules": {
+      "fans": true,
+      "basic": true,
+      "spread": true,
+      "seeding": true,
+      "creation": true,
+      "commercial": true,
+      "conversion": true,
+      "fulfillment": true
+    },
+    "valid": true
+  },
+  "latency": {
+    "connect_and_select1": {
+      "min_ms": 159.2,
+      "median_ms": 160.2,
+      "max_ms": 1048.4
+    },
+    "select1_reused_connection": {
+      "min_ms": 19.1,
+      "median_ms": 19.4,
+      "max_ms": 19.8
+    },
+    "full_checkpoint_read": {
+      "min_ms": 8260.1,
+      "median_ms": 8285.7,
+      "max_ms": 8311.4
+    },
+    "same_bytes_transfer": {
+      "min_ms": 9612.2,
+      "median_ms": 9788.9,
+      "max_ms": 9965.7
+    },
+    "candidate_module_complete": {
+      "min_ms": 160.7,
+      "median_ms": 381.7,
+      "max_ms": 3812.3
+    },
+    "candidate_valid": {
+      "min_ms": 160.9,
+      "median_ms": 178.7,
+      "max_ms": 612.6
+    },
+    "progress_update_temp_table": {
+      "min_ms": 30.5,
+      "median_ms": 34.2,
+      "max_ms": 39.7
+    }
+  },
+  "note": "full_checkpoint_read uses Repository.get and includes connect + root + checkpoint; progress_update_temp_table is session-local and does not modify application rows."
+}

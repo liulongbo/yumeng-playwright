@@ -1,0 +1,28 @@
+# Test evidence (with local MinIO integration) 2026-10-20T18:15:08Z
+
+## unit
+........................................................................ [ 81%]
+................................................................         [100%]
+352 passed in 4.81s
+
+## contract
+.................................                                        [100%]
+33 passed in 14.25s
+
+## integration (isolated PostgreSQL + local MinIO 9002)
+.................................................sss.................... [ 67%]
+..................................                                       [100%]
+103 passed, 3 skipped in 129.49s (0:02:09)
+
+## mypy
+Success: no issues found in 34 source files
+
+## ruff check
+All checks passed!
+
+## ruff format --check
+93 files already formatted
+
+## parity/benchmark scripts lint
+All checks passed!
+4 files already formatted

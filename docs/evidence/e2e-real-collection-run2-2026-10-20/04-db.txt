@@ -1,0 +1,12 @@
+# PostgreSQL 数据（只读）
+root b5a01709... state=COLLECTING version=135 updated_at=2026-10-20T15:29:33Z
+task_creators:
+  6983857505726103560 position=0 valid=true latest_snapshot_id=NULL
+  7360610271510921225 position=1 valid=true latest_snapshot_id=NULL
+creator_snapshots=0
+featured_collections=0
+featured_cards=0
+media_objects=68
+old task 11f9fc9c...: state=COLLECTING version=182 updated_at=14:12:16Z
+old task counts: task_creators=2, snapshots=1, featured_collections=0
+root_tasks total=4; new root tasks in last 30m=1

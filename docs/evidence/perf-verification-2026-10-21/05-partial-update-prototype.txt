@@ -1,0 +1,8 @@
+observation bytes 411
+checkpoint~512KiB actual=512KiB column=6KiB index_scan=0.5ms partial_update=2.7ms (min 1.7 max 5.6)
+checkpoint~1024KiB actual=1024KiB column=12KiB index_scan=0.4ms partial_update=3.8ms (min 3.4 max 4.2)
+checkpoint~2560KiB actual=2560KiB column=30KiB index_scan=0.7ms partial_update=6.2ms (min 5.8 max 7.1)
+realistic observation bytes 32105
+20KB obs checkpoint~512KiB actual=574KiB column=12KiB partial_update=5.5ms (min 3.7 max 7.4)
+20KB obs checkpoint~1024KiB actual=1086KiB column=17KiB partial_update=6.3ms (min 5.8 max 6.9)
+20KB obs checkpoint~2560KiB actual=2622KiB column=35KiB partial_update=7.8ms (min 7.2 max 9.2)

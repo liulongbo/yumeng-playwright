@@ -1,0 +1,9 @@
+bucket xingtu-covers endpoint http://100.86.124.51:9000
+real cover {'object_id': 'cover/b5a01709-8a4b-46bd-aa31-6494b0d9ce24/d972ae7e5006214311b40b9d40a2f3523f7b0fe39a8728efe77363fccddd5495', 'byte_size': 61866}
+real cover head=48ms get=496ms bytes=61866 -> 121.8KiB/s
+temp prefix _diag/perf-20261021/17752c7771624c23838ab2295f136506/
+size=64KiB put=88ms (730.3KiB/s) head=21ms get=640ms (100.0KiB/s) delete=25ms readback_ok=True
+size=256KiB put=95ms (2682.8KiB/s) head=24ms get=3503ms (73.1KiB/s) delete=23ms readback_ok=True
+size=512KiB put=97ms (5266.7KiB/s) head=25ms get=10214ms (50.1KiB/s) delete=23ms readback_ok=True
+size=1024KiB put=140ms (7299.2KiB/s) head=21ms get=18097ms (56.6KiB/s) delete=24ms readback_ok=True
+residual temp objects 0

@@ -1,0 +1,23 @@
+# 真实采集时间线（UTC）
+2026-10-20T13:46:09Z 任务 11f9fc9c 创建（前端真实提交），RECEIVED
+2026-10-20T13:46:10Z P1 ProcessProductIntakeV1 COMPLETED；model_run succeeded
+2026-10-20T13:46:10Z 任务派发 collect/11f9fc9c（task_dispatches.sent=true）
+2026-10-20T13:46:24Z ExecutionUnit 获取租约、Chrome 启动（项目 Profile unit-local-mac-02）
+2026-10-20T13:47:57Z 巨量星图触发滑块验证，任务 WAITING_FOR_VERIFICATION
+2026-10-20T13:48:01Z challenge ACKNOWLEDGED；创建 F10 takeover
+2026-10-20T13:48:17Z takeover ACTIVE（本机原 Chrome，nonVNC 未配置）
+2026-10-20T13:57:02Z 用户在本机 Chrome 完成滑块后，点击“我已完成验证”
+2026-10-20T13:57:12Z challenge declared clear；verification RESOLVED；takeover RESUMED
+2026-10-20T13:57:51Z 任务重新 QUEUED，重新获取租约
+2026-10-20T13:58:45Z COLLECTING
+2026-10-20T14:08:33Z 已持久 2 位达人（有效入库 2/10）
+2026-10-20T14:09:32Z collect_segment_v1 attempt 1 失败（activity cancelled）
+2026-10-20T14:10:34Z attempt 2 失败
+2026-10-20T14:11:29Z attempt 3 失败
+2026-10-20T14:12:31Z attempt 4 失败；CollectF04F05V1 状态 FAILED
+2026-10-20T14:12Z 之后 root_task 仍 COLLECTING，未进入 FAILED/PARTIAL；ExecutionUnit SESSION_UNVERIFIED
+
+## 观察
+- 滑块/F10 人工验证本身成功（challenge RESOLVED，recovery_count=1，account_matches=true）。
+- 恢复后仅再完成 1 位达人，随后 activity 连续 heartbeat timeout。
+- P2 workflow 已 FAILED，但产品任务状态未收口（P1 状态不一致）。

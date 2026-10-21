@@ -1,0 +1,14 @@
+# S02 会话 Cookie 属性证据（值已脱敏）
+测试时间：2026-10-20 20:54 (UTC+08)
+方式：curl 直连 HTTPS，Origin=https://xingtu.yumeng.live，正确凭据从 macOS Keychain 读取（未输出）
+（该请求仅用于读取响应头，创建一个额外测试会话；未修改密码或 Cookie 配置）
+
+set-cookie: xingtu_product_session=<REDACTED>; HttpOnly; Max-Age=604800; Path=/; SameSite=lax; Secure
+
+响应体字段：user_id, username, display_name, csrf_token（长度 43，未输出内容）
+响应头：cache-control: no-store; x-request-id: <uuid>
+
+浏览器侧：
+- document.cookie => ""（会话 Cookie 为 HttpOnly，JS 不可读）
+- localStorage / sessionStorage => 空
+- 页面 HTML 不包含 csrf 字符串（仅内存持有）

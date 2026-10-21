@@ -1,0 +1,12 @@
+# S02/S08 复核（2026-10-20 22:15）
+- 未登录 API：/api/health/workers、/api/execution-units、/api/creator-library、/api/verification-events 均 401。
+- 登出：/tasks -> /login；API 401。
+- 错误密码：页面提示“用户名或密码错误”，停留 /login。
+- 正确登录：进入 /tasks。
+- 会话 Cookie：HttpOnly; Max-Age=604800; Path=/; SameSite=lax; Secure（值已脱敏）。
+- CSRF：POST /api/tasks 无 X-CSRF-Token -> 403 CSRF_CHECK_FAILED，未创建任务。
+- CORS：Origin=https://evil.example -> 401，无 Access-Control-Allow-Origin。
+- WebSocket 未认证 -> 403。
+- HTTP 80 -> 3/3 302 到 dnspod.qcloud.com/static/webblock.html。
+- 安全响应头：仅 server/content-type，无 HSTS/CSP/X-Frame-Options/X-Content-Type-Options/Referrer-Policy。
+- 代理：直连 200；Clash 系统代理 TLS 中断；本轮浏览器用独立隔离 Profile + --no-proxy-server。

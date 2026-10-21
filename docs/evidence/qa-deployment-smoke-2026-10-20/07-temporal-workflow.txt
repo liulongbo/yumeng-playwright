@@ -1,0 +1,26 @@
+# S07 Temporal 与 Worker 在线证据
+测试时间：2026-10-20 20:53–20:55 (UTC+08)
+方式：Temporal Python 客户端（只读 describe）+ 产品 API /api/health/workers
+
+## Intake Workflow（只读 describe）
+workflow_id: intake/1cfaecbc-ec03-4f32-b03b-6548028a3a25
+type: ProcessProductIntakeV1
+task_queue: xingtu-intake
+status: WORKFLOW_EXECUTION_STATUS_COMPLETED
+start: 2026-10-20T12:36:21.188Z
+close: 2026-10-20T12:36:21.816Z
+history_length: 11
+execution_duration: 628ms
+（Activity 返回 FAILED 状态，Workflow 本身正常完成）
+
+## 新鲜 poller（/api/health/workers，20:53:26Z）
+xingtu-intake:
+  alive=true, fresh_pollers=1, poller_entries=1, freshest_age_seconds=18.18, error=null
+xingtu-unit-local-mac-02:
+  alive=true, fresh_pollers=1, poller_entries=1, freshest_age_seconds=55.31, error=null
+temporal_address: temporal:7233（服务端内部地址，由 API 返回）
+
+## 结论
+- Intake Worker 真实消费并完成该任务的 workflow，不是“接口 200”层面的假在线。
+- Mac Collection Worker 在专属 task queue 上有新鲜 poller；与云端 ExecutionUnit 的 worker_status=ONLINE 对应。
+- 本轮没有采集 workflow（task_dispatches=0），因此没有 Chrome/巨量星图访问。

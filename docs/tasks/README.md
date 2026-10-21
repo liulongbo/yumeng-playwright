@@ -1,5 +1,37 @@
 # 开发任务索引
 
+# 2026-10-21 真实 E2E（户外/3）：1/3 达人、性能 NO-GO，修复 Temporal 心跳 P1（E2E-01 / P1FIX-02，阻塞）
+
+[E2E-01](E2E-01.md) 在正式站点用 Playwright MCP + 系统 Chrome 完成登录、创建 `户外/3`（`4ab65124-ce3c-4fd5-adcf-aa837228006b`）：P1 `deepseek-flash` 866ms、`keyword=户外/target=3`；P2 单次派发；Mac Worker/Chrome 真实访问星图；会话 `VALID`；20 候选；仅 1 位达人完成 8 模块（81 字段）+ 10 封面（904,132 B，MinIO HEAD 10/10）+ 1 份快照（85,868 B）；精选 `NOT_ATTEMPTED`、`profile_complete=false`；10:17:11 终态 `PARTIAL_COMPLETED / HEARTBEAT_TIMEOUT`，未出现永久 COLLECTING、未重复发布。该达人 8 模块 **11 分 37 秒**、到发布 **15 分 39 秒**（>120s）。F10 未触发 **NOT TESTED**。
+
+[P1FIX-02](P1FIX-02.md) 真实复验发现并修复新的 P1：`TemporalHeartbeat` 在守护线程直接调用 `activity.heartbeat`，SDK 在异步 Activity 中 `asyncio.create_task` 需要事件循环 → `RuntimeError`，心跳从未发出、45s 超时反复重派。已改为调度到事件循环线程 + 恢复循环侧心跳；heartbeat 15 / unit 352 / contract 33 / mypy / ruff 通过，真实 `last_heartbeat` 持续刷新。后续失败是慢网下租约心跳 10s 预算被击穿，属既有 fail-closed。
+
+[PERF-03](PERF-03.md) 实测带宽未升级：手机热点 DERP(sfo) 377–449ms、MinIO 22.8–26.8 KiB/s（约 0.2 Mbps），**≤120s 未达标**。公司 WiFi 09:21–09:31 实测**阻断 Tailscale**（TLS reset、私网不可达），站点 443 正常（[NET-01](NET-01.md)）。报告：[e2e-real-collection-2026-10-21.md](../evidence/e2e-real-collection-2026-10-21.md)。
+
+# 2026-10-21 Mac 网络兼容性：手机热点可用但 relay 400 ms，家庭 WiFi 待实测（NET-01，阻塞）
+
+[NET-01](NET-01.md) 完成只读网络兼容性检查：手机热点 `10.209.115.57` 下 Tailscale 为 **relay "sfo"/DERP 383–401 ms**，`MappingVariesByDestIP=true`（对称 NAT，无 direct）；TCP 5432/7233/9000 335–466 ms 可达，PostgreSQL `SELECT 1` 3.75–4.99 s，Temporal poller `alive=True/fresh=1`，MinIO cover GET 21.6–41.1 KiB/s；Worker PID 54216、ExecutionUnit `SESSION_UNVERIFIED/generation 9/owner NULL/browser_stopped=true`，无活动 task、无重复 Worker、无 lease owner。**连接性 PASS，性能 FAIL**。家庭 WiFi **NOT TESTED**（Mac 实际仍为手机热点，未拿到 192.168.3.x）；家庭↔手机双向切换 **NOT TESTED**。额外观察到公司→手机网络变化后同一 PID 54216 恢复 poller、未重启/未重复，说明现有 launchd/Worker 重试机制有效；**未发现需要修改代码/配置的明确缺陷，本轮零业务代码改动**。报告：[network-compat-2026-10-21.md](../evidence/network-compat-2026-10-21.md)。
+
+# 2026-10-21 部署执行阻塞：Mac 网络变为对称 NAT，Tailscale 走 DERP
+
+[PERF-03](PERF-03.md) 实施前复核发现：Mac 当前 `10.209.115.57` / 公网 `223.160.114.198`，`MappingVariesByDestIP=true`，Tailscale 对 cloud 为 **relay "sea" / DERP 378 ms**；TCP 5432/7233/9000 约 473–510 ms，psycopg connect 15 s 超时，MinIO GET ~27 KiB/s。健康路径（192.168.3.132 / 120.228.1.159，direct 19 ms）已丢失。按授权边界**未部署、未重启 Worker、未创建真实任务、未调整带宽**；Worker 仍 PID 20406 旧代码。代码已部署到 Mac Worker（PID 54216，poller fresh）；**真实任务未创建**。待 Mac 接回 direct 网络并在腾讯云控制台确认 10/20 Mbps 套餐后继续。证据：[01-tailscale-relay.txt](../evidence/deployment-blocker-2026-10-21/01-tailscale-relay.txt)。
+
+# 2026-10-21 带宽升级评估与单达人性能模型（PERF-03，待验收）
+
+[PERF-03](PERF-03.md) 评估“带宽升级 + 最小代码优化”能否达到单达人 ≤120/≤60 s：8 模块、0.5/1/2.5 MiB checkpoint、0.5/5/10/20 Mbps 隔离 benchmark。当前代码 DB 时间：0.5 Mbps 145 s；5 Mbps 16.2/24.9/51.3 s；10 Mbps 8.9/13.6/27.5 s；20 Mbps 5.4/8.0/15.7 s（0.5/1/2.5 MiB）；旧代码 20 Mbps 仍需 21.7/75.6 s（0.5/2.5 MiB，59 次完整传输）。加 30 封面与 60 s 浏览器基线后，2.5 MiB 场景：0.5 Mbps 602 s、5 Mbps 121.5 s、**10 Mbps 96.6 s**、**20 Mbps 84.4 s**。**推荐方案 B：10 Mbps 起、20 Mbps 优先**；仅升级带宽不够（旧代码 20 Mbps/2.5 MiB 约 144 s）；≤60 s 需浏览器/JSONB 局部更新另立任务。旧/新 synthetic `Engine.run()` DB 产物 parity **True**；单元 352/契约 33/隔离集成 103+3 skipped/mypy/ruff 通过。**未购买带宽、未部署、未创建真实任务、未改生产数据/网络、未 commit/push/merge。** 报告：[bandwidth-optimization-2026-10-21.md](../evidence/bandwidth-optimization-2026-10-21.md)。
+
+# 2026-10-21 混合部署网络瓶颈与 checkpoint 优化专项验证（PERF-02，GO 受控验证）
+
+[PERF-02](PERF-02.md) 实测证实主瓶颈是**云端→Mac 方向出口带宽/整形**（高置信度；具体套餐待控制台确认），不是 Tailscale 中继、Mac 网络或 PostgreSQL 慢查询/锁：Tailscale 为 direct（19 ms RTT）；PostgreSQL 云→Mac 下载 **41–61 KiB/s** vs Mac→云上传 **1.5–6.3 MiB/s**；MinIO GET **50–122 KiB/s** vs PUT **0.7–7.3 MiB/s**；并发下载总吞吐不提升、上传扩展；DB 服务器执行完整 checkpoint **0.046 ms**、无锁/临时文件、11/100 连接。隔离 benchmark（真实 Engine、限速代理、0.5/1/2.5 MiB）显示当前优化把完整传输 **10 → 3**（边际 7→1）、下行字节 **−70%**、单模块耗时 **−66%–69%**（8 模块模型 59→10，约 5.9×），但剩余 1 次完整 edit 仍 **5.6–27.7 s/模块**。专项验证还发现并修复 `TemporalHeartbeat` watchdog 会先等 loop 再发心跳的缺陷：改为先发心跳、仅 60 s 不可运行才停；新增取消/token 失效/线程堆积/短阻塞/永久卡死测试。测试：单元 **352**、契约 **33**、隔离集成 **103/3 skipped**、mypy/ruff 通过。**未部署、未创建真实任务、未改生产数据/网络、未 commit/push/merge。** 决策：若要求接近本地速度，需云出方向 **≥10–20 Mbps**（先读控制台确认套餐/限速/利用率）；无 Schema 的 JSONB 局部更新已测可行（2.5 MiB 每模块 27.7 s→约 0.2–0.3 s），需单独立项。当前代码 **GO（受控验证部署 + 一次真实 `宠物/10`）**，速度仍受云出口限制，10 位可能 30–60 分钟；若速度必须达标则 NO-GO。报告：[perf-verification-2026-10-21.md](../evidence/perf-verification-2026-10-21.md)。
+
+# 2026-10-21 混合部署采集性能诊断与 Heartbeat/终态修复（PERF-01，待验收）
+
+[PERF-01](PERF-01.md) 完成混合部署后采集变慢的证据驱动诊断：**主因不是 Temporal/asyncio**，而是每个模块至少 7 次完整 checkpoint 传输（510 KiB/次）+ Mac↔腾讯云 PostgreSQL 共享吞吐仅 **46–89 KiB/s** + 封面改走远程 MinIO 读回校验。生产只读实测 `Repository.get()` **7.7–8.3 s**（本地隔离库同量级 checkpoint **14.5 ms**，约 530–570×）；run2 `module_seconds` 合计 **176.67 s** vs 历史本地任务 **9.74 s**，其中 basic 28.89 s vs 0.12 s、commercial 21.21 s vs 0.10 s，证明差异来自同步 DB 而不是浏览器。修复：`record_progress` 服务端 JSONB 小增量（不传 checkpoint）、`candidate_module_complete`/`candidate_valid` 小查询，使每模块完整传输 **≥7 → 1**；独立 `TemporalHeartbeat` daemon 线程 + 60 s loop watchdog，不再依赖 asyncio loop；lease 续租 `lock_timeout=8 s`；最后 attempt `not_found=True` 收口并发布 checkpoint 数据，保留 generation/attempt fence 与幂等。测试：单元 **346**、契约 **33**、隔离 PostgreSQL 集成 **101 passed/4 skipped**、mypy/ruff 通过。**未部署、未创建真实任务**；两个历史任务在本轮开始时已是 `CANCELLED`（15:34Z，非本轮写入）。残留：单次完整 edit 仍随 checkpoint 增长，0.6 Mbps 级链路上 10 位目标仍可能较慢；带宽升级（优先）或结构化 checkpoint 需用户确认。报告：[hybrid-performance-diagnosis-2026-10-21.md](../evidence/hybrid-performance-diagnosis-2026-10-21.md)。
+
+# 2026-10-20 混合部署实机推进（正式产品入口与 Mac Worker 已接入，真实平台待授权）
+
+[DEP-01](DEP-01.md)、[DEP-02](DEP-02.md)、[CFG-01](CFG-01.md) 与 [APP-01](APP-01.md) 已完成；`https://xingtu.yumeng.live` 的 DNS、Let’s Encrypt、独立 Nginx、真实 `admin` 登录、Secure Cookie 与会话刷新已实测。腾讯云中心容器、Intake Worker、Tailnet 最小权限及 Mac 到 PostgreSQL/Temporal/MinIO 的鉴权访问已实测。[MAC-01](MAC-01.md) launchd Worker 真实轮询 `xingtu-unit-local-mac-02`，[HYB-01](HYB-01.md) 完成停止 199 秒判离线与恢复。执行单元仍真实为 `NEEDS_LOGIN/local_development`，未访问巨量星图、未采集；COS 恢复、OpenWrt/NetworkProof、远程 F10 与真实端到端仍待完成。统一操作见[混合部署手册](../deployment/hybrid-production-runbook.md)。
+
 # 2026-10-16 CD-08 / DATA-02：作品封面与传播量中位数修复 + 7 指标/11 作品字段结构化（CD-08 待验收 / DATA-02 已完成）
 
 [CD-08](CD-08.md) 修复达人详情「创作能力作品封面」与「商业能力播放量中位数」；[DATA-02](DATA-02.md) 完成 7 项内容数据指标与 11 个作品字段的 JSONB 拆分、历史回填与读写链路。要点：①播放量中位数原读顶层 `spread.play_mid`（`1399516`），线上实测该卡片是 `spread.item_rate_metrics.play_mid`（`766187`＝`76.6w`、优于 `99.23%`），修复后页面与平台一致且另六项不变；②作品 `item_cover` 是不透明对象存储 key，改用已登记的 `get_sign_image`（含实测必需的 `format=webp`）与既有 CDN 白名单签名、受控入库并按平台 key 登记，作品列表 15/15 与 14/14 显示真实封面且与作品一一对应（柱序/链接/封面/播放量/标题逐条核对）；③迁移 015/016/017 新增 5 指标列、追加式作品观测表、`media_objects.source_key`，回填 3064 条作品行与 51 位达人的指标值（缺失保持 NULL、未填 0，副标题/收藏数标注 `NOT_PROVIDED`），JSONB 与快照 md5 未变化；④契约升版 `xingtu-ad-creator-featured-v11`（新增 `cover_signs` 请求与 `item_cover` 规范），`adapter_version` 不变；⑤实现中修复签名回声未校验、`text_value(None)` 变 `"None"`、任务入口封面 404、空 `canonical_link` 冲突、`field_sources` 描述空值共 5 个真实缺陷。验证：后端 `403 passed, 1 skipped`、前端 `82 passed`、`ruff`/`format`/`mypy --strict` 与 lint/build 全部通过；两入口真实 Chrome 验收通过。历史封面全量回填已完成（去重 `1590/1591` key，唯一未解析为平台拒签）；仍待验收的一项为「新采集数据按现有业务流程写入」（采集侧封面链路未做真实新采集回归，用户本轮要求不为此单独触发采集）。详见[验收证据](evidence/CD-08-DATA-02-acceptance-2026-10-16.md)。
@@ -186,7 +218,7 @@ B3/C 最终证明自动选号在当前 Playwright 环境中不可靠：目标条
 [AUTO-01](AUTO-01.md)：**进行中／未验收**，为跨现有功能卡的优化跟踪项，不计入原 12 个一期交付单元。2026-09-29 已实现单达人 `IDENTITY_UNREADABLE` 三次尝试后跳过续跑、按能力 scope 的 Contract breaker，并通过合成 20/200 位连续任务；旧“任务结束必回 NEEDS_LOGIN”已被 DEC-013 取代。未验收：真实全字段、第 3 页及终点、真实 5/10/20、50/100 与 7 天观察。
 
 
-> 更新时间：2026-10-17T12:20:00+08:00。具体实现与验收事实只在各卡片及其证据维护；本表同步ID、标题、状态和链接。
+> 更新时间：2026-10-20T20:32:00+08:00。具体实现与验收事实只在各卡片及其证据维护；本表同步ID、标题、状态和链接。
 
 **先看[项目任务进度总览](../项目任务进度总览.md)**：当前进度、推荐顺序、F/T/U覆盖、依赖及AI执行方式。
 
@@ -198,15 +230,34 @@ B3/C 最终证明自动选号在当前 Playwright 环境中不可靠：目标条
 | UNIT-01 | 执行单元与平台核验（先本地后蜂窝） | 待验收 | [UNIT-01.md](UNIT-01.md) |
 | F04 | 平台筛选、搜索与候选发现 | 待验收 | [F04.md](F04.md) |
 | F05 | 达人主页资料采集 | 已完成 | [F05.md](F05.md) |
-| APP-01 | 产品应用基础与登录会话 | 待验收 | [APP-01.md](APP-01.md) |
+| APP-01 | 产品应用基础与登录会话 | 已完成 | [APP-01.md](APP-01.md) |
 | INTAKE-01 | 筛选表单、P1转换与可靠提交 | 已完成 | [INTAKE-01.md](INTAKE-01.md) |
 | F06 | 主页精选作品采集与封面存储 | 已完成 | [F06.md](F06.md) |
 | CONSOLE-01 | 任务中心与任务内达人结果 | 已完成 | [CONSOLE-01.md](CONSOLE-01.md) |
 | F09 | 手动更新达人（达人库入口，UPD-03） | 待验收 | [F09.md](F09.md) |
 | F10 | 执行单元状态与远程登录维护 | 进行中 | [F10.md](F10.md) |
 | F12 | 达人周期性更新（UPD-04） | 待验收 | [F12.md](F12.md) |
-| OPS-01 | 生产运行、资源调度与运维恢复 | 待办 | [OPS-01.md](OPS-01.md) |
+| OPS-01 | 生产运行、资源调度与运维恢复 | 进行中 | [OPS-01.md](OPS-01.md) |
 | RELEASE-01 | 一期全链路联调与上线验收 | 待办 | [RELEASE-01.md](RELEASE-01.md) |
+
+## 2026-10-20 正式部署后冒烟测试
+
+| ID | 标题 | 状态 | 卡片 |
+|---|---|---|---|
+| QA-01 | 正式部署后核心业务冒烟测试（NO-GO；P1 已修复，等待 DSH 独立复测） | 进行中 | [QA-01.md](QA-01.md) |
+
+## 2026-10-20 P1 需求转换修复
+
+| ID | 标题 | 状态 | 卡片 |
+|---|---|---|---|
+| P1FIX-01 | P1 需求转换 402 阻断修复与实机验证 | 待验收 | [P1FIX-01.md](P1FIX-01.md) |
+| E2E-01 | 真实采集端到端验收（户外 / 3 位，2026-10-21） | 阻塞（1/3、精选未执行、11 分 37 秒/达人；NO-GO） | [E2E-01.md](E2E-01.md) |
+| P1FIX-02 | F10 后采集中断 / Workflow 不收口 / Heartbeat 修复 | 待验收（已部署；修 Temporal 心跳线程 P1，慢网租约心跳仍 fail-closed） | [P1FIX-02.md](P1FIX-02.md) |
+| PERF-01 | 混合部署采集性能诊断与 Heartbeat/终态最小修复 | 待验收（未部署/未真实复验；带宽/结构方案待确认） | [PERF-01.md](PERF-01.md) |
+| PERF-02 | 混合部署网络瓶颈与 checkpoint 优化专项验证 | 待验收（GO 受控验证；未部署/未真实复验） | [PERF-02.md](PERF-02.md) |
+| PERF-03 | 带宽升级评估、单达人性能模型与可靠性回归 | 阻塞（实测单达人 11 分 37 秒；带宽未升级，≤120s 未达标） | [PERF-03.md](PERF-03.md) |
+| NET-01 | Mac 家庭 WiFi / 手机热点网络兼容性与自动恢复 | 阻塞（公司 WiFi 阻断 Tailscale；热点 22.8–26.8 KiB/s；家庭/切换 NOT TESTED） | [NET-01.md](NET-01.md) |
+| FOLLOW-01 | 部署后遗留问题跟踪（HTTP 80 / 证书 / P2-P3 / 安全头） | 待办 | [FOLLOW-01.md](FOLLOW-01.md) |
 
 ## 2026-10-17 达人手动/周期性更新（UPD）
 

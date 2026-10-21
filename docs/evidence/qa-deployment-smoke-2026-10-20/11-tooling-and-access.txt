@@ -1,0 +1,28 @@
+# 测试工具、访问方式与边界
+测试时间：2026-10-20 20:43–21:00 (UTC+08)
+
+## 工具版本
+- Playwright MCP: @playwright/mcp 0.0.77（serverInfo 报告 playwright 1.62.0-alpha-2026-06-29）
+- 浏览器：系统 Google Chrome 155.0.8059.85（channel=chrome，headful）
+- Node.js v24.14.0
+- macOS 26.5.2 (25F84)
+- 接入方式：MCP stdio 传输 + 本机 Unix socket 持久桥接；DSH 侧无原生 MCP 客户端配置，
+  本次通过 JSON-RPC 调用 Playwright MCP 工具（browser_navigate / snapshot / click / type /
+  evaluate / take_screenshot / console_messages / network_requests），不是直接使用 Playwright API。
+- 浏览器隔离：isolated=true，Profile 仅在内存；未使用采集单元 Profile（.runtime/profiles/unit-local-mac-02），
+  未修改任何 Cookie/Profile。
+- 网络：launchOptions.proxy.server=direct:// + --no-proxy-server，绕过 Clash Verge Rev 系统代理；
+  未修改 Mac 全局代理、Tailscale、DNS 或防火墙。
+
+## 凭据
+- 管理员账号密码从 macOS Keychain（service com.yumeng.xingtu.product.admin）读取；
+- 仅在浏览器表单/登录请求瞬时使用，未写入仓库、证据、报告或聊天；
+- 测试期间生成过一条 MCP 工具回显（登录时 fill 明文出现在会话工具输出中），已在后续调用中加入输出脱敏；
+  本报告与归档文件不含明文密码。建议本轮结束后轮换该测试密码（由用户决定，本轮未修改）。
+
+## 未使用的通道
+- SSH：使用现有 ~/.ssh/yumeng_xingtu_tencent_ed25519 连接 root@119.91.210.100 返回
+  “Permission denied (publickey,...)”；未尝试密码、未修改 authorized_keys，故服务器容器、
+  docker compose ps、宿主资源与容器重启记录均未在本轮独立核验。
+- 巨量星图：本轮未导航、未登录、未采集、未提交会触发采集的任务。
+- 未执行任何 Git commit/push/merge；未修改业务代码、数据库 Schema、生产数据、Worker 或租约状态。

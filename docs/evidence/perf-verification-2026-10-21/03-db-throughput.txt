@@ -1,0 +1,13 @@
+DB transfer matrix (client wall clock; includes protocol/round trips)
+size=128KiB download=[2.54, 2.22]s (53.8 KiB/s) upload=[0.09, 0.08]s (1463.4 KiB/s)
+size=512KiB download=[8.33, 8.52]s (60.8 KiB/s) upload=[0.15, 0.18]s (3136.4 KiB/s)
+size=1024KiB download=[20.7, 21.77]s (48.2 KiB/s) upload=[0.97, 0.18]s (1771.2 KiB/s)
+size=2560KiB download=[46.02, 78.1]s (41.3 KiB/s) upload=[0.36, 0.46]s (6256.2 KiB/s)
+
+server-side execution for download (no transfer):
+  size=512KiB execution=0.016ms planning=0.079ms buffers=0
+Traceback (most recent call last):
+  File "<stdin>", line 30, in <module>
+  File "/Users/Longbo/Developer/YUMENG/.venv/lib/python3.13/site-packages/psycopg/connection.py", line 304, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.DuplicateTable: relation "probe" already exists

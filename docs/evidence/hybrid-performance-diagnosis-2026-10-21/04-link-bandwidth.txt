@@ -1,0 +1,27 @@
+# Link measurements 2026-10-20T16:35:21Z
+
+## Tailscale
+pong from yumeng-xingtu-cloud (100.86.124.51) via 119.91.210.100:41641 in 18ms
+100.86.124.51  yumeng-xingtu-cloud  lb.liu.w@  linux  active; direct 119.91.210.100:41641; offline, last seen 5m ago, tx 326281448 rx 526688156  
+
+## TCP connect (10 samples)
+  5432: n=10 median=19.5ms min=18.7 max=24.0 fails=0
+  7233: n=10 median=19.4ms min=18.6 max=239.6 fails=0
+  9000: n=10 median=19.3ms min=18.3 max=19.7 fails=0
+
+## General internet (Cloudflare 10MB)
+  speed=364693 B/s total=27.420305s
+
+## PostgreSQL transfer throughput (production, read-only)
+  concurrency=1 size=131072: aggregate=89.2 KiB/s wall=1.43s
+  concurrency=4 size=131072: aggregate=52.8 KiB/s wall=9.70s
+  concurrency=8 size=65536: aggregate=76.8 KiB/s wall=6.67s
+
+## Repeat general internet samples (WiFi variability)
+  sample1 speed=504232 B/s total=19.832119s
+  sample2 speed=1706027 B/s total=5.861569s
+  sample3 speed=431357 B/s total=23.182613s
+  earlier sample at 00:11 local: speed=2914287 B/s (23.3 Mbit/s)
+
+## Repeat DB 128 KiB transfer
+  DB 128 KiB: median=2788 ms -> 45.9 KiB/s

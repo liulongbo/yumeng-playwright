@@ -1,0 +1,29 @@
+# Worker/ExecutionUnit 状态
+时间：2026-10-20 22:12–22:17 (UTC+08)
+
+execution_units:
+  unit_id=unit-local-mac-02
+  state=SESSION_UNVERIFIED
+  generation=5
+  owner=NULL
+  current_root_task_id=NULL
+  browser_stopped=true
+  browser_instance_id=NULL
+  browser_started_at=NULL
+  last_session_status=INDETERMINATE
+  last_session_reason=NO_CURRENT_PROCESS_SESSION_OBSERVATION
+  last_session_checked_at=2026-10-20T14:12:36Z
+
+root_tasks:
+  root_task_id=11f9fc9c-ad06-4d41-9fde-c33bab168f47
+  state=COLLECTING
+  version=182
+  updated_at=2026-10-20T14:12:16Z
+  completed_at=NULL
+  (无 failure_reason；与 Temporal FAILED 不一致)
+
+## Worker 日志
+- 4 次 “Completing activity as failed” (collect_segment_v1 attempt 1–4)
+- traceback: page.goto / check_session / locator.is_visible → asyncio.CancelledError: Activity cancelled
+- 代码位置：backend/src/xingtu/worker.py:574 `except asyncio.CancelledError:` 仅在 heartbeat_error 存在时写任务终态；否则重新抛出
+  → Temporal 已判定 heartbeat timeout，但产品任务没有 FAILED/PARTIAL 收口

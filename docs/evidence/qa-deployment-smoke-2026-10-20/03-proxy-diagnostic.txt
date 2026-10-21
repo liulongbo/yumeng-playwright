@@ -1,0 +1,27 @@
+# S01 本机网络/代理证据
+测试时间：2026-10-20 20:45–20:58 (UTC+08)
+工具：scutil / curl / Playwright MCP + 系统 Chrome 155.0.8059.85
+
+## 系统代理（未修改）
+HTTPEnable=1  HTTPProxy=127.0.0.1  HTTPPort=7897
+HTTPSEnable=1 HTTPSProxy=127.0.0.1 HTTPSPort=7897
+SOCKSEnable=1 SOCKSPort=7897
+
+## 对比结果
+curl --noproxy '*' https://xingtu.yumeng.live/  => 200，remote_ip=119.91.210.100，约 0.25s
+curl（走系统代理）https://xingtu.yumeng.live/  => curl(35) LibreSSL SSL_connect: SSL_ERROR_SYSCALL
+curl -x http://127.0.0.1:7897 https://www.baidu.com/ => 200
+curl -x http://127.0.0.1:7897 https://api.github.com/ => 200
+curl -x http://127.0.0.1:7897 https://xingtu.yumeng.live/ => 000 / TLS 被中断
+curl -x http://127.0.0.1:7897 http://xingtu.yumeng.live/ => 502（由代理返回）
+
+## 隔离浏览器启动参数
+Playwright MCP 0.0.77，channel=chrome，headless=false，isolated=true（内存 Profile）
+launchOptions.proxy.server=direct://，args 含 --no-proxy-server
+context viewport 1440x900，locale zh-CN
+输出目录 /tmp/dsh-pw-smoke
+
+## 结论
+- 站点与域名本身可直连；Clash Verge Rev 系统代理对该域名的规则/线路返回 502/TLS 中断。
+- 本轮所有浏览器测试均使用隔离上下文 + 显式绕过系统代理，未修改 Mac 全局代理、Tailscale 或 DNS。
+- 对内网用户的影响：使用同一 Clash 配置且未加 DIRECT 规则时，Chrome 可能无法打开该域名。

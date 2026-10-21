@@ -1,0 +1,131 @@
+{
+  "label": "current-unknown",
+  "checked_at": "2026-10-21T01:02:38.379331+00:00",
+  "interface": {
+    "cmd": "ifconfig en0",
+    "exit": 0,
+    "elapsed_s": 0.005,
+    "stdout": "en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500\n\toptions=6460<TSO4,TSO6,CHANNEL_IO,PARTIAL_CSUM,ZEROINVERT_CSUM>\n\tether 2e:c2:12:2f:d5:c6\n\tinet6 fe80::8b:35a9:7c89:a064%en0 prefixlen 64 secured scopeid 0xb \n\tinet 192.168.10.165 netmask 0xfffffc00 broadcast 192.168.11.255\n\tnd6 options=201<PERFORMNUD,DAD>\n\tmedia: autoselect\n\tstatus: active",
+    "stderr": ""
+  },
+  "network": {
+    "cmd": "scutil --nwi",
+    "exit": 0,
+    "elapsed_s": 0.004,
+    "stdout": "Network information\n\nIPv4 network interface information\n     en0 : flags      : 0x5 (IPv4,DNS)\n           address    : 192.168.10.165\n           reach      : 0x00000002 (Reachable)\n\n   REACH : flags 0x00000002 (Reachable)\n\nIPv6 network interface information\n   No IPv6 states found\n\n\n   REACH : flags 0x00000000 (Not Reachable)\n\nNetwork interfaces: en0 utun5",
+    "stderr": ""
+  },
+  "route": {
+    "cmd": "route -n get default",
+    "exit": 0,
+    "elapsed_s": 0.002,
+    "stdout": "route to: default\ndestination: default\n       mask: default\n    gateway: 192.168.10.1\n  interface: en0\n      flags: <UP,GATEWAY,DONE,STATIC,PRCLONING,GLOBAL>\n recvpipe  sendpipe  ssthresh  rtt,msec    rttvar  hopcount      mtu     expire\n       0         0         0         0         0         0      1500         0",
+    "stderr": ""
+  },
+  "dns": {
+    "cmd": "scutil --dns",
+    "exit": 0,
+    "elapsed_s": 0.003,
+    "stdout": "DNS configuration\n\nresolver #1\n  nameserver[0] : 223.5.5.5\n  flags    : Request A records\n  reach    : 0x00000002 (Reachable)\n\nresolver #2\n  domain   : local\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300000\n\nresolver #3\n  domain   : 254.169.in-addr.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300200\n\nresolver #4\n  domain   : 8.e.f.ip6.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300400\n\nresolver #5\n  domain   : 9.e.f.ip6.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300600\n\nresolver #6\n  domain   : a.e.f.ip6.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300800\n\nresolver #7\n  domain   : b.e.f.ip6.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 301000\n\nDNS configuration (for scoped queries)\n\nresolver #1\n  nameserver[0] : 223.5.5.5\n  if_index : 11 (en0)\n  flags    : Scoped, Request A records\n  reach    : 0x00000002 (Reachable)\n\nresolver #2\n  nameserver[0] : 223.5.5.5\n  if_index : 20 (utun5)\n  flags    : Scoped, Request A records, Request AAAA records\n  reach    : 0x00000003 (Reachable,Transient Connection)",
+    "stderr": ""
+  },
+  "tailscale_status": {
+    "cmd": "tailscale status",
+    "exit": 0,
+    "elapsed_s": 0.027,
+    "stdout": "100.67.64.110  longbo               lb.liu.w@  macOS  -                                                \n100.86.124.51  yumeng-xingtu-cloud  lb.liu.w@  linux  active; relay \"sfo\", tx 855649352 rx 1243523128",
+    "stderr": ""
+  },
+  "tailscale_ping": {
+    "cmd": "tailscale ping --c 2 100.86.124.51",
+    "exit": 1,
+    "elapsed_s": 2.798,
+    "stdout": "pong from yumeng-xingtu-cloud (100.86.124.51) via DERP(sfo) in 378ms\npong from yumeng-xingtu-cloud (100.86.124.51) via DERP(sfo) in 387ms",
+    "stderr": "2026/10/21 09:02:41 direct connection not established"
+  },
+  "tailscale_netcheck": {
+    "cmd": "tailscale netcheck",
+    "exit": 0,
+    "elapsed_s": 3.479,
+    "stdout": "Report:\n\t* Time: 2026-10-21 09:02:44.690053+08:00\n\t* UDP: false\n\t* IPv4: (no addr found)\n\t* IPv6: no, but OS has support\n\t* MappingVariesByDestIP: \n\t* PortMapping: \n\t* CaptivePortal: false\n\t* Nearest DERP: unknown (no response to latency probes)",
+    "stderr": "2026/10/21 09:02:41 portmap: monitor: gateway and self IP changed: gw=192.168.10.1 self=192.168.10.165"
+  },
+  "tcp": {
+    "5432": {
+      "host": "100.86.124.51",
+      "port": 5432,
+      "ok": 3,
+      "fail": 0,
+      "times_ms": [
+        440.7,
+        432.7,
+        617.3
+      ],
+      "errors": []
+    },
+    "7233": {
+      "host": "100.86.124.51",
+      "port": 7233,
+      "ok": 3,
+      "fail": 0,
+      "times_ms": [
+        448.4,
+        444.5,
+        744.1
+      ],
+      "errors": []
+    },
+    "9000": {
+      "host": "100.86.124.51",
+      "port": 9000,
+      "ok": 3,
+      "fail": 0,
+      "times_ms": [
+        450.9,
+        639.6,
+        444.6
+      ],
+      "errors": []
+    }
+  },
+  "postgres": {
+    "ok": true,
+    "elapsed_s": 6.41,
+    "select1": {
+      "ok": 1
+    },
+    "unit": {
+      "unit_id": "unit-local-mac-02",
+      "state": "SESSION_UNVERIFIED",
+      "generation": "9",
+      "owner": "None",
+      "browser_stopped": "True",
+      "last_heartbeat_at": "2026-10-20 15:29:53.818575+00:00"
+    },
+    "active_roots": 0,
+    "root_tasks_total": 4
+  },
+  "minio": {
+    "ok": true,
+    "elapsed_s": 8.711,
+    "get_s": 4.783,
+    "bytes": 61866,
+    "kib_s": 12.6
+  },
+  "temporal": {
+    "ok": true,
+    "elapsed_s": 1.433,
+    "alive": true,
+    "fresh_pollers": 1,
+    "poller_entries": 1,
+    "freshest_age_seconds": 10.800687,
+    "error": null
+  },
+  "launchd": {
+    "ok": true,
+    "state": "active",
+    "runs": "3",
+    "pid": "54216",
+    "raw": "gui/501/com.yumeng.xingtu.collection-worker = {\n\tactive count = 1\n\tpath = /Users/Longbo/Library/LaunchAgents/com.yumeng.xingtu.collection-worker.plist\n\ttype = LaunchAgent\n\tstate = running\n\n\tprogram = /bin/zsh\n\targuments = {\n\t\t/bin/zsh\n\t\t/Users/Longbo/Developer/YUMENG/deploy/macos/run-collection-worker.sh\n\t\t/Users/Longbo/Developer/YUMENG\n\t\t/Users/Longbo/Developer/YUMENG/.runtime/units/local-dev-mac-02.json\n\t\t/Users/Longbo/Developer/YUMENG/.runtime/cloud-worker.env\n\t}\n\n\tworking directory = /Users/Longbo/Developer/YUMENG\n\n\tstdout path = /Users/Longbo/Developer/YUMENG/.runtime/logs/cloud-collection-worker.log\n\tstderr path = /Users/Longbo/Developer/YUMENG/.runtime/logs/cloud-collection-worker.error.log\n\tinherited environment = {\n\t\tDISPLAY => /var/run/com.apple.launchd.ZQlwTAr8qX/org.xquartz:0\n\t\tSSH_AUTH_SOCK => /var/run/com.apple.launchd.W55trbtyay/Listeners\n\t}\n\n\tdefault environment = {\n\t\tPATH => /usr/bin:/bin:/usr/sbin:/sbin\n\t}\n\n\tenvironment = {\n\t\tOSLogRateLimit => 64\n\t\tXPC_SERVICE_NAME =>"
+  }
+}

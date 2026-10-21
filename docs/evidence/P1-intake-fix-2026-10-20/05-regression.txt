@@ -1,0 +1,21 @@
+# 自动化回归结果
+时间：2026-10-20 21:31–21:34 (UTC+08)
+
+| 检查 | 命令 | 结果 |
+|---|---|---|
+| 后端单元 | `.venv/bin/pytest backend/tests/unit -q` | 315 passed |
+| 后端契约 | `PLAYWRIGHT_BROWSERS_PATH=$PWD/.runtime/browsers .venv/bin/pytest backend/tests/contract -q` | 33 passed |
+| 类型 | `.venv/bin/mypy backend/src` | Success, 34 source files |
+| 后端 lint | `.venv/bin/ruff check backend` | All checks passed |
+| 后端格式 | `.venv/bin/ruff format --check backend` | 83 files already formatted |
+| 前端测试 | `npm --prefix frontend test` | 6 files / 83 tests passed |
+| 前端构建 | `npm --prefix frontend run build` | exit 0，bundle index-BNJmWNlC.js 430.72 kB |
+| Compose | `docker compose ... config --quiet` | exit 0 |
+| API 健康 | `GET /api/health/live` | 200 |
+| 登录/任务/单元 API | 真实产品 HTTPS | login 200；tasks 200；units 200 |
+
+## 未执行/环境限制
+- `backend/tests/integration`：92 errors，原因是未提供 `XINGTU_TEST_DATABASE_URL`，
+  测试明确拒绝在非测试库运行；不是本轮代码失败。另有 3 skipped。
+- 真实巨量星图采集：未执行（无授权）。
+- 真实 P2 采集/Chrome：未执行（见 03 的隔离说明）。

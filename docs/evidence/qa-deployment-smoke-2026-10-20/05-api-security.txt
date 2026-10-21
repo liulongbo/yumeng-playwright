@@ -1,0 +1,52 @@
+# S08/S02 安全冒烟证据
+测试时间：2026-10-20 20:53–20:58 (UTC+08)
+
+## 未登录访问受保护 API（curl，无 Cookie）
+/api/health/workers      => 401
+/api/execution-units     => 401
+/api/creator-library     => 401
+/api/verification-events => 401
+/api/health/live         => 200 {"status":"ok"}（公开存活探针）
+
+401 响应体示例：
+{"code":"ACCOUNT_LOGIN_REQUIRED","message":"PRODUCT_SESSION_REQUIRED","field_errors":[],"request_id":"...","current_version":null,"allowed_actions":[]}
+
+## 登出后
+GET /api/tasks?limit=5 => 401 ACCOUNT_LOGIN_REQUIRED
+浏览器访问 /tasks => 客户端跳转 /login
+
+## CSRF（浏览器内 fetch，带 Cookie）
+POST /api/tasks 无 X-CSRF-Token        => 403 {"code":"INVALID_FORM","message":"CSRF_CHECK_FAILED"}
+POST /api/tasks 伪造 X-CSRF-Token      => 403 CSRF_CHECK_FAILED
+两次均未创建任务（测试前后任务数均为 1）
+
+## Origin 校验（curl）
+POST /api/auth/login, Origin=https://evil.example => 403 ORIGIN_CHECK_FAILED
+
+## CORS
+GET /api/auth/me, Origin=https://evil.example     => 401，无 Access-Control-Allow-Origin
+OPTIONS /api/tasks, Origin=https://evil.example   => 405，allow: POST，无 CORS 头
+
+## WebSocket（无 Cookie / 错误 Origin）
+GET(Upgrade) /api/takeovers/<uuid>/viewer, 无 Cookie     => 403
+GET(Upgrade) 同上, Origin=https://evil.example           => 403
+（说明 Nginx 将 Upgrade 路由到应用，且应用在握手阶段拒绝未认证/错误来源）
+
+## 服务端校验
+target_count=0   => 422 INVALID_FORM "Input should be greater than or equal to 1"
+target_count=201 => 422 INVALID_FORM "Input should be less than or equal to 200"
+测试前后任务数均为 1，未产生测试任务
+
+## 错误响应
+不存在的任务/达人/封面 => 404，响应体仅 code/message/request_id，无堆栈、无数据库或对象存储凭据。
+前端 bundle 扫描：无 127.0.0.1、localhost:8000、postgres://、AKIA、minioadmin 等字符串。
+
+## 缺失的安全响应头
+见 01-https-tls.txt（无 HSTS/CSP/X-Frame-Options/X-Content-Type-Options/Referrer-Policy）。
+
+## WebSocket 路由补充
+GET /api/takeovers/<uuid>/viewer（普通 GET，无 Upgrade）=> 404，带 x-request-id、content-type application/json
+  → 证明该路径由 Nginx 转发到 FastAPI。
+GET /api/definitely-not-a-route + Upgrade 头 => 403（空 body）
+  → Nginx 对 /api/ 的 Upgrade 请求同样转发到上游，403 由应用/ASGI 在握手阶段产生，
+    而不是 Nginx 静态拒绝；结合无 Cookie/错误 Origin 的 403，可确认认证在应用侧执行。

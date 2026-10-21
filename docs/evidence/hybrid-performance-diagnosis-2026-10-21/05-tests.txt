@@ -1,0 +1,24 @@
+# Test evidence 2026-10-20T16:48:24Z
+
+## unit
+........................................................................ [ 83%]
+..........................................................               [100%]
+346 passed in 4.39s
+
+## contract
+.................................                                        [100%]
+33 passed in 14.99s
+
+## integration (isolated PostgreSQL 127.0.0.1:55439/xingtu_test_perf)
+.................................................sss.................... [ 68%]
+................................s                                        [100%]
+101 passed, 4 skipped in 125.30s (0:02:05)
+
+## mypy
+Success: no issues found in 34 source files
+
+## ruff check
+All checks passed!
+
+## ruff format --check
+89 files already formatted

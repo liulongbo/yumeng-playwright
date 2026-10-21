@@ -1,0 +1,3 @@
+local synthetic 512 KiB transfer: median=2.9 ms min=1.5 max=8.4
+local Repository.get checkpoint=617126 bytes: median=14.5 ms min=12.8 max=17.4
+historical DB: restored .runtime/xingtu-pre-data02-20261016T153124.dump (pre-hybrid local 127.0.0.1:55432 source), isolated container 127.0.0.1:55439

@@ -1,0 +1,22 @@
+# S01 HTTP(80) 入口证据
+测试时间：2026-10-20 20:57–20:58 (UTC+08)
+
+## 连续 3 次请求
+try1 http=302 redirect=https://dnspod.qcloud.com/static/webblock.html?d=xingtu.yumeng.live
+try2 http=302 redirect=https://dnspod.qcloud.com/static/webblock.html?d=xingtu.yumeng.live
+try3 http=302 redirect=https://dnspod.qcloud.com/static/webblock.html?d=xingtu.yumeng.live
+
+## 响应头
+HTTP/1.1 302 OK
+Connection: Keep-Alive
+Location: https://dnspod.qcloud.com/static/webblock.html?d=xingtu.yumeng.live
+
+## 跟随跳转后的页面
+<title>备案</title>，页面脚本含 window.CDN_HOST = "cloudcache.tencent-cloud.com"，
+为腾讯云 DNSPod 的备案/拦截页，不是本项目 Nginx 的 301→HTTPS 响应。
+
+## 结论
+显式 HTTPS 访问正常；纯 HTTP 入口在外部网络层被拦截，未到达项目 Nginx。
+- 影响：用户从 http:// 链接进入会看到第三方备案页。
+- 风险：Let's Encrypt 证书为 2026-10-20 手工 DNS-01 签发（OPS-01 记录，当前无自动续期 hook），HTTP-01 路径不可用；证书 2027-01-18 到期，若无自动续期将导致 HTTPS 中断。
+- 该现象与 OPS-01 2026-10-20 记录的“80 端口路径存在外部间歇性拦截”一致，本轮 3/3 均被拦截。

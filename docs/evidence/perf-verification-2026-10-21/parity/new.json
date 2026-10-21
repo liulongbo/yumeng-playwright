@@ -1,0 +1,164 @@
+{
+  "returned_state": "PARTIAL_COMPLETED",
+  "task": {
+    "state": "PARTIAL_COMPLETED",
+    "valid_count": 1,
+    "target_count": 1,
+    "profile_complete_count": 1,
+    "featured_status": "NOT_ATTEMPTED",
+    "pipeline_complete": false,
+    "failure_reason": "FEATURED_NOT_ATTEMPTED"
+  },
+  "candidates": [
+    {
+      "platform_creator_id": "1",
+      "state": "done",
+      "valid": true,
+      "failure_reason": "FEATURED_COLLECTION_INCOMPLETE",
+      "modules": {
+        "basic": {
+          "module_key": "basic",
+          "fields": [
+            {
+              "field_key": "nickname",
+              "status": "COLLECTED",
+              "value": "synthetic name",
+              "raw_value": "synthetic",
+              "failure_reason": null,
+              "coverage": null
+            },
+            {
+              "field_key": "platform_creator_id",
+              "status": "COLLECTED",
+              "value": "1",
+              "raw_value": "synthetic",
+              "failure_reason": null,
+              "coverage": null
+            }
+          ],
+          "expected_fields": [
+            "nickname",
+            "platform_creator_id"
+          ],
+          "coverage_gaps": []
+        },
+        "commercial": {
+          "module_key": "commercial",
+          "fields": [
+            {
+              "field_key": "value",
+              "status": "COLLECTED",
+              "value": "synthetic name",
+              "raw_value": "synthetic",
+              "failure_reason": null,
+              "coverage": null
+            }
+          ],
+          "expected_fields": [
+            "value"
+          ],
+          "coverage_gaps": []
+        },
+        "fans": {
+          "module_key": "fans",
+          "fields": [
+            {
+              "field_key": "value",
+              "status": "COLLECTED",
+              "value": "synthetic name",
+              "raw_value": "synthetic",
+              "failure_reason": null,
+              "coverage": null
+            }
+          ],
+          "expected_fields": [
+            "value"
+          ],
+          "coverage_gaps": []
+        }
+      },
+      "collections": {}
+    }
+  ],
+  "task_creators": [
+    {
+      "position": 0,
+      "valid": true
+    }
+  ],
+  "snapshots": [
+    {
+      "modules": {
+        "basic": {
+          "module_key": "basic",
+          "fields": [
+            {
+              "field_key": "nickname",
+              "status": "COLLECTED",
+              "value": "synthetic name",
+              "raw_value": "synthetic",
+              "failure_reason": null,
+              "coverage": null
+            },
+            {
+              "field_key": "platform_creator_id",
+              "status": "COLLECTED",
+              "value": "1",
+              "raw_value": "synthetic",
+              "failure_reason": null,
+              "coverage": null
+            }
+          ],
+          "expected_fields": [
+            "nickname",
+            "platform_creator_id"
+          ],
+          "coverage_gaps": []
+        },
+        "commercial": {
+          "module_key": "commercial",
+          "fields": [
+            {
+              "field_key": "value",
+              "status": "COLLECTED",
+              "value": "synthetic name",
+              "raw_value": "synthetic",
+              "failure_reason": null,
+              "coverage": null
+            }
+          ],
+          "expected_fields": [
+            "value"
+          ],
+          "coverage_gaps": []
+        },
+        "fans": {
+          "module_key": "fans",
+          "fields": [
+            {
+              "field_key": "value",
+              "status": "COLLECTED",
+              "value": "synthetic name",
+              "raw_value": "synthetic",
+              "failure_reason": null,
+              "coverage": null
+            }
+          ],
+          "expected_fields": [
+            "value"
+          ],
+          "coverage_gaps": []
+        }
+      },
+      "collections": {},
+      "profile_complete": true,
+      "featured_complete": false,
+      "pipeline_complete": false,
+      "featured_status": "NOT_ATTEMPTED"
+    }
+  ],
+  "featured_collections": 0,
+  "featured_cards": 0,
+  "label": "new",
+  "source_path": "/Users/Longbo/Developer/YUMENG/backend/src/xingtu/__init__.py"
+}

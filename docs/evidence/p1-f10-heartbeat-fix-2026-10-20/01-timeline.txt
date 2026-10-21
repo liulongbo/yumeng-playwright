@@ -1,0 +1,24 @@
+# 真实任务 11f9fc9c 关键时间线（UTC）
+2026-10-20T13:46:09Z 任务创建，P1 成功
+2026-10-20T13:46:24Z ExecutionUnit 获取租约，项目 Chrome 启动
+2026-10-20T13:47:57Z 滑块触发，WAITING_FOR_VERIFICATION
+2026-10-20T13:48:17Z F10 takeover ACTIVE
+2026-10-20T13:57:02Z 人工完成滑块，QA 点击“我已完成验证”
+2026-10-20T13:57:12Z challenge RESOLVED，takeover RESUMED
+2026-10-20T13:57:18Z 第一个 collect_segment_v1 完成（返回等待验证前）
+2026-10-20T13:57:48Z Workflow 定时器结束，调度下一次 activity
+2026-10-20T13:57:51Z ExecutionUnit 再次 LEASED（恢复采集）
+2026-10-20T14:08:33Z 已持久 2 位达人草稿（第 2 位 basic 完成）
+2026-10-20T14:09:32Z worker 日志 attempt 1 failed
+2026-10-20T14:10:34Z attempt 2 failed
+2026-10-20T14:11:29Z attempt 3 failed
+2026-10-20T14:11:41Z Temporal 记录 activity attempt 4 started
+2026-10-20T14:11:52Z execution_units.last_heartbeat_at 最后更新
+2026-10-20T14:12:26Z Temporal activity timed out (heartbeat)
+2026-10-20T14:12:31Z Workflow FAILED（max attempts reached）
+之后 root_task 仍 COLLECTING v182；unit SESSION_UNVERIFIED generation=5
+
+## 事实
+- F10 恢复本身成功：challenge RESOLVED、takeover RESUMED、任务重新 LEASED、第二位达人 basic 已采集。
+- 失败发生在恢复约 11 分钟后，表现为 heartbeat 停止/activity 取消，不是 takeover 无法恢复。
+- `last_heartbeat_at=14:11:52` 到 timeout 14:12:26 约 34 秒；此后无 DB 心跳。

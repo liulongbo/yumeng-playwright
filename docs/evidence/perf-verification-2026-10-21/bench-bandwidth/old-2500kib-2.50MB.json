@@ -1,0 +1,272 @@
+{
+  "label": "old",
+  "source_path": "/Users/Longbo/Developer/YUMENG/.runtime/perf/old_src/xingtu/__init__.py",
+  "target_checkpoint_bytes": 2621440,
+  "checkpoint_text_bytes": 2621440,
+  "final_checkpoint_text_bytes": 3485815,
+  "modules": 8,
+  "rate_kib": 2500.0,
+  "lease_ttl_extended": true,
+  "elapsed_s": 75.599,
+  "db_wait_s": 75.283,
+  "max_single_db_call_s": 1.7,
+  "get_calls": 24,
+  "edit_calls": 35,
+  "progress_calls": 0,
+  "full_checkpoint_transfers": 59,
+  "proxy_down_bytes": 178662548,
+  "proxy_up_bytes": 106580813,
+  "loop_lag_max_s": 75.599,
+  "loop_lag_over_1s": 1,
+  "heartbeat_count": 0,
+  "heartbeat_max_gap_s": 0.0,
+  "heartbeat_gaps_s": [],
+  "module_seconds": {
+    "m2": 1.0692920829969808,
+    "m3": 1.1137819170035073,
+    "m4": 1.1564654169997084,
+    "m5": 1.1944637080014218,
+    "m6": 1.2414489579969086,
+    "m7": 1.2813452910049818,
+    "m8": 1.321085875002609,
+    "basic": 1.0259222089953255
+  },
+  "calls": [
+    [
+      "edit",
+      1.238
+    ],
+    [
+      "edit",
+      1.124
+    ],
+    [
+      "edit",
+      1.142
+    ],
+    [
+      "get",
+      0.871
+    ],
+    [
+      "get",
+      1.024
+    ],
+    [
+      "edit",
+      1.255
+    ],
+    [
+      "edit",
+      1.162
+    ],
+    [
+      "get",
+      0.915
+    ],
+    [
+      "edit",
+      1.351
+    ],
+    [
+      "edit",
+      1.181
+    ],
+    [
+      "get",
+      0.913
+    ],
+    [
+      "get",
+      1.069
+    ],
+    [
+      "edit",
+      1.315
+    ],
+    [
+      "edit",
+      1.208
+    ],
+    [
+      "get",
+      0.969
+    ],
+    [
+      "edit",
+      1.404
+    ],
+    [
+      "edit",
+      1.248
+    ],
+    [
+      "get",
+      0.959
+    ],
+    [
+      "get",
+      1.109
+    ],
+    [
+      "edit",
+      1.362
+    ],
+    [
+      "edit",
+      1.255
+    ],
+    [
+      "get",
+      1.005
+    ],
+    [
+      "edit",
+      1.454
+    ],
+    [
+      "edit",
+      1.304
+    ],
+    [
+      "get",
+      1.004
+    ],
+    [
+      "get",
+      1.152
+    ],
+    [
+      "edit",
+      1.408
+    ],
+    [
+      "edit",
+      1.314
+    ],
+    [
+      "get",
+      1.05
+    ],
+    [
+      "edit",
+      1.489
+    ],
+    [
+      "edit",
+      1.361
+    ],
+    [
+      "get",
+      1.049
+    ],
+    [
+      "get",
+      1.194
+    ],
+    [
+      "edit",
+      1.47
+    ],
+    [
+      "edit",
+      1.359
+    ],
+    [
+      "get",
+      1.091
+    ],
+    [
+      "edit",
+      1.567
+    ],
+    [
+      "edit",
+      1.42
+    ],
+    [
+      "get",
+      1.096
+    ],
+    [
+      "get",
+      1.235
+    ],
+    [
+      "edit",
+      1.528
+    ],
+    [
+      "edit",
+      1.459
+    ],
+    [
+      "get",
+      1.135
+    ],
+    [
+      "edit",
+      1.607
+    ],
+    [
+      "edit",
+      1.491
+    ],
+    [
+      "get",
+      1.135
+    ],
+    [
+      "get",
+      1.277
+    ],
+    [
+      "edit",
+      1.582
+    ],
+    [
+      "edit",
+      1.478
+    ],
+    [
+      "get",
+      1.179
+    ],
+    [
+      "edit",
+      1.654
+    ],
+    [
+      "edit",
+      1.514
+    ],
+    [
+      "get",
+      1.18
+    ],
+    [
+      "get",
+      1.32
+    ],
+    [
+      "edit",
+      1.615
+    ],
+    [
+      "edit",
+      1.537
+    ],
+    [
+      "get",
+      1.228
+    ],
+    [
+      "edit",
+      1.7
+    ],
+    [
+      "edit",
+      1.569
+    ]
+  ]
+}

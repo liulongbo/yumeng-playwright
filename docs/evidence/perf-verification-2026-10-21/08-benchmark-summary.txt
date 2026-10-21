@@ -1,0 +1,24 @@
+Isolated benchmark: real Engine (old baseline vs current), no-op adapter, one basic module
+Proxy: 100 KiB/s cloud->Mac, 2 MiB/s Mac->cloud, 10 ms one-way; local PostgreSQL 18.3
+
+  size ver  full  down_MiB   up_MiB elapsed_s db_wait_s max_call_s loop_lag_s   hb hb_max_gap
+  0.50 new     3      1.52     1.52     18.38     17.87       5.64      12.62   19     1.006
+  0.50 old    10      5.03     3.53     54.69     54.52       5.65      54.70    0     0.000
+  1.00 new     3      3.02     3.02     34.85     34.33      11.12      23.60   35     1.005
+  1.00 old    10     10.03     7.03    108.45    108.28      11.13     108.45    0     0.000
+  2.50 new     3      7.52     7.52     84.64     84.09      27.70      56.84   85     1.010
+  2.50 old    10     25.03    17.53    270.36    270.18      27.68     270.37    0     0.000
+
+Model for N modules (marginal old = 7 full/module, new = 1 full/module; start/end/final charge add
+a small constant; the measured one-module run is 10 -> 3):
+  N=1: full transfers 10 -> 3 (3.33x fewer)
+  N=8: full transfers 59 -> 10 (5.90x fewer)
+
+Per-module residual full edit cost (measured max single DB call, current code):
+  0.50 MiB checkpoint: 5.64s per full edit
+  1.00 MiB checkpoint: 11.12s per full edit
+  2.50 MiB checkpoint: 27.70s per full edit
+
+Old 2.5 MiB path exceeded the real 120 s lease TTL and failed LEASE_LOST during the initial run;
+the benchmark extended the isolated lease to 2 h to measure the DB path. New 2.5 MiB one-module
+run was 84.6 s, below 120 s but close; multi-module runs rely on the 1 ms module yield for lease renewal.

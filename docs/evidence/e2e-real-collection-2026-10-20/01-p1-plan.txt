@@ -1,0 +1,24 @@
+# P1 真实转换与任务创建
+时间：2026-10-20 21:46 (UTC+08)
+入口：https://xingtu.yumeng.live/tasks/new
+输入：内容关键词=宠物，目标达人数量=10（页面摘要显示 1 项条件 / 10 位）
+任务 ID：11f9fc9c-ad06-4d41-9fde-c33bab168f47
+
+## model_runs
+model_run_id=1121cbde-ac7e-47db-9494-66d0ae3406fb
+provider=deepseek
+requested/response_model=deepseek-flash
+status=succeeded
+input_tokens=16073 / output_tokens=88 / latency_ms=1043
+error_payload=NULL
+
+## filter_plans（source=model）
+keyword=宠物
+target_count=10
+capability_version=xingtu-ad-creator-square-v2
+validation_errors=[]
+sort=score
+
+## 结论
+- P1 真实完成，未硬编码、未跳过、未手工插入 FilterPlan。
+- 关键词与目标数量逐字保留。

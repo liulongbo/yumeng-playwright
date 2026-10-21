@@ -1,0 +1,228 @@
+{
+  "label": "new",
+  "source_path": "/Users/Longbo/Developer/YUMENG/backend/src/xingtu/__init__.py",
+  "target_checkpoint_bytes": 2621440,
+  "checkpoint_text_bytes": 2621440,
+  "final_checkpoint_text_bytes": 3485830,
+  "modules": 8,
+  "rate_kib": 625.0,
+  "lease_ttl_extended": true,
+  "elapsed_s": 51.297,
+  "db_wait_s": 50.743,
+  "max_single_db_call_s": 5.727,
+  "get_calls": 0,
+  "edit_calls": 10,
+  "progress_calls": 25,
+  "full_checkpoint_transfers": 10,
+  "proxy_down_bytes": 30211773,
+  "proxy_up_bytes": 31056039,
+  "loop_lag_max_s": 11.618,
+  "loop_lag_over_1s": 9,
+  "heartbeat_count": 52,
+  "heartbeat_max_gap_s": 1.01,
+  "heartbeat_gaps_s": [
+    1.008,
+    1.005,
+    1.002,
+    1.004,
+    1.007,
+    1.006,
+    1.003,
+    1.001,
+    1.001,
+    1.007,
+    1.006,
+    1.007,
+    1.008,
+    1.004,
+    1.006,
+    1.005,
+    1.003,
+    1.003,
+    1.004,
+    1.008,
+    1.007,
+    1.002,
+    1.004,
+    1.01,
+    1.008,
+    1.009,
+    1.007,
+    1.001,
+    1.001,
+    1.007,
+    1.001,
+    1.009,
+    1.001,
+    1.001,
+    1.003,
+    1.009,
+    1.005,
+    1.004,
+    1.007,
+    1.006,
+    1.005,
+    1.002,
+    1.007,
+    1.005,
+    1.01,
+    1.01,
+    1.009,
+    1.007,
+    1.009,
+    1.001,
+    1.009
+  ],
+  "module_seconds": {
+    "m2": 0.03095379199658055,
+    "m3": 0.028842291998444125,
+    "m4": 0.029522750002797693,
+    "m5": 0.029514959001971874,
+    "m6": 0.030243791996326763,
+    "m7": 0.03029883300041547,
+    "m8": 0.03020404199924087,
+    "basic": 0.028782084002159536
+  },
+  "calls": [
+    [
+      "edit",
+      4.311
+    ],
+    [
+      "progress",
+      0.052
+    ],
+    [
+      "progress",
+      0.049
+    ],
+    [
+      "progress",
+      0.064
+    ],
+    [
+      "edit",
+      4.228
+    ],
+    [
+      "progress",
+      0.061
+    ],
+    [
+      "progress",
+      0.056
+    ],
+    [
+      "progress",
+      0.075
+    ],
+    [
+      "edit",
+      4.405
+    ],
+    [
+      "progress",
+      0.054
+    ],
+    [
+      "progress",
+      0.057
+    ],
+    [
+      "progress",
+      0.07
+    ],
+    [
+      "edit",
+      4.606
+    ],
+    [
+      "progress",
+      0.065
+    ],
+    [
+      "progress",
+      0.058
+    ],
+    [
+      "progress",
+      0.074
+    ],
+    [
+      "edit",
+      4.812
+    ],
+    [
+      "progress",
+      0.06
+    ],
+    [
+      "progress",
+      0.054
+    ],
+    [
+      "progress",
+      0.064
+    ],
+    [
+      "edit",
+      4.99
+    ],
+    [
+      "progress",
+      0.059
+    ],
+    [
+      "progress",
+      0.057
+    ],
+    [
+      "progress",
+      0.074
+    ],
+    [
+      "edit",
+      5.167
+    ],
+    [
+      "progress",
+      0.065
+    ],
+    [
+      "progress",
+      0.059
+    ],
+    [
+      "progress",
+      0.076
+    ],
+    [
+      "edit",
+      5.362
+    ],
+    [
+      "progress",
+      0.067
+    ],
+    [
+      "progress",
+      0.063
+    ],
+    [
+      "progress",
+      0.079
+    ],
+    [
+      "edit",
+      5.552
+    ],
+    [
+      "edit",
+      5.727
+    ],
+    [
+      "progress",
+      0.069
+    ]
+  ]
+}

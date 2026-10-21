@@ -1,0 +1,36 @@
+# S01 HTTPS / TLS 证据
+测试时间：2026-10-20 20:53–20:59 (UTC+08)
+测试地址：https://xingtu.yumeng.live/
+采集方式：curl --noproxy '*'（直接连接，绕过本机系统代理）
+
+## 响应
+HTTP/2 200
+server: nginx
+date: Tue, 20 Oct 2026 12:53:59 GMT
+content-type: text/html
+content-length: 822
+last-modified: Mon, 19 Oct 2026 06:50:30 GMT
+etag: "6ad5bdb6-336"
+accept-ranges: bytes
+
+## TLS
+SSL connection using TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256
+ALPN: server accepted h2
+subject: CN=xingtu.yumeng.live
+issuer: C=US; O=Let's Encrypt; CN=YE1
+start date: Oct 20 07:11:17 2026 GMT
+expire date: Jan 18 07:11:16 2027 GMT
+subjectAltName: host "xingtu.yumeng.live" matched cert's "xingtu.yumeng.live"
+SSL certificate verify ok. (ssl_verify_result=0)
+
+## 静态资源
+GET /assets/index-BNJmWNlC.js  => 200, content-type application/javascript, 430716 bytes
+GET /assets/index-C5Qo-e4q.css => 200
+本地 frontend/dist 中同名文件大小一致（430716 bytes），部署前端与本地 dist 一致。
+
+## 缺失的安全响应头（低风险加固项）
+- Strict-Transport-Security：缺失
+- Content-Security-Policy：缺失
+- X-Frame-Options：缺失
+- X-Content-Type-Options：缺失
+- Referrer-Policy：缺失

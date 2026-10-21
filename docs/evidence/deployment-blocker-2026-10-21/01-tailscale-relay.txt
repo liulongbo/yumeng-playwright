@@ -1,0 +1,36 @@
+# Deployment blocker: Tailscale direct path lost 2026-10-20T23:11:39Z
+
+## Observed
+- Mac en0 IP: 10.209.115.57; public IP (netcheck): 223.160.114.198
+- Tailscale peer: relay "sea", CurAddr empty; tailscale ping 372-393 ms via DERP(sea)
+- netcheck: MappingVariesByDestIP=true; PortMapping empty; nearest DERP Singapore
+- TCP 5432/7233/9000: ~473-510 ms; PostgreSQL psycopg connect timed out at 15 s
+- MinIO real cover GET: 61,866 B in 2,232 ms (~27.1 KiB/s)
+- General internet: 1.75 MB/s; public cloud ping 31-45 ms; public 443 200
+- Worker: launchd PID 20406 still running deployed code; no new task created
+- No code deployed, no Worker restart, no real task created.
+
+## Previous healthy path (2026-10-20)
+- Mac self 192.168.3.132, gateway 192.168.3.1; public 120.228.1.159
+- Tailscale direct 119.91.210.100:41641; RTT 18-20 ms; MappingVariesByDestIP=false
+- DB cloud->Mac 41-61 KiB/s; upload 1.5-6.3 MiB/s.
+
+## Diagnosis
+The Mac moved to a different network with symmetric NAT (MappingVariesByDestIP=true).
+Tailscale cannot establish direct UDP; it relays via Seattle (~378 ms), so DB connections time out and MinIO GET is ~27 KiB/s.
+This is not the cloud egress bandwidth being measured; bandwidth upgrade cannot be evaluated on this relay path.
+
+## Required before deployment / real acceptance
+1. Reconnect Mac to the previous network (192.168.3.x / UPnP or cone NAT) or another network where Tailscale is direct.
+2. Confirm: tailscale status shows 'direct 119.91.210.100:41641'; tailscale ping ~18-20 ms; netcheck MappingVariesByDestIP=false.
+3. Confirm Tencent Cloud plan and 10/20 Mbps upgrade in console (no console access in this session).
+4. Then re-run bandwidth probe; if cloud->Mac >1 MB/s, deploy code and run one real 宠物/10.
+
+## Re-check 2026-10-21T00:43:43Z
+- en0 192.168.10.165, gateway 192.168.10.1
+- tailscale status: relay "sfo"; tailscale ping timed out (no reply); LastHandshake 07:32
+- netcheck: UDP false, IPv4 no addr found, no DERP latency response
+- TCP 5432/7233/9000: 0/5 connections
+- Worker PID 54216: dispatch tick ConnectionTimeout every ~12s
+- public cloud HTTPS 200 but ICMP 33% loss; general Cloudflare reset; 1.1.1.1 100% loss
+- Conclusion: current network is not usable for the real acceptance. Do not create task.

@@ -1,0 +1,38 @@
+# DeepSeek 供应商诊断证据
+测试时间：2026-10-20 21:12–21:33 (UTC+08)
+
+## 失败时的原始容器日志（部署前捕获）
+2026-10-20 12:36:21,207 INFO xingtu.intake_worker dispatched 1 intake task(s)
+2026-10-20 12:36:21,766 INFO httpx HTTP Request: POST https://api.deepseek.com/responses "HTTP/1.1 402 Payment Required"
+
+- 任务：1cfaecbc-ec03-4f32-b03b-6548028a3a25
+- 供应商：deepseek；模型：deepseek-flash；耗时：475ms
+- 原始 model_runs.error_payload：
+  {"code":"AI_AUTH_OR_QUOTA","message":"provider rejected credentials","retryable":false}
+- 说明：原 intake-worker 容器在修复部署时被重建，旧容器 json log 已被 Docker 清理；
+  上述两行为重建前 `docker logs` 的直接输出。持久事实仍可在 model_runs 中复核。
+
+## 为什么之前的“DeepSeek 校验 200”与失败不矛盾
+- 启动校验 `DeepSeekAdapter.verify_model()` 只调用 `GET {base_url}/models`（模型列表），
+  该请求不涉及推理计费；密钥有效、模型在列表中时会返回 200。
+- 需求转换调用 `POST {base_url}/responses`，需要实际余额/额度；余额不足时供应商返回 402。
+- 因此旧实现把 401/402/403 统一映射为 `AI_AUTH_OR_QUOTA / provider rejected credentials`，
+  把“余额不足”误报成“凭据被拒”，这是诊断被误导的直接原因。
+
+## 当前实际配置（不含密钥）
+XINGTU_DEEPSEEK_MODEL=deepseek-flash
+XINGTU_DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_API_KEY：长度 35、以 sk- 开头、无空格/引号/重复项；容器与 application.env 指纹一致
+
+## 当前供应商状态（容器内实际请求）
+GET /models        => 200，模型列表 ['deepseek-flash', 'deepseek-v4-pro']
+POST /responses    => 200，status=completed，response model=deepseek-flash
+GET /user/balance  => 200，is_available=true
+  CNY: total_balance=8.49, granted_balance=0.00, topped_up_balance=8.49
+
+## 结论
+- 失败不是 API Key 无效、不是模型名错误、不是 Base URL 错误，也不是 Compose 注入缺失。
+- 失败时供应商返回 HTTP 402 Payment Required（余额/额度不足）；当前账户余额为正，
+  同一套配置的真实推理请求与完整 P1 转换均已成功。
+- 余额从失败时的状态变为当前 8.49 CNY 的具体时间点无法由供应商 API 证明；
+  需在 DeepSeek 控制台核对充值/扣费记录。若未充值，应按供应商计费异常处理。

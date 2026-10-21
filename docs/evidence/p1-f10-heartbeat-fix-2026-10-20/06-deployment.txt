@@ -1,0 +1,44 @@
+# Mac Worker 修复部署记录
+时间：2026-10-20 23:05 (UTC+08)
+
+## 部署前
+- unit: SESSION_UNVERIFIED / generation=5 / owner=NULL / browser_stopped=true
+- 无项目 Chrome 进程
+- stuck 任务 11f9fc9c-...: COLLECTING v182，updated_at=2026-10-20T14:12:16Z
+- task_dispatches.sent=true，workflow_started_at=13:46:10Z
+- Worker 旧 PID 14961，runs=1
+
+## 备份
+- 目录：.runtime/backups/p1fix-02-20261020/
+  - current/：部署前工作区（已修复）四个文件
+  - pre-fix/：HEAD 版本四个文件
+  - SHA256SUMS
+- 文件：worker.py、engine.py、repository.py、browser_host.py
+
+## 工作区范围
+- 旧 Worker 启动：2026-10-20 21:31:30
+- 本轮四个目标源文件 mtime：22:37–22:49（晚于旧启动）
+- 其它既有 modified 源文件 mtime ≤ 21:15（早于旧启动，已在旧进程工作区内；本轮未新增/修改）
+- 结论：重启加载 = 旧工作区 + 本轮四个目标文件；没有额外引入未验证模块
+
+## 部署
+- `launchctl kickstart -k gui/501/com.yumeng.xingtu.collection-worker`
+- 新 PID 20406，launchd runs=2
+- 进程：/Users/Longbo/Developer/YUMENG/.venv/bin/xingtu worker
+  --config /Users/Longbo/Developer/YUMENG/.runtime/units/local-dev-mac-02.json
+- 启动日志：2026-10-20 23:05:01,345 INFO xingtu.worker collection worker polling xingtu-unit-local-mac-02 on 100.86.124.51:7233
+- 无 import/启动错误（日志中的 CancelledError traceback 为部署前历史）
+
+## 部署后
+- Temporal poller xingtu-unit-local-mac-02: alive=true, fresh=1, age≈33s（旧 poller 经 180s TTL 消失）
+- ExecutionUnit: ONLINE / SESSION_UNVERIFIED / UNAVAILABLE / browser_stopped=true / IDLE，owner NULL
+- stuck 任务：COLLECTING v182，updated_at=14:12:16Z 未变化；
+  task_dispatches sent=true / workflow_started_at=13:46:10Z 未变化 → 未被自动重试
+- 未重启/修改腾讯云 API/DB/Temporal/Redis/MinIO；未改 Schema；未删除历史任务/达人/快照
+- stuck 任务数据保持：task_creators=2、creator_snapshots=1、featured_collections=0、featured_cards=0、media_objects=34
+
+## 代码版本
+- worker.py 65d34a67702e2dc7a77bfbd5aa306d9fd7b6209f691b1745de88801774ab42da
+- engine.py 1c0da6f48142338513b185e897c631a19accfcafc0c6157791574e0c951a2eec
+- repository.py 51d127c4d9223567503a74c48efb7acccbb5ebae982a04514c81f17da8c9337b
+- browser_host.py fda504f2e5a9e598357c0b1e60345615b8cdff4c2d6703e059c704a6f60c92d8

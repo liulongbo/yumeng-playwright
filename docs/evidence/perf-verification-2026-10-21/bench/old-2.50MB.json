@@ -1,0 +1,67 @@
+{
+  "label": "old",
+  "source_path": "/Users/Longbo/Developer/YUMENG/.runtime/perf/old_src/xingtu/__init__.py",
+  "target_checkpoint_bytes": 2621440,
+  "checkpoint_text_bytes": 2621440,
+  "rate_kib": 100.0,
+  "lease_ttl_extended": true,
+  "elapsed_s": 270.364,
+  "db_wait_s": 270.178,
+  "max_single_db_call_s": 27.681,
+  "get_calls": 3,
+  "edit_calls": 7,
+  "progress_calls": 0,
+  "full_checkpoint_transfers": 10,
+  "proxy_down_bytes": 26250386,
+  "proxy_up_bytes": 18377028,
+  "loop_lag_max_s": 270.365,
+  "loop_lag_over_1s": 1,
+  "heartbeat_count": 0,
+  "heartbeat_max_gap_s": 0.0,
+  "heartbeat_gaps_s": [],
+  "module_seconds": {
+    "basic": 25.81493579200469
+  },
+  "calls": [
+    [
+      "edit",
+      27.593
+    ],
+    [
+      "edit",
+      27.604
+    ],
+    [
+      "edit",
+      27.585
+    ],
+    [
+      "get",
+      25.634
+    ],
+    [
+      "get",
+      25.629
+    ],
+    [
+      "edit",
+      27.593
+    ],
+    [
+      "edit",
+      27.681
+    ],
+    [
+      "get",
+      25.642
+    ],
+    [
+      "edit",
+      27.6
+    ],
+    [
+      "edit",
+      27.617
+    ]
+  ]
+}

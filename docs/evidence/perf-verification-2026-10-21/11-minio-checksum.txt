@@ -1,0 +1,15 @@
+key _diag/checksum-b70cc65e73ec4c09b30d8b2aa9ccf5fa/probe.bin bytes 65536 sha256_b64 OTilZp8gt50t+Mm3qA2dAM13n2ye46btQIpBwR9BmRA=
+PUT with ChecksumSHA256: 677ms
+HEAD ChecksumMode=ENABLED: 40ms
+HEAD keys: ['AcceptRanges', 'ChecksumSHA256', 'ChecksumType', 'ContentLength', 'ContentType', 'ETag', 'LastModified', 'Metadata', 'ResponseMetadata']
+ChecksumSHA256: OTilZp8gt50t+Mm3qA2dAM13n2ye46btQIpBwR9BmRA=
+metadata: {'sha256': '3938a5669f20b79d2df8c9b7a80d9d00cd779f6c9ee3a6ed408a41c11f419910'} ContentLength: 65536 ContentType: application/octet-stream
+checksum_matches: True
+DELETE: 21ms
+residual 0
+
+PUT/HEAD comparison (64 KiB, 5 samples each; first sample connection warm-up included):
+plain PUT ms [105, 69, 48, 52, 48] median 52
+checksum PUT ms [49, 48, 49, 48, 48] median 48
+checksum HEAD ms [24, 22, 29, 21, 22] median 22
+residual 0

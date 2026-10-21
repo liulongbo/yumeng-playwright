@@ -1,0 +1,10 @@
+source: state=CANCELLED version=137 attempt=26261f53-a1a1-42fb-b712-1f320dc3b402 candidates=20 valid=2 media=34 tasks=4
+seeded local task
+finalize_interrupted -> PARTIAL_COMPLETED
+root_task: {'state': 'PARTIAL_COMPLETED', 'version': 136, 'reason': 'HEARTBEAT_TIMEOUT', 'completed_at': datetime.datetime(2026, 10, 20, 16, 45, 31, 332906, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}
+published counts: {'task_creators': 2, 'creator_snapshots': 2, 'featured_collections': 2, 'featured_cards': 8, 'snapshot_collections': 2}
+latest snapshots: [{'creator_id': UUID('a7032316-e3a9-4039-8c8c-9c34d2a88bab'), 'latest_snapshot_id': UUID('918a4e87-1faf-4d16-8a9d-b1035b8cddac')}, {'creator_id': UUID('d438c953-0097-4175-854f-f1e5f44e7ca2'), 'latest_snapshot_id': UUID('02300783-37a2-480a-8614-498436b2bb66')}]
+featured types: [{'collection_type': 'excellent_reach', 'status': 'COMPLETE', 'created_at': datetime.datetime(2026, 10, 20, 16, 45, 31, 332906, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}, {'collection_type': 'excellent_seeding', 'status': 'COMPLETE', 'created_at': datetime.datetime(2026, 10, 20, 16, 45, 31, 332906, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}]
+duplicate closeout -> PARTIAL_COMPLETED
+before: {'task_creators': 2, 'creator_snapshots': 2, 'featured_collections': 2, 'featured_cards': 8, 'snapshot_collections': 2}
+after : {'task_creators': 2, 'creator_snapshots': 2, 'featured_collections': 2, 'featured_cards': 8, 'snapshot_collections': 2}

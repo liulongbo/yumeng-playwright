@@ -1,0 +1,19 @@
+8 modules, real Engine, isolated proxy; final checkpoint includes per-module observations (100 fields each)
+init MiB      rate final MiB     DB s  down MiB covers s browser 60s  total s  <=120  <=60
+    0.50     0.5M      1.32    144.9      8.81     29.4          60    234.3     NO    NO
+    0.50     5.0M      1.32     16.2      8.81     10.2          60     86.5    YES    NO
+    0.50    10.0M      1.32      8.9      8.81      9.2          60     78.1    YES    NO
+    0.50    20.0M      1.32      5.4      8.81      8.6          60     74.0    YES    NO
+    1.00     0.5M      1.82    248.6     13.81     29.4          60    338.0     NO    NO
+    1.00     5.0M      1.82     24.9     13.81     10.2          60     95.1    YES    NO
+    1.00    10.0M      1.82     13.6     13.81      9.2          60     82.7    YES    NO
+    1.00    20.0M      1.82      8.0     13.81      8.6          60     76.7    YES    NO
+    2.50     0.5M      3.32    513.0     28.81     29.4          60    602.4     NO    NO
+    2.50     5.0M      3.32     51.3     28.81     10.2          60    121.5     NO    NO
+    2.50    10.0M      3.32     27.5     28.81      9.2          60     96.6    YES    NO
+    2.50    20.0M      3.32     15.7     28.81      8.6          60     84.4    YES    NO
+
+covers model: 30 covers, 1.3 MiB total; fixed PUT/HEAD/DB 8.1s + bytes/rate. Based on measured MinIO phases; not a real run.
+browser/page/parse baseline 60s: historical local 381d628b (2 creators, 119.76s active, local DB/cover); not a current-environment measurement.
+DB times for 0.5 Mbps at 1/2.5 MiB are 10x the 5 Mbps measured elapsed (bandwidth scaling); 0.5 MiB is measured.
+At 10 Mbps the 2.5 MiB scenario is ~96.5s total (<=120); at 20 Mbps ~83.7s; <=60 is not reached because the 60s browser baseline alone consumes the budget.

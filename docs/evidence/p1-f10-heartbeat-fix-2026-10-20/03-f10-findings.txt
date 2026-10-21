@@ -1,0 +1,11 @@
+# F10 人工恢复证据结论
+- challenge 触发：13:47:57Z；F10 takeover ACTIVE；noVNC 未配置，但本机项目 Chrome 可用。
+- 人工滑块后 QA 点击“我已完成验证”：challenge RESOLVED、takeover RESUMED。
+- 任务重新 QUEUED/LEASED，随后采集第 2 位达人 basic，说明恢复流程成功获得浏览器控制权。
+- `rescan_reasons=["CURSOR_INVALID"]` 出现，但 engine 的既有 rescan 分支执行，未抛错；
+  没有证据证明 cursor 失效是最终失败的直接原因。
+- 第 2 位达人 platform_creator_id=736... 对应 checkpoint candidate first_position=1，
+  与候选列表一致；未发现 candidate ID 与实际访问达人 ID 错位。
+- `SESSION_UNVERIFIED / generation=5` 是 activity 取消后 lease 释放的 disposition，
+  不能据此判定 Profile 损坏。
+- 因此本轮没有修改 F10 接管/恢复逻辑，避免对已验证正常路径做无证据重构。

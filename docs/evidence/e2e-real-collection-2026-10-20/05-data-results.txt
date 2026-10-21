@@ -1,0 +1,29 @@
+# 真实采集数据结果
+任务：11f9fc9c-ad06-4d41-9fde-c33bab168f47
+目标：10；筛选：宠物
+
+## 数量
+- 有效入库：2（task_creators valid=true）
+- 已发布快照：1（creator_snapshots）
+- 资料完整：0（profile_complete_count）
+- 精选完整：0（featured_complete_count）
+- media_objects：34（全部 kind=cover，root_task_id=本任务）
+- MinIO xingtu-covers：34 个对象（head_bucket 200）
+- featured_collections：0；featured_cards：0（查询受限/尚未发布；至少 API/前端显示 NOT_ATTEMPTED）
+- 达人库已加载：1 位（第二位置 latest_snapshot_id=NULL，仍是草稿）
+
+## 达人
+1) 一只平安喵
+   - 平台标签：萌宠 / 医药健康 / 母婴宠物 / 工具类软件
+   - 地区：浙江省杭州市；粉丝 1,001,127
+   - 互动/完播原始值 1615 / 167；CPM/CPE 3396 / 21
+   - 任务详情显示“已发布快照”，但精选为 NOT_ATTEMPTED；资料不完整
+2) C位小师妹
+   - 任务详情标签：生活 / 食品饮料 / 汽车（未见宠物标签）
+   - latest_snapshot_id=NULL，未发布快照
+   - 该达人由人工在 F10 原浏览器中选择后出现；与关键词“宠物”相关性存疑
+
+## 结论
+- 实际只完成 2/10，且仅 1 位有快照；无 10 位结果。
+- 第一位精选集合 NOT_ATTEMPTED；第二位无快照、行业与筛选词不匹配。
+- 34 张封面对象证明本轮真实写入 MinIO；但任务级数据不完整，不能判定采集验收通过。

@@ -1,0 +1,18 @@
+# Network path and latency 2026-10-20T16:57:36Z
+
+## tailscale status (peer)
+100.86.124.51  yumeng-xingtu-cloud  lb.liu.w@  linux  active; direct 119.91.210.100:41641, tx 427304180 rx 680960936  
+
+## 30 tailscale pings
+pong from yumeng-xingtu-cloud (100.86.124.51) via 119.91.210.100:41641 in 18ms
+direct=1 relay=0
+
+## 20 ICMP pings
+--- 100.86.124.51 ping statistics ---
+20 packets transmitted, 18 packets received, 10.0% packet loss
+round-trip min/avg/max/stddev = 17.994/18.748/20.016/0.497 ms
+
+## TCP connect 50 samples
+  5432: n=50 fail=0 min=18.3 med=19.3 p95=60.0 max=819.6 stdev=112.1
+  7233: n=50 fail=0 min=18.4 med=19.4 p95=61.2 max=805.1 stdev=110.6
+  9000: n=50 fail=0 min=18.2 med=19.3 p95=60.9 max=61.7 stdev=15.1

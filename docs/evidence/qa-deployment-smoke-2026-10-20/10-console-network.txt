@@ -1,0 +1,39 @@
+# S01/S02/S03 Console 与 Network 摘要
+测试时间：2026-10-20 20:48–20:58 (UTC+08)
+采集：Playwright MCP browser_console_messages / browser_network_requests / browser_snapshot
+
+## 未登录访问 /login
+GET /api/auth/me => 401
+Console: [ERROR] Failed to load resource: the server responded with a status of 401
+→ 预期内的未登录探测；无 JS 运行时异常。
+
+## 错误密码
+POST /api/auth/login => 422（不是 401）
+Console: 401 /api/auth/me + 422 /api/auth/login
+页面提示“用户名或密码错误”，停留在 /login。
+
+## 登录成功后（任务详情页重新加载）
+GET /api/auth/me => 200
+GET /api/tasks/<id> => 200
+GET /api/tasks/<id>/creators?limit=20 => 200
+GET /tasks/<id> => 200（SPA 回退）
+GET /assets/index-BNJmWNlC.js => 200
+GET /assets/index-C5Qo-e4q.css => 200
+Console: 0 errors, 0 warnings
+
+## 不存在的任务 / 达人
+GET /api/tasks/00000000-... => 404（React Query retry=1，共 2 次请求）
+GET /api/creator-library/00000000-... => 404
+GET .../videos、.../contents（两类）、.../update => 均 404，各重试一次，共 10 次 404
+Console: 对应资源 404 错误；页面显示错误码与请求编号。
+
+## CSRF 负向测试
+POST /api/tasks 无 token / 伪造 token => 403，共 2 次
+Console: 2 条 403 资源错误（浏览器对失败请求的常规记录）。
+
+## 混合内容
+全部页面资源与 API 请求均为 https://xingtu.yumeng.live 同源；未观察到 http:// 资源或 Mixed Content 警告。
+
+## 说明
+以上 Console 记录都是浏览器对非 2xx 响应的资源加载提示，不是未捕获的 JS 异常；
+但未登录、错误密码、404、CSRF 负向场景都会在控制台留下红色错误，属于可优化的可观测性噪声。

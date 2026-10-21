@@ -1,0 +1,19 @@
+# Production read-only state after verification 2026-10-20T17:36:45Z
+{'root_task_id': UUID('b5a01709-8a4b-46bd-aa31-6494b0d9ce24'), 'state': 'CANCELLED', 'version': 137, 'updated_at': datetime.datetime(2026, 10, 20, 15, 34, 29, 246523, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'completed_at': datetime.datetime(2026, 10, 20, 15, 34, 29, 246523, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}
+{'root_task_id': UUID('11f9fc9c-ad06-4d41-9fde-c33bab168f47'), 'state': 'CANCELLED', 'version': 184, 'updated_at': datetime.datetime(2026, 10, 20, 15, 34, 38, 587632, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'completed_at': datetime.datetime(2026, 10, 20, 15, 34, 38, 587632, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}
+{'root_task_id': UUID('8bf44ae4-cc15-4bc8-819a-5d0664cdce17'), 'state': 'CANCELLED', 'version': 4, 'updated_at': datetime.datetime(2026, 10, 20, 13, 30, 55, 476499, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'completed_at': datetime.datetime(2026, 10, 20, 13, 30, 55, 476499, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}
+{'root_task_id': UUID('1cfaecbc-ec03-4f32-b03b-6548028a3a25'), 'state': 'FAILED', 'version': 3, 'updated_at': datetime.datetime(2026, 10, 20, 12, 36, 21, 796532, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'completed_at': datetime.datetime(2026, 10, 20, 12, 36, 21, 796532, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}
+root tasks in last 120m: 0
+b5a01709-8a4b-46bd-aa31-6494b0d9ce24 {'task_creators': 2, 'snapshots': 0, 'featured': 0}
+11f9fc9c-ad06-4d41-9fde-c33bab168f47 {'task_creators': 2, 'snapshots': 1, 'featured': 0}
+cancellations: [{'root_task_id': UUID('11f9fc9c-ad06-4d41-9fde-c33bab168f47'), 'actor': 'product:a1598139-34e9-4e2c-baf4-711feedf8ea3', 'created_at': datetime.datetime(2026, 10, 20, 15, 34, 36, 991224, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}, {'root_task_id': UUID('b5a01709-8a4b-46bd-aa31-6494b0d9ce24'), 'actor': 'product:a1598139-34e9-4e2c-baf4-711feedf8ea3', 'created_at': datetime.datetime(2026, 10, 20, 15, 34, 27, 380403, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}, {'root_task_id': UUID('8bf44ae4-cc15-4bc8-819a-5d0664cdce17'), 'actor': 'product:a1598139-34e9-4e2c-baf4-711feedf8ea3', 'created_at': datetime.datetime(2026, 10, 20, 13, 30, 55, 476499, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}]
+unit: {'unit_id': 'unit-local-mac-02', 'state': 'SESSION_UNVERIFIED', 'generation': 9, 'owner': None, 'browser_stopped': True, 'last_heartbeat_at': datetime.datetime(2026, 10, 20, 15, 29, 53, 818575, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}
+
+worker launchd:
+	state = running
+	runs = 2
+	pid = 20406
+		state = active
+root tasks total: 4
+media objects total: 68
+residual _diag objects: 0

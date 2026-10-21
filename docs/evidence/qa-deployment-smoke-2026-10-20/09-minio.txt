@@ -1,0 +1,10 @@
+# S07 MinIO 对象存储只读证据
+测试时间：2026-10-20 20:58 (UTC+08)
+endpoint：Tailscale 私网 100.86.124.51:9000（来自 cloud-worker.env，未输出凭据）
+
+head_bucket(Bucket=xingtu-covers) => 200
+list_objects_v2(MaxKeys=5)        => key_count=0, is_truncated=false
+
+结论：
+- MinIO 服务与 Worker 凭据可用。
+- 封面桶为空，符合当前无任何成功采集/达人数据的事实，不代表封面链路已验证。

@@ -1,0 +1,40 @@
+# S05/S07/S09 Mac Collection Worker 证据
+测试时间：2026-10-20 20:57 (UTC+08)
+机器：macOS 26.5.2 (25F84)，Tailscale IP 100.67.64.110
+云端：yumeng-xingtu-cloud 100.86.124.51
+
+## launchd（只读 print）
+label: gui/501/com.yumeng.xingtu.collection-worker
+state: running
+pid: 3238
+runs: 1
+program: /bin/zsh /Users/Longbo/Developer/YUMENG/deploy/macos/run-collection-worker.sh
+args: <repo> <unit config> <cloud-worker.env>
+stdout: <repo>/.runtime/logs/cloud-collection-worker.log
+stderr: <repo>/.runtime/logs/cloud-collection-worker.error.log
+（未执行 bootstrap/bootout/kickstart，未重启 Worker）
+
+## UnitConfig（只读字段）
+unit_id: unit-local-mac-02
+network_mode: local_development
+line_id: local-mac-02
+line_verification: not_applicable_test_only
+test_only: true
+contract: xingtu-ad-creator-featured-v11
+
+## Worker 日志摘要
+最后轮询记录：collection worker polling xingtu-unit-local-mac-02 on 100.86.124.51:7233
+近期告警（UTC）：
+- 11:53:58 / 12:10:26 / 12:22:41 Temporal gRPC poll 任务重试 6–8 次，transport error / ConnectionReset
+近期本地时间告警：
+- 18:13:27、19:04:19 collection dispatch tick failed: OperationalError
+当前（约 12:59Z）API 仍显示新鲜 poller，说明连接已恢复；但日志表明 Tailscale/Temporal 链路存在间歇性重置。
+
+## Tailscale
+100.67.64.110  longbo  macOS
+100.86.124.51  yumeng-xingtu-cloud  linux  active; direct 119.91.210.100:41641
+（本轮为 direct 直连，非 DERP）
+
+## 结论
+- Mac Worker 常驻运行，PID 3238，launchd 未发生重启（runs=1）。
+- 云端 worker_status=ONLINE 与 Mac 进程/poller 一致；但 gRPC 重置告警需要持续观察，暂不能据此判定采集稳定性通过。

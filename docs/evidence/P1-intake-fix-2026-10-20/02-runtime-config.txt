@@ -1,0 +1,31 @@
+# 运行时配置与来源核对
+时间：2026-10-20 21:20 (UTC+08)
+方式：现有 SSH ControlMaster（/tmp/yumeng-ops01.sock），只读检查
+
+## 配置来源
+- Compose 工作目录：/opt/yumeng-xingtu/current/deploy
+- env_file：/opt/yumeng-xingtu/shared/config/application.env
+- 文件权限：600 root:root；无重复 DEEPSEEK_API_KEY / XINGTU_DEEPSEEK_MODEL
+- 容器实际环境：DEEPSEEK_API_KEY 长度 35、sk- 前缀；XINGTU_DEEPSEEK_MODEL=deepseek-flash；
+  XINGTU_DEEPSEEK_BASE_URL=https://api.deepseek.com
+- 容器内取值与文件取值指纹一致，排除“文件已改但容器未重启”的旧配置问题
+
+## 启动检查
+Intake Worker 启动日志：
+  GET https://api.deepseek.com/models "HTTP/1.1 200 OK"
+  intake worker polling xingtu-intake on temporal:7233
+
+## 代码一致性
+本地与服务器 release 的关键文件 SHA-256 前缀一致：
+  product_cli.py a5ebf1176d67
+  intake_worker.py 09cfeecb33a1
+  worker.py 8b2c357374bb
+  product_api.py 5aece2c7b78c
+  product_repository.py a81c4479910a
+  intake.py 5dfac62c9405
+  product_models.py 13044f761c34
+（intake.py 为本次修复后的版本；其余文件与本地工作区一致）
+
+## 模型名称
+- deepseek-flash 在供应商 /models 中真实存在，且 /responses 返回 model=deepseek-flash。
+- 未发现多个 Key、旧 Base URL 或旧模型配置。

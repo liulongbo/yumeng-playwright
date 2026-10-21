@@ -1,0 +1,48 @@
+# P1 需求转换实机验证
+测试时间：2026-10-20 21:29–21:33 (UTC+08)
+测试任务：8bf44ae4-cc15-4bc8-819a-5d0664cdce17
+输入：keyword=宠物，target_count=1，其余筛选为空
+隔离方式：临时 bootout Mac Collection Worker，确保 P1 成功后没有任何 collection worker
+可以消费 P2 workflow；验证窗口内无 Chrome 启动、无星图访问。
+
+## 创建到 P1 成功
+- API POST /api/tasks => 202，root_task_id=8bf44ae4-cc15-4bc8-819a-5d0664cdce17
+- Intake workflow：intake/8bf44ae4...，ProcessProductIntakeV1，COMPLETED，
+  13:29:54.225Z → 13:29:55.495Z，history=11
+- 模型调用：provider=deepseek，requested/response_model=deepseek-flash，status=succeeded，
+  model_run_id=2c4e42dc-255f-4ef6-8a24-1bbe490ac100，input_tokens=16073，output_tokens=88，
+  latency_ms=1116，error_payload=NULL
+- filter_plans：source=model，keyword=宠物，target_count=1，
+  capability_version=xingtu-ad-creator-square-v2，validation_errors=[]
+- root_tasks：state=QUEUED，version=3，unit_id=unit-local-mac-02，
+  created_at=13:29:53.173Z，updated_at=13:29:55.468Z
+- tasks：P1=1，P2-1=dafd2d60-3f6d-49ae-ad90-4e08d6c3b3d4，
+  attempt=bc3fc308-e090-47eb-bab4-1926981224e7，search=1，profile=1
+- 页面：任务详情显示“排队中 / 等待采集资源”，进度第 3 步“排队”，无失败提示
+  （截图 p1-queued.png）
+- task_dispatches（worker 停止时）：sent=false，workflow_started_at=NULL
+  → P1 已完成，P2 尚未被 collection worker 派发；这正是预期的资源等待状态。
+
+## 取消与无 Chrome 证据
+- 13:30:55Z 调用产品取消命令：root_tasks state=CANCELLED，version=4，
+  failure_reason=TASK_CANCELLED，completed_at=13:30:55.476Z
+- 13:31:30Z 恢复 Mac Collection Worker（新 PID 14961，launchd state=running）
+- 13:31:33Z collection worker 启动 collect/8bf44ae4... workflow；
+  CollectF04F05V1 于 13:31:34Z COMPLETED（0.8 秒）
+- 该 workflow 读取到任务已是 CANCELLED，直接返回终态，未获取浏览器、未启动 Chrome
+- 恢复后执行单元仍为：
+  state=NEEDS_LOGIN, generation=0, owner=NULL, current_root_task_id=NULL,
+  browser_stopped=true, browser_instance_id=NULL, browser_started_at=NULL
+- 没有任何 browser_takeover_sessions，也没有新的浏览器租约/浏览器实例
+- Mac worker 日志仅新增 “collection worker polling xingtu-unit-local-mac-02”，无浏览器启动记录
+
+## 测试后状态
+root_tasks：2 条
+- 1cfaecbc-ec03-4f32-b03b-6548028a3a25：FAILED（历史任务，保持原状）
+- 8bf44ae4-cc15-4bc8-819a-5d0664cdce17：CANCELLED（本轮隔离测试任务，未删除）
+
+## 结论
+- 真实 DeepSeek 模型调用与完整 P1 转换在正式运行环境成功。
+- P1 输出通过 FilterPlan schema、确定性业务校验与 capability 校验，任务进入
+  QUEUED/等待采集资源。
+- P2 实际采集未执行；这是授权边界内的有意隔离，不是失败。

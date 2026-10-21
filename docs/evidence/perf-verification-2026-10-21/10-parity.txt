@@ -1,0 +1,10 @@
+# Old/new data parity 2026-10-20T18:12:21Z
+
+Synthetic collection: one candidate, 3 modules, no featured; Engine.run() includes search, collection, finish and snapshot publish.
+Compared: returned state, task counters/state/failure, candidate states/modules/fields/collections, task_creators, creator_snapshots normalized payload, featured counts.
+
+PARITY True
+old task: {'state': 'PARTIAL_COMPLETED', 'valid_count': 1, 'target_count': 1, 'profile_complete_count': 1, 'featured_status': 'NOT_ATTEMPTED', 'pipeline_complete': False, 'failure_reason': 'FEATURED_NOT_ATTEMPTED'}
+new task: {'state': 'PARTIAL_COMPLETED', 'valid_count': 1, 'target_count': 1, 'profile_complete_count': 1, 'featured_status': 'NOT_ATTEMPTED', 'pipeline_complete': False, 'failure_reason': 'FEATURED_NOT_ATTEMPTED'}
+old creators/snapshots/featured: [{'position': 0, 'valid': True}] 1 0 0
+new creators/snapshots/featured: [{'position': 0, 'valid': True}] 1 0 0

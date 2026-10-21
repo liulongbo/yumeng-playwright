@@ -1,0 +1,46 @@
+# Production read-only state 2026-10-20T16:41:44Z
+
+## root tasks
+{'root_task_id': UUID('b5a01709-8a4b-46bd-aa31-6494b0d9ce24'), 'state': 'CANCELLED', 'version': 137, 'created_at': datetime.datetime(2026, 10, 20, 15, 16, 3, 659950, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'updated_at': datetime.datetime(2026, 10, 20, 15, 34, 29, 246523, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'completed_at': datetime.datetime(2026, 10, 20, 15, 34, 29, 246523, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}
+{'root_task_id': UUID('11f9fc9c-ad06-4d41-9fde-c33bab168f47'), 'state': 'CANCELLED', 'version': 184, 'created_at': datetime.datetime(2026, 10, 20, 13, 46, 7, 846538, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'updated_at': datetime.datetime(2026, 10, 20, 15, 34, 38, 587632, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'completed_at': datetime.datetime(2026, 10, 20, 15, 34, 38, 587632, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}
+{'root_task_id': UUID('8bf44ae4-cc15-4bc8-819a-5d0664cdce17'), 'state': 'CANCELLED', 'version': 4, 'created_at': datetime.datetime(2026, 10, 20, 13, 29, 53, 173432, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'updated_at': datetime.datetime(2026, 10, 20, 13, 30, 55, 476499, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'completed_at': datetime.datetime(2026, 10, 20, 13, 30, 55, 476499, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}
+{'root_task_id': UUID('1cfaecbc-ec03-4f32-b03b-6548028a3a25'), 'state': 'FAILED', 'version': 3, 'created_at': datetime.datetime(2026, 10, 20, 12, 36, 20, 236165, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'updated_at': datetime.datetime(2026, 10, 20, 12, 36, 21, 796532, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'completed_at': datetime.datetime(2026, 10, 20, 12, 36, 21, 796532, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}
+new root tasks in last 60m: 0
+snapshot counts:
+b5a01709-8a4b-46bd-aa31-6494b0d9ce24 {'task_creators': 2, 'snapshots': 0, 'featured_collections': 0}
+11f9fc9c-ad06-4d41-9fde-c33bab168f47 {'task_creators': 2, 'snapshots': 1, 'featured_collections': 0}
+unit: {'unit_id': 'unit-local-mac-02', 'state': 'SESSION_UNVERIFIED', 'generation': 9, 'owner': None, 'browser_stopped': True, 'mode': None, 'last_heartbeat_at': datetime.datetime(2026, 10, 20, 15, 29, 53, 818575, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}
+
+## Mac worker process
+	state = running
+	runs = 2
+	pid = 20406
+		state = active
+		state = active
+bash: line 15: /bin/ps: Operation not permitted
+
+## current source SHA256
+af25cb569f043617eeb643f72bb7eca05af975b3d5a37ad4e4ef34479bfd262a  backend/src/xingtu/worker.py
+3d49a279615b4305b35af35fa805dfb22b12707fcba9d49c2e6b6c72fb869b4f  backend/src/xingtu/engine.py
+b768269265311501a27c1797ede50b6c27e31a6baf8e1722d63fe4aee036478d  backend/src/xingtu/repository.py
+1e80bb8329e1e8859ce923b7fcea451dc8ff94f07e8573ba0f85155f7ff3146a  backend/src/xingtu/browser_host.py
+
+## deployed baseline SHA256 (2026-10-20 23:05)
+8b2c357374bb70d1daf5a6636d0acf441e28d7766153916196c2f3489d54e8a0  ./pre-fix/backend/src/xingtu/worker.py
+93feb77c1fcd0d7bd17cd0e812e4ee07296d5199195b48d0b3d46ab9c2dc7130  ./pre-fix/backend/src/xingtu/browser_host.py
+ea396d361b2b9c5c4b387291bb30575ac87f766f3dac1666b96cd49e2fc2e564  ./pre-fix/backend/src/xingtu/engine.py
+09f4b44d3645cd2667fd4f3ebd7fd10fe9a369c74ae3c725f9cf10c424dc99e3  ./pre-fix/backend/src/xingtu/repository.py
+65d34a67702e2dc7a77bfbd5aa306d9fd7b6209f691b1745de88801774ab42da  ./current/backend/src/xingtu/worker.py
+fda504f2e5a9e598357c0b1e60345615b8cdff4c2d6703e059c704a6f60c92d8  ./current/backend/src/xingtu/browser_host.py
+1c0da6f48142338513b185e897c631a19accfcafc0c6157791574e0c951a2eec  ./current/backend/src/xingtu/engine.py
+51d127c4d9223567503a74c48efb7acccbb5ebae982a04514c81f17da8c9337b  ./current/backend/src/xingtu/repository.py
+715153c415c82da93fe1c62b4a355ec7705dbe8572a01b34de8e7eb186594f48  ./SHA256SUMS
+
+## worker error log tail (no new heartbeat activity expected)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+asyncio.exceptions.CancelledError: Activity cancelled
+2026-10-21 00:03:22,374 WARNING xingtu.worker collection dispatch tick failed: OperationalError
+
+## audit_logs for the two historical tasks (read-only)
+{'created_at': datetime.datetime(2026, 10, 20, 15, 34, 27, 380403, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'root_task_id': UUID('b5a01709-8a4b-46bd-aa31-6494b0d9ce24'), 'actor': 'product:a1598139-34e9-4e2c-baf4-711feedf8ea3', 'action': 'cancel'}
+{'created_at': datetime.datetime(2026, 10, 20, 15, 34, 36, 991224, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'root_task_id': UUID('11f9fc9c-ad06-4d41-9fde-c33bab168f47'), 'actor': 'product:a1598139-34e9-4e2c-baf4-711feedf8ea3', 'action': 'cancel'}

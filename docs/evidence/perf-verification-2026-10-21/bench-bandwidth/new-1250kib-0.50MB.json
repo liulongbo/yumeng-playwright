@@ -1,0 +1,185 @@
+{
+  "label": "new",
+  "source_path": "/Users/Longbo/Developer/YUMENG/backend/src/xingtu/__init__.py",
+  "target_checkpoint_bytes": 524288,
+  "checkpoint_text_bytes": 524288,
+  "final_checkpoint_text_bytes": 1388674,
+  "modules": 8,
+  "rate_kib": 1250.0,
+  "lease_ttl_extended": true,
+  "elapsed_s": 8.919,
+  "db_wait_s": 8.363,
+  "max_single_db_call_s": 1.116,
+  "get_calls": 0,
+  "edit_calls": 10,
+  "progress_calls": 25,
+  "full_checkpoint_transfers": 10,
+  "proxy_down_bytes": 9240246,
+  "proxy_up_bytes": 10084509,
+  "loop_lag_max_s": 2.453,
+  "loop_lag_over_1s": 3,
+  "heartbeat_count": 9,
+  "heartbeat_max_gap_s": 1.01,
+  "heartbeat_gaps_s": [
+    1.009,
+    1.001,
+    1.01,
+    1.0,
+    1.01,
+    1.01,
+    1.001,
+    1.005
+  ],
+  "module_seconds": {
+    "m2": 0.030340082994371187,
+    "m3": 0.031210125001962297,
+    "m4": 0.03247562499745982,
+    "m5": 0.02960295900265919,
+    "m6": 0.030392292006581556,
+    "m7": 0.03013049999572104,
+    "m8": 0.0284233749989653,
+    "basic": 0.029331874997296836
+  },
+  "calls": [
+    [
+      "edit",
+      0.402
+    ],
+    [
+      "progress",
+      0.054
+    ],
+    [
+      "progress",
+      0.046
+    ],
+    [
+      "progress",
+      0.05
+    ],
+    [
+      "edit",
+      0.335
+    ],
+    [
+      "progress",
+      0.051
+    ],
+    [
+      "progress",
+      0.045
+    ],
+    [
+      "progress",
+      0.055
+    ],
+    [
+      "edit",
+      0.43
+    ],
+    [
+      "progress",
+      0.058
+    ],
+    [
+      "progress",
+      0.053
+    ],
+    [
+      "progress",
+      0.063
+    ],
+    [
+      "edit",
+      0.529
+    ],
+    [
+      "progress",
+      0.061
+    ],
+    [
+      "progress",
+      0.055
+    ],
+    [
+      "progress",
+      0.056
+    ],
+    [
+      "edit",
+      0.623
+    ],
+    [
+      "progress",
+      0.053
+    ],
+    [
+      "progress",
+      0.053
+    ],
+    [
+      "progress",
+      0.064
+    ],
+    [
+      "edit",
+      0.727
+    ],
+    [
+      "progress",
+      0.052
+    ],
+    [
+      "progress",
+      0.054
+    ],
+    [
+      "progress",
+      0.065
+    ],
+    [
+      "edit",
+      0.827
+    ],
+    [
+      "progress",
+      0.055
+    ],
+    [
+      "progress",
+      0.057
+    ],
+    [
+      "progress",
+      0.068
+    ],
+    [
+      "edit",
+      0.924
+    ],
+    [
+      "progress",
+      0.068
+    ],
+    [
+      "progress",
+      0.056
+    ],
+    [
+      "progress",
+      0.068
+    ],
+    [
+      "edit",
+      1.028
+    ],
+    [
+      "edit",
+      1.116
+    ],
+    [
+      "progress",
+      0.062
+    ]
+  ]
+}

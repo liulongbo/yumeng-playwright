@@ -1,0 +1,24 @@
+# Temporal 失败证据
+workflow_id: collect/11f9fc9c-ad06-4d41-9fde-c33bab168f47
+type: CollectF04F05V1
+status: FAILED
+start: 2026-10-20T13:46:10.729Z
+close: 2026-10-20T14:12:31.826Z
+history_length: 22
+
+## 失败事件（event 22 WorkflowExecutionFailed）
+message: Activity task timed out
+cause.message: activity Heartbeat timeout
+cause.timeout_failure_info.timeout_type: TIMEOUT_TYPE_HEARTBEAT
+activity_failure_info.activity_type: collect_segment_v1
+activity_id: "2"
+retry_state: RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
+
+## 活动尝试
+event 17 attempt=4 last_failure: "activity Heartbeat timeout" (TIMEOUT_TYPE_HEARTBEAT)
+worker log: attempt 1–4 均以 asyncio.CancelledError: Activity cancelled 结束
+（最后一次 traceback 位于 page.goto / check_session / locator.is_visible）
+
+## 结论
+- P2 workflow 在 4 次尝试后因 heartbeat timeout 失败。
+- 该失败没有同步到 root_tasks；产品任务仍 COLLECTING，构成状态不一致。

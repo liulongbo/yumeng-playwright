@@ -1,0 +1,35 @@
+server: {'v': 'PostgreSQL 18.3 (Debian 18.3-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit', 'sv': '18.3 (Debian 18.3-1.pgdg13+1)', 'mc': '100', 'sb': '128MB', 'wm': '4MB', 'dl': '1s'}
+
+connections:
+{'n': 11, 'active': 1, 'idle_tx': 2}
+
+activity:
+{'pid': 143448, 'usename': 'xingtu_app', 'state': 'active', 'wait_event_type': None, 'wait_event': None, 'q': "select count(*) n, count(*) filter (where state='active') active, count(*) filter (where state='idle in transaction') id"}
+{'pid': 143449, 'usename': 'xingtu_app', 'state': 'idle in transaction', 'wait_event_type': None, 'wait_event': None, 'q': 'BEGIN'}
+{'pid': 143435, 'usename': 'xingtu_app', 'state': 'idle in transaction', 'wait_event_type': 'Client', 'wait_event': 'ClientRead', 'q': 'SELECT payload FROM task_checkpoints WHERE task_id=$1'}
+
+locks (non-granted or relation-level):
+{'locktype': 'relation', 'mode': 'AccessShareLock', 'granted': True, 'n': 10}
+{'locktype': 'relation', 'mode': 'RowShareLock', 'granted': True, 'n': 10}
+{'locktype': 'relation', 'mode': 'RowExclusiveLock', 'granted': True, 'n': 6}
+{'locktype': 'virtualxid', 'mode': 'ExclusiveLock', 'granted': True, 'n': 2}
+{'locktype': 'transactionid', 'mode': 'ExclusiveLock', 'granted': True, 'n': 1}
+
+database stats:
+{'xact_commit': 135548, 'xact_rollback': 33, 'blks_read': 1492, 'blks_hit': 39434450, 'tup_returned': 32924310, 'tup_fetched': 30479173, 'deadlocks': 0, 'temp_files': 0, 'temp_bytes': 0}
+
+top user tables by updates:
+{'relname': 'sessions', 'seq_scan': 5237, 'n_tup_ins': 28, 'n_tup_upd': 2667, 'n_tup_del': 0, 'n_live_tup': 28, 'n_dead_tup': 7, 'last_autovacuum': None}
+{'relname': 'task_checkpoints', 'seq_scan': 2135, 'n_tup_ins': 7, 'n_tup_upd': 328, 'n_tup_del': 0, 'n_live_tup': 7, 'n_dead_tup': 10, 'last_autovacuum': datetime.datetime(2026, 10, 20, 15, 28, 5, 604867, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC'))}
+{'relname': 'root_tasks', 'seq_scan': 20470, 'n_tup_ins': 4, 'n_tup_upd': 328, 'n_tup_del': 0, 'n_live_tup': 4, 'n_dead_tup': 40, 'last_autovacuum': None}
+{'relname': 'execution_units', 'seq_scan': 3988, 'n_tup_ins': 1, 'n_tup_upd': 219, 'n_tup_del': 0, 'n_live_tup': 1, 'n_dead_tup': 3, 'last_autovacuum': None}
+{'relname': 'media_objects', 'seq_scan': 94, 'n_tup_ins': 68, 'n_tup_upd': 8, 'n_tup_del': 0, 'n_live_tup': 68, 'n_dead_tup': 6, 'last_autovacuum': None}
+{'relname': 'model_runs', 'seq_scan': 13, 'n_tup_ins': 4, 'n_tup_upd': 4, 'n_tup_del': 0, 'n_live_tup': 4, 'n_dead_tup': 4, 'last_autovacuum': None}
+{'relname': 'intake_dispatches', 'seq_scan': 2144, 'n_tup_ins': 4, 'n_tup_upd': 4, 'n_tup_del': 0, 'n_live_tup': 4, 'n_dead_tup': 4, 'last_autovacuum': None}
+{'relname': 'browser_takeover_sessions', 'seq_scan': 14, 'n_tup_ins': 1, 'n_tup_upd': 3, 'n_tup_del': 0, 'n_live_tup': 1, 'n_dead_tup': 3, 'last_autovacuum': None}
+{'relname': 'task_dispatches', 'seq_scan': 3595, 'n_tup_ins': 3, 'n_tup_upd': 3, 'n_tup_del': 0, 'n_live_tup': 3, 'n_dead_tup': 3, 'last_autovacuum': None}
+{'relname': 'verification_events', 'seq_scan': 11, 'n_tup_ins': 1, 'n_tup_upd': 2, 'n_tup_del': 0, 'n_live_tup': 1, 'n_dead_tup': 2, 'last_autovacuum': None}
+
+checkpoint payload server-side size/execution:
+{'root_task_id': UUID('11f9fc9c-ad06-4d41-9fde-c33bab168f47'), 'n': 522183}
+[{"Plan": {"Node Type": "Seq Scan", "Parallel Aware": false, "Async Capable": false, "Relation Name": "task_checkpoints", "Alias": "task_checkpoints", "Startup Cost": 1.06, "Total Cost": 3.15, "Plan Rows": 1, "Plan Width": 952, "Actual Startup Time": 0.035, "Actual Total Time": 0.035, "Actual Rows": 1.0, "Actual Loops": 1, "Disabled": false, "Filter": "(task_id = (InitPlan 1).col1)", "Rows Removed by Filter": 6, "Shared Hit Blocks": 5, "Shared Read Blocks": 0, "Shared Dirtied Blocks": 0, "Shared Written Blocks": 0, "Local Hit Blocks": 0, "Local Read Blocks": 0, "Local Dirtied Blocks": 0, "Local Written Blocks": 0, "Temp Read Blocks": 0, "Temp Written Blocks": 0, "Plans": [{"Node Type": "Seq Scan", "Parent Relationship": "InitPlan", "Subplan Name": "InitPlan 1", "Parallel Aware": false, "Async Capable": false, "Relation Name": "root_tasks", "Alias": "root_tasks", "Startup Cost": 0.0, "Total Cost": 1.06, "Plan Rows": 1, "Plan Width": 16, "Actual Startup Time": 0.026, "Actual Total Time": 0.026, "Actual Rows": 1.0, "Actual Loops": 1, "Disabled": false, "Filter": "(root_task_id = '11f9fc9c-ad06-4d41-9fde-c33bab168f47'::uuid)", "Rows Removed by Filter": 3, "Shared Hit Blocks": 3, "Shared Read Blocks": 0, "Shared Dirtied Blocks": 0, "Shared Written Blocks": 0, "Local Hit Blocks": 0, "Local Read Blocks": 0, "Local Dirtied Blocks": 0, "Local Written Blocks": 0, "Temp Read Blocks": 0, "Temp Written Blocks": 0}]}, "Planning": {"Shared Hit Blocks": 6, "Shared Read Blocks": 0, "Shared Dirtied Blocks": 0, "Shared Written Blocks": 0, "Local Hit Blocks": 0, "Local Read Blocks": 0, "Local Dirtied Blocks": 0, "Local Written Blocks": 0, "Temp Read Blocks": 0, "Temp Written Blocks": 0}, "Planning Time": 0.099, "Triggers": [], "Execution Time": 0.046}]

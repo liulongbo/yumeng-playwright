@@ -1,0 +1,26 @@
+# Heartbeat 根因证据
+## 旧实现
+worker.py（修复前）heartbeat 任务每 15 秒：
+  await host.heartbeat()       # 同步 psycopg：repo.heartbeat + ensure_line
+  activity.heartbeat(root)     # 只有 DB 调用返回后才发送 Temporal heartbeat
+  if engine: engine.guard()
+
+## 已确认代码缺陷
+1. Temporal heartbeat 位于同步 DB 调用之后。DB/Tailscale 任一卡顿都会让 Temporal 45 秒内收不到心跳。
+2. heartbeat 任务只捕获 CollectorError；psycopg OperationalError/TimeoutError 等会静默杀死该任务。
+3. Activity 的 `except asyncio.CancelledError` 在 heartbeat_error 为空时直接 re-raise，不写任务终态。
+   → Temporal 判定 heartbeat timeout + max attempts，而 root_task 永远 COLLECTING。
+
+## 时间证据
+- execution_units.last_heartbeat_at=2026-10-20T14:11:52Z
+- Temporal activity timed out=14:12:26Z（约 34 秒后）
+- Workflow FAILED=14:12:31Z
+- Worker 日志：4 次 attempt，traceback 尾部均为 asyncio.CancelledError: Activity cancelled；
+  最后一次位于 page.goto/check_session/locator.is_visible。
+
+## 结论
+- 已确认：heartbeat 发送顺序 + 异常未捕获 + 取消后不落终态，是可复现的代码缺陷。
+- 高置信度触发条件：Mac↔云端 PostgreSQL/Tailscale 或同步 DB 调用在 14:11:52 后阻塞，
+  导致 heartbeat 任务无法按时发送；本轮多次 API/DB 查询也出现 60 秒级卡顿。
+- 未证实：Chrome Profile 损坏、账号 session 失效、候选 ID 错位。session 在任务前为 VALID，
+  unit 的 SESSION_UNVERIFIED 是取消后无当前进程 observation 的释放结果，不是根因。

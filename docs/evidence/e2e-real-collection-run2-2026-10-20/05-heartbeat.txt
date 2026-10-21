@@ -1,0 +1,37 @@
+# Heartbeat / lease 观察
+
+## 正常阶段（样例）
+execution_units.lease_until / last_heartbeat_at（UTC）：
+- 15:18:47 / 15:17:04（generation 6）
+- 15:19:19 / 15:17:21
+- 15:19:52 / 15:17:55
+- 15:20:30 / 15:18:32
+- 15:22:46 / 15:20:48
+- 15:25:44 / 15:23:46
+- 15:28:10 / 15:26:12
+- 15:30:03 / 15:28:07
+说明：正常阶段约每 15 秒续租，lease_until 约 120 秒后；Temporal heartbeat 正常工作。
+
+## 异常阶段
+23:26:21 WARNING activity heartbeat failed
+  reason=RESOURCE_UNAVAILABLE: HEARTBEAT_TIMEOUT elapsed=11.4s
+  → 本地 heartbeat 任务 10s 上限触发，主任务取消；attempt 1 失败（deferred，未收口）
+
+23:27:58 attempt 2：
+  details=ActivityCancellationDetails(not_found=True, timed_out=True)
+  heartbeat=None → deferred（attempt<4）
+
+23:28:50 attempt 3：
+  details=ActivityCancellationDetails(not_found=True, timed_out=False)
+  heartbeat=None → deferred（attempt<4）
+
+23:29:55 attempt 4：
+  details=ActivityCancellationDetails(not_found=True, timed_out=False)
+  heartbeat=None → deferred（not_found 被 helper 排除，未收口）
+  → Temporal 已达 MAXIMUM_ATTEMPTS_REACHED，Workflow FAILED
+
+## 结论
+- generation 6→9，4 次 attempt 后 unit SESSION_UNVERIFIED，owner NULL，browser_stopped=true。
+- 首次 heartbeat 失败是 DB/lease 续租 11.4s 超时；随后 3 次为 not_found，heartbeat 日志未再出现，
+  说明 heartbeat coroutine/事件循环仍可能被同步 DB 调用阻塞（新 P1 诊断点）。
+- P1FIX-02 的 attempt 门控避免了 attempt 1–3 提前收口，但 attempt 4 的 not_found 未落终态。

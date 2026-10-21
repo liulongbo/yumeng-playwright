@@ -1,0 +1,18 @@
+# Temporal history（workflow collect/b5a01709-8a4b-46bd-aa31-6494b0d9ce24）
+run_id 01a159e2-52a2-74fa-9aef-60fbff57baf2
+status FAILED (describe status=3), close_time 2026-10-20T15:29:53.247858532Z
+
+1  WORKFLOW_EXECUTION_STARTED   15:16:06.946
+2  WORKFLOW_TASK_SCHEDULED      15:16:06.946
+3  WORKFLOW_TASK_STARTED        15:16:06.977
+4  WORKFLOW_TASK_COMPLETED      15:16:07.482
+5  ACTIVITY_TASK_SCHEDULED      15:16:07.482  activity_id=1 collect_segment_v1 heartbeat_timeout=45s retry max=4
+6  ACTIVITY_TASK_STARTED        15:29:06.007  attempt=4 last_failure="activity Heartbeat timeout"
+7  ACTIVITY_TASK_TIMED_OUT      15:29:51.009  retry_state=MAXIMUM_ATTEMPTS_REACHED
+8  WORKFLOW_TASK_SCHEDULED      15:29:51.009
+9  WORKFLOW_TASK_STARTED        15:29:51.015
+10 WORKFLOW_TASK_COMPLETED      15:29:53.247
+11 WORKFLOW_EXECUTION_FAILED    15:29:53.247  "Activity task timed out" / activity Heartbeat timeout
+
+说明：Worker 日志记录 attempt 1–4（23:26:36、23:27:58、23:28:50、23:29:55）；
+Temporal history 在 final attempt（attempt 4）记录 heartbeat timeout 并达到最大重试。

@@ -1,0 +1,33 @@
+run2 (hybrid, 2026-10-20): {'root_task_id': UUID('b5a01709-8a4b-46bd-aa31-6494b0d9ce24'), 'state': 'CANCELLED', 'created_at': datetime.datetime(2026, 10, 20, 15, 16, 3, 659950, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'active': 672.728720414998, 'ms': {'fans': 14.632840917001886, 'basic': 28.8861146249983, 'spread': 3.2520165410023765, 'seeding': 2.633845749995089, 'creation': 97.15752183400036, 'commercial': 21.210532334000163, 'conversion': 3.9374065840020194, 'fulfillment': 4.964332374998776}, 'candidates': 20, 'nav': '5', 'req': '107', 'text_bytes': 521870, 'col_bytes': 131091}
+local historical (2026-10-15): {'root_task_id': UUID('381d628b-e6e8-4d0e-865e-ed4aab98c11c'), 'state': 'PARTIAL_COMPLETED', 'created_at': datetime.datetime(2026, 10, 15, 13, 26, 11, 74844, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')), 'active': 119.75907541699416, 'ms': {'fans': 4.543453874997795, 'basic': 0.11864391599374358, 'spread': 0.0970390410075197, 'seeding': 0.10580162399855908, 'creation': 4.555856792998384, 'commercial': 0.09933808300411329, 'conversion': 0.11063274899788667, 'fulfillment': 0.11343720900185872}, 'candidates': 20, 'nav': '5', 'req': '49', 'text_bytes': 617126, 'col_bytes': 149740}
+
+module_seconds comparison (same 8 modules):
+  fans         hybrid=    14.63s local=   4.54s ratio=    3.2x
+  basic        hybrid=    28.89s local=   0.12s ratio=  243.5x
+  spread       hybrid=     3.25s local=   0.10s ratio=   33.5x
+  seeding      hybrid=     2.63s local=   0.11s ratio=   24.9x
+  creation     hybrid=    97.16s local=   4.56s ratio=   21.3x
+  commercial   hybrid=    21.21s local=   0.10s ratio=  213.5x
+  conversion   hybrid=     3.94s local=   0.11s ratio=   35.6x
+  fulfillment  hybrid=     4.96s local=   0.11s ratio=   43.8x
+
+sum module_seconds: hybrid=176.67s local=9.74s
+active_seconds: hybrid=672.73s local=119.76s
+
+run2 candidate/module timestamps:
+  6983857505726103560 done valid= True
+     fans 2026-10-20T15:17:55.519148Z
+     basic 2026-10-20T15:16:51.529549Z
+     spread 2026-10-20T15:16:51.530024Z
+     seeding 2026-10-20T15:16:51.530148Z
+     creation 2026-10-20T15:19:43.825052Z
+     commercial 2026-10-20T15:16:51.529770Z
+     conversion 2026-10-20T15:16:51.530433Z
+     fulfillment 2026-10-20T15:16:51.530295Z
+    collection excellent_reach 2026-10-20T15:21:33.812375Z
+    collection excellent_seeding 2026-10-20T15:23:04.823557Z
+  7360610271510921225 collecting valid= True
+     basic 2026-10-20T15:24:51.281846Z
+
+run2 cover uploads:
+ count 34 bytes 1299928 first 2026-10-20 15:18:37.984235+00:00 last 2026-10-20 15:23:36.811221+00:00
