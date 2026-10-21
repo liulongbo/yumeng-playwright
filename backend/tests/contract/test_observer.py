@@ -96,6 +96,25 @@ async def test_duplicate_matching_requests_are_ambiguous(page):
         assert not results and failures["search"] == "RESPONSE_UNCORRELATED"
 
 
+async def test_gateway_timeout_is_a_module_failure_not_a_contract_change(page):
+    """An HTML 504 from the edge is transient; it must not disable the capability contract."""
+
+    await page.route(
+        "**/search?*",
+        lambda route: route.fulfill(
+            status=504, content_type="text/html", body="<html>gateway timeout</html>"
+        ),
+    )
+    async with ResponseCollector(
+        page, [spec()], {"condition": "new", "creator": "A"}, 1, 4096
+    ) as capture:
+        await page.evaluate("fetch('/search?condition=new').catch(() => null)")
+        results, failures = await capture.read()
+    assert not results
+    assert failures["search"] == "PLATFORM_HTTP_5XX"
+    assert capture.global_error is None
+
+
 async def test_attribute_filters_are_compared_as_an_exact_multiset(page):
     request = RequestSpec.model_validate(
         {

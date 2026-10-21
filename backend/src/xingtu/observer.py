@@ -318,6 +318,19 @@ class ResponseCollector:
         data: Any = None
         try:
             headers = response.headers
+            # A gateway/edge/server error is transient transport noise, not an unregistered
+            # platform contract change. Classify it as a module-level failure so the engine keeps
+            # the successful modules and the task can continue/retry instead of terminating the
+            # whole collection on an HTML 502/503/504 body.
+            if response.status in {408, 500, 502, 503, 504}:
+                raise self._record_diagnostic(
+                    CollectorError("MODULE_COLLECTION_FAILED", "PLATFORM_HTTP_5XX"),
+                    RequestDiagnostic(
+                        request_key=spec.key,
+                        http_status=response.status,
+                        content_type_kind=content_type_kind(headers),
+                    ),
+                )
             if "json" not in headers.get("content-type", "").lower():
                 raise self._record_diagnostic(
                     CollectorError("PLATFORM_PAGE_CHANGED", "RESPONSE_CONTENT_TYPE"),
