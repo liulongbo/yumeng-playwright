@@ -1,0 +1,20 @@
+# syntax=docker/dockerfile:1.7
+# Collection worker: the application runtime plus a pinned Playwright Chromium and its system
+# libraries. Only the single-node baseline runs the browser next to the centre services; the
+# hybrid topology keeps Chrome on the Mac.
+ARG APP_IMAGE=xingtu-app:baseline
+FROM ${APP_IMAGE}
+
+USER root
+ARG APT_MIRROR=
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN if [ -n "${APT_MIRROR}" ]; then \
+      sed -i "s#deb.debian.org#${APT_MIRROR}#g; s#security.debian.org#${APT_MIRROR}#g" \
+        /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true; \
+    fi
+RUN python -m playwright install --with-deps chromium
+RUN mkdir -p /app/.runtime/profiles /app/.runtime/evidence \
+    && chown -R xingtu:xingtu /app/.runtime /ms-playwright
+
+USER xingtu
+CMD ["xingtu", "worker", "--config", "/app/units/unit-server-01.json"]

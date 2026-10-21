@@ -1,0 +1,243 @@
+name: xingtu-baseline
+
+# Single-node baseline: centre services and the collection worker share one host, with no
+# Tailscale and no Mac. It exists to compare against the hybrid topology on lln_1018 and must
+# never publish a database, Temporal, Redis or MinIO port.
+x-logging: &default-logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "5"}
+
+x-app: &app
+  image: ${XINGTU_APP_IMAGE:-xingtu-app:baseline}
+  build: {context: .., dockerfile: deploy/Dockerfile.app}
+  env_file:
+    - "${XINGTU_ENV_FILE:-./single-node.application.env}"
+  restart: unless-stopped
+  logging: *default-logging
+  networks: [egress, data]
+
+x-worker: &worker
+  image: ${XINGTU_WORKER_IMAGE:-xingtu-worker:baseline}
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile.worker
+    args:
+      APP_IMAGE: ${XINGTU_APP_IMAGE:-xingtu-app:baseline}
+      APT_MIRROR: ${APT_MIRROR:-}
+  env_file:
+    - "${XINGTU_ENV_FILE:-./single-node.application.env}"
+  restart: unless-stopped
+  logging: *default-logging
+  networks: [egress, data]
+  # Chromium needs more than the 64 MiB default /dev/shm to stay stable.
+  shm_size: "512m"
+
+services:
+  app-postgres:
+    image: postgres:18.3
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: xingtu_app
+      POSTGRES_DB: xingtu_production
+      POSTGRES_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD}
+    volumes: [app-db:/var/lib/postgresql]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U xingtu_app -d xingtu_production]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *default-logging
+    networks: [data]
+    mem_limit: ${APP_POSTGRES_MEMORY_LIMIT:-384m}
+
+  temporal-postgres:
+    image: postgres:16.10
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_DB: temporal
+      POSTGRES_PASSWORD: ${TEMPORAL_DB_PASSWORD:?set TEMPORAL_DB_PASSWORD}
+    volumes: [temporal-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U temporal -d temporal]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *default-logging
+    networks: [data]
+    mem_limit: ${TEMPORAL_POSTGRES_MEMORY_LIMIT:-384m}
+
+  temporal:
+    image: temporalio/auto-setup:1.28.1
+    restart: unless-stopped
+    depends_on:
+      temporal-postgres: {condition: service_healthy}
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: ${TEMPORAL_DB_PASSWORD:?set TEMPORAL_DB_PASSWORD}
+      POSTGRES_SEEDS: temporal-postgres
+    healthcheck:
+      test: [CMD, tctl, --address, temporal:7233, cluster, health]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+    logging: *default-logging
+    networks: [data]
+    mem_limit: ${TEMPORAL_MEMORY_LIMIT:-768m}
+
+  redis:
+    image: redis:7.4.5-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    command: [/bin/sh, -c, 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: [CMD-SHELL, 'redis-cli -a "$$REDIS_PASSWORD" ping | grep PONG']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *default-logging
+    networks: [data]
+    mem_limit: ${REDIS_MEMORY_LIMIT:-128m}
+
+  objects:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    volumes: [objects:/data]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    logging: *default-logging
+    networks: [data]
+    mem_limit: ${MINIO_MEMORY_LIMIT:-384m}
+
+  objects-init:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    depends_on:
+      objects: {condition: service_healthy}
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+      MINIO_WORKER_USER: ${MINIO_WORKER_USER:?set MINIO_WORKER_USER}
+      MINIO_WORKER_PASSWORD: ${MINIO_WORKER_PASSWORD:?set MINIO_WORKER_PASSWORD}
+    entrypoint: [/bin/sh, -c]
+    command:
+      - >-
+        mc alias set local http://objects:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD";
+        mc mb --ignore-existing local/xingtu-covers;
+        mc anonymous set none local/xingtu-covers;
+        mc admin user add local "$$MINIO_WORKER_USER" "$$MINIO_WORKER_PASSWORD" || true;
+        mc admin policy attach local readwrite --user "$$MINIO_WORKER_USER"
+    restart: "no"
+    logging: *default-logging
+    networks: [data]
+
+  migration:
+    <<: *app
+    command: [xingtu, migrate, --environment, development]
+    restart: "no"
+    depends_on:
+      app-postgres: {condition: service_healthy}
+    mem_limit: ${MIGRATION_MEMORY_LIMIT:-384m}
+
+  api:
+    <<: *app
+    command: [xingtu-api]
+    depends_on:
+      migration: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      temporal: {condition: service_healthy}
+      objects-init: {condition: service_completed_successfully}
+    ports: ["127.0.0.1:${API_BIND_PORT:-18000}:8000"]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/live', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: ${API_MEMORY_LIMIT:-320m}
+
+  web:
+    image: ${XINGTU_WEB_IMAGE:-xingtu-web:baseline}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+    restart: unless-stopped
+    depends_on:
+      api: {condition: service_healthy}
+    ports: ["${WEB_BIND_PORT:-18080}:80"]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging: *default-logging
+    networks: [data]
+    mem_limit: ${WEB_MEMORY_LIMIT:-64m}
+
+  intake-worker:
+    <<: *app
+    command:
+      - xingtu-product
+      - intake-worker
+      - --unit-config
+      - /app/units/unit-server-01.json
+      - --profile-requirement
+      - /app/contracts/profile_requirements.json
+    depends_on:
+      migration: {condition: service_completed_successfully}
+      temporal: {condition: service_healthy}
+    volumes:
+      - "${UNIT_CONFIG_FILE:-./units/unit-server-01.json}:/app/units/unit-server-01.json:ro"
+    mem_limit: ${INTAKE_MEMORY_LIMIT:-512m}
+
+  update-scheduler:
+    <<: *app
+    command:
+      - xingtu-product
+      - update-scheduler
+      - --unit-config
+      - /app/units/unit-server-01.json
+      - --profile-requirement
+      - /app/contracts/profile_requirements.json
+    depends_on:
+      migration: {condition: service_completed_successfully}
+    volumes:
+      - "${UNIT_CONFIG_FILE:-./units/unit-server-01.json}:/app/units/unit-server-01.json:ro"
+    mem_limit: ${SCHEDULER_MEMORY_LIMIT:-256m}
+
+  collection-worker:
+    <<: *worker
+    command: [xingtu, worker, --config, /app/units/unit-server-01.json]
+    depends_on:
+      migration: {condition: service_completed_successfully}
+      temporal: {condition: service_healthy}
+      objects-init: {condition: service_completed_successfully}
+    volumes:
+      - worker-runtime:/app/.runtime
+      - "${UNIT_CONFIG_FILE:-./units/unit-server-01.json}:/app/units/unit-server-01.json:ro"
+    mem_limit: ${WORKER_MEMORY_LIMIT:-768m}
+
+networks:
+  egress:
+  data: {internal: true}
+
+volumes:
+  app-db:
+  temporal-db:
+  redis-data:
+  objects:
+  worker-runtime:

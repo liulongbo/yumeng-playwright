@@ -2,6 +2,10 @@
 .bootstrap/
 .runtime/
 .env
+# Single-node baseline runtime secrets; only the *.example templates are tracked.
+deploy/single-node.env
+deploy/single-node.application.env
+deploy/units/unit-server-01.json
 *.pyc
 __pycache__/
 .pytest_cache/

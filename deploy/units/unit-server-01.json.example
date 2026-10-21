@@ -1,0 +1,19 @@
+{
+  "unit_id": "unit-server-01",
+  "account_ref": "baseline-server-account",
+  "expected_account_id": "",
+  "line_id": "server-direct",
+  "profile_directory": "/app/.runtime/profiles/unit-server-01",
+  "registry_path": "/app/contracts/douyin_xingtu.verified.json",
+  "network_mode": "local_development",
+  "headless": true,
+  "covers": {
+    "kind": "s3",
+    "endpoint": "http://objects:9000",
+    "bucket": "xingtu-covers"
+  },
+  "evidence": {
+    "kind": "local",
+    "directory": "/app/.runtime/evidence"
+  }
+}
