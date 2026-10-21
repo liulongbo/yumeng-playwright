@@ -65,15 +65,16 @@ def _next_due(base: datetime, followers: Decimal | None) -> tuple[datetime, str,
     return base + timedelta(days=days), tier, days
 
 
+# Fast retries allowed after an incomplete or failed update: 1 h, then 6 h.  Once they are
+# exhausted the creator waits for its normal follower-band interval instead of entering another
+# 24 h retry, so a structurally incomplete profile cannot be re-crawled on a short cycle forever.
+MAX_FAST_RETRIES = 2
+
+
 def _backoff(failures: int, interval_days: int) -> timedelta:
-    if failures <= 1:
-        value = timedelta(hours=1)
-    elif failures == 2:
-        value = timedelta(hours=6)
-    elif failures == 3:
-        value = timedelta(hours=24)
-    else:
-        value = timedelta(days=interval_days)
+    if failures > MAX_FAST_RETRIES:
+        return timedelta(days=interval_days)
+    value = timedelta(hours=1) if failures <= 1 else timedelta(hours=6)
     return min(value, timedelta(days=interval_days))
 
 

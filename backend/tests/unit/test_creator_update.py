@@ -99,9 +99,11 @@ def test_update_policy_boundaries(followers, tier, days):
 def test_backoff_is_capped_by_the_normal_interval():
     assert _backoff(1, 15) == timedelta(hours=1)
     assert _backoff(2, 15) == timedelta(hours=6)
-    assert _backoff(3, 15) == timedelta(hours=24)
+    # Two fast retries are the limit; the third incomplete update falls back to the band cycle.
+    assert _backoff(3, 15) == timedelta(days=15)
     assert _backoff(4, 15) == timedelta(days=15)
-    assert _backoff(4, 1) == timedelta(days=1)
+    assert _backoff(3, 1) == timedelta(days=1)
+    assert _backoff(2, 1) == timedelta(hours=6)
 
 
 def test_update_record_requires_targets_and_matching_candidates():
