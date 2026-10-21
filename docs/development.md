@@ -68,6 +68,7 @@
 | `make smoke-local` | `UNIT_CONFIG`、`ROOT_TASK_ID`、`XINGTU_DATABASE_URL`；Temporal 本地测试服务器 | 本地阶段验证载体：真实 `Activities.collect` + `CollectionWorkflow`，一次性等待终态。**不是生产编排** |
 | `xingtu browser-check --config <unit.json>` | 单元配置 | 真实启动一次配置的浏览器，记录路径/版本/UA/兼容性；不访问平台 |
 | `xingtu production-preflight --config <unit.json>` | `network_mode=production_line` + 有效线路证明/探针 + live 注册表 | 生产入口显式检查；**本地开发单元一律拒绝** |
+| `xingtu worker-preflight --config <unit.json>` | 私有单元配置 + live 注册表 | Worker 服务入口检查；生产单元仍要求线路证明/探针，本地单元只以 `test_only` 运行且不得配置代理 |
 | `xingtu research --config <unit.json> ...` | 仅 `network_mode=local_development`，主机须在 `research_allowed_hosts` 内 | 开发期契约研究采集：打开真实页面、等待人工登录、记录结构（不记录头部/Cookie/令牌/响应正文）；原始件写入 `.runtime/research/` |
 | `xingtu rebind-account --config <unit.json> --account-id <ID: ...> --actor <actor> --reason <原因>` | `XINGTU_DATABASE_URL`；单元 JSON 的 `expected_account_id` 必须已改为同一身份；单元当前无浏览器宿主（`owner` 为空且 `browser_stopped=true`） | **显式审计改绑**：写入 `unit_account_rebindings` 与 `audit_logs`，并把单元置为 `SESSION_UNVERIFIED` 要求重新验证。可选 `--previous-account-id`（旧绑定只存在于配置文件、未落库时）与 `--evidence-ref`。自动化路径（`register-unit`、`ACCOUNT_MISMATCH`）仍不得改绑 |
 | `xingtu cover-gc --config <unit.json>` | `XINGTU_DATABASE_URL`；`covers` 配置（默认 `local`，目录在运行根内） | 删除没有任何卡片引用的封面对象并解除登记；已发布快照引用的封面保留 |

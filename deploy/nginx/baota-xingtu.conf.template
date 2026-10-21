@@ -1,0 +1,41 @@
+# Replace CHANGE_ME_DOMAIN, CHANGE_ME_WEB_ROOT, and CHANGE_ME_API_PORT in
+# BaoTa's site configuration. CHANGE_ME_API_PORT must match API_BIND_PORT.
+# TLS certificates remain managed by BaoTa. Do not expose Docker dependency ports here.
+server {
+    listen 80;
+    server_name CHANGE_ME_DOMAIN;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name CHANGE_ME_DOMAIN;
+
+    # Replace these with BaoTa-managed certificate paths.
+    ssl_certificate CHANGE_ME_CERTIFICATE_PATH;
+    ssl_certificate_key CHANGE_ME_CERTIFICATE_KEY_PATH;
+    root CHANGE_ME_WEB_ROOT;
+    index index.html;
+    client_max_body_size 10m;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:CHANGE_ME_API_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location ~ /\. {
+        deny all;
+    }
+}

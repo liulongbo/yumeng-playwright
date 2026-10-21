@@ -1,0 +1,20 @@
+// Merge this narrow rule into the existing tailnet policy; do not replace unrelated rules.
+{
+  "groups": {
+    "group:xingtu-collectors": ["CHANGE_ME_MAC_OPERATOR_EMAIL"]
+  },
+  "tagOwners": {
+    "tag:xingtu-server": ["autogroup:admin"]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["group:xingtu-collectors"],
+      "dst": [
+        "tag:xingtu-server:5432",
+        "tag:xingtu-server:7233",
+        "tag:xingtu-server:9000"
+      ]
+    }
+  ]
+}

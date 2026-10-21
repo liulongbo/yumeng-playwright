@@ -2,6 +2,10 @@
 .bootstrap/
 .runtime/
 .env
+# Filled production secrets stay out of Git; only the *.example templates are tracked.
+deploy/production.env
+deploy/application.env
+deploy/ops/cos-backup.env
 *.pyc
 __pycache__/
 .pytest_cache/

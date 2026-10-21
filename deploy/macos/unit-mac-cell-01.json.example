@@ -1,0 +1,29 @@
+{
+  "unit_id": "unit-mac-cell-01",
+  "account_ref": "CHANGE_ME_SECRET_REFERENCE_ONLY",
+  "expected_account_id": "CHANGE_ME_PLATFORM_ACCOUNT_ID",
+  "line_id": "cell-01",
+  "profile_directory": "/Users/CHANGE_ME/.local/share/yumeng/profiles/unit-mac-cell-01",
+  "registry_path": "/Users/CHANGE_ME/Developer/YUMENG/contracts/douyin_xingtu.verified.json",
+  "network_mode": "production_line",
+  "proxy_server": "http://CHANGE_ME_OPENWRT_OR_PROXY_PRIVATE_ADDRESS",
+  "proxy_username_env": "XINGTU_LINE_PROXY_USERNAME",
+  "proxy_password_env": "XINGTU_LINE_PROXY_PASSWORD",
+  "network_evidence_path": "/Users/CHANGE_ME/.config/yumeng/network-proof-cell-01.json",
+  "network_probe_command": [
+    "/Users/CHANGE_ME/.local/bin/yumeng-line-probe",
+    "cell-01"
+  ],
+  "browser_executable_path": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "macos_system_keychain": true,
+  "headless": false,
+  "covers": {
+    "kind": "s3",
+    "endpoint": "http://100.64.0.10:9000",
+    "bucket": "xingtu-covers"
+  },
+  "evidence": {
+    "kind": "local",
+    "directory": "/Users/CHANGE_ME/.local/share/yumeng/evidence"
+  }
+}
