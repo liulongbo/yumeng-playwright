@@ -41,7 +41,7 @@ F01/F03/F04/F05；DEC-017。前置：UPD-01/02。
 - **真实批次**：`6871b08c…` 在只让目标达人到期、scheduler batch-size=1 的受控条件下 `QUEUED→COLLECTING→COMPLETED`；终态自动 reconcile 通过。
 - **未执行**：真实失败/部分更新注入、长期积压/饥饿、多批次连续调度；保留待验收。
 - **2026-10-21 真实运行观察（本地单机，main@5182c09）**：18 个定时更新任务全部 `PARTIAL_COMPLETED`；59 位达人被目标执行 78 次（19 次重复采集），41 份快照 `pipeline_complete=false`，22 位达人进入快速重试（3 位 `consecutive_failures=1`、19 位 `=2`）。该观察促成 DEC-018：把快速重试限制为 2 次。
-- **2026-10-21 单元/静态检查（DEC-018 变更后）**：`.venv/bin/pytest backend/tests/unit -q` → 303 passed；`test_creator_update.py` 17 passed；`ruff check`、`ruff format --check`、`mypy backend/src`（34 files）通过。
+- **2026-10-21 单元/集成/静态检查（DEC-018 变更后）**：`pytest backend/tests/unit -q` → 303 passed；`pytest backend/tests/integration/test_creator_update.py -q`（隔离库 `xingtu_test`）→ 8 passed；`ruff check`、`ruff format --check`、`mypy backend/src`（34 files）通过。
 
 ## 交接信息
 

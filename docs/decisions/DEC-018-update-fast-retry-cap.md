@@ -36,3 +36,4 @@
 - `backend/tests/unit/test_creator_update.py::test_backoff_is_capped_by_the_normal_interval`：
   `_backoff(1)=1h`、`_backoff(2)=6h`、`_backoff(3)=档位间隔`、`_backoff(4)=档位间隔`。
 - 全量单测与 lint/typecheck 通过后记录在 UPD-04 验证证据。
+- 2026-10-21：`pytest backend/tests/unit -q` 303 passed；`pytest backend/tests/integration/test_creator_update.py` 8 passed（隔离库）；`ruff`/`mypy` 通过。
