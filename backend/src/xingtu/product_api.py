@@ -448,6 +448,8 @@ def create_app(
 
     def takeover_view(row: dict[str, Any]) -> BrowserTakeoverView:
         viewer_url = None
+        access_mode: Literal["LOCAL_WINDOW", "REMOTE_VIEWER"] = "LOCAL_WINDOW"
+        operator_message = "请切换到本机已经打开的执行单元 Chrome 窗口完成验证。"
         if row["state"] == "ACTIVE" and services.settings.remote_viewer_base_url:
             # The configured viewer is a same-origin noVNC client. It authenticates the WebSocket
             # separately; no VNC address, debug port or credential is returned here.
@@ -456,7 +458,14 @@ def create_app(
                 + "?takeover_id="
                 + str(row["takeover_id"])
             )
-        return services.queries.takeover_view(row, viewer_url=viewer_url)
+            access_mode = "REMOTE_VIEWER"
+            operator_message = "请在下方受认证的远程浏览器中完成验证。"
+        return services.queries.takeover_view(
+            row,
+            viewer_url=viewer_url,
+            access_mode=access_mode,
+            operator_message=operator_message,
+        )
 
     async def proxy_original_vnc(websocket: WebSocket, takeover_id: str) -> None:
         """Proxy RFB bytes only for the operator's currently ACTIVE original browser.

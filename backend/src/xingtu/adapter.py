@@ -4,8 +4,10 @@ import asyncio
 import base64
 import copy
 import json
+import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from typing import Any, NamedTuple, Protocol
 from urllib.parse import urlencode, urljoin, urlsplit, urlunsplit
 
@@ -30,6 +32,7 @@ from .domain import (
     AudienceProfileCompound,
     CandidateDiagnostic,
     Capabilities,
+    CapabilityDimension,
     Checkpoint,
     CollectionStatus,
     CollectorError,
@@ -238,6 +241,135 @@ def _scaled_count(value: Any, scale: int) -> str:
     return format(scaled, "f").rstrip("0").rstrip(".")
 
 
+def _connection_range_bounds(
+    value: NumberRange, dimension: CapabilityDimension
+) -> tuple[Decimal, Decimal]:
+    """Fill an omitted connection bound with the verified platform-domain boundary.
+
+    Xingtu's connection-user component writes 0 for a blank bound. A min-only request would
+    therefore become ge=min AND le=0 (zero results), while a max-only request becomes
+    ge=0 AND le=max. The visible chip still says min above or max below, so silently accepting
+    the 0 would not execute the user's condition. Filling the omitted side with the registered
+    0/99999w domain preserves the condition exactly within the verified capability. This is
+    deliberately limited to connection_users: followers was measured not to add a counterpart.
+    """
+
+    constraints = dimension.range_constraints
+    if constraints is None:
+        raise CollectorError("PLATFORM_PAGE_CHANGED", "CONNECTION_RANGE_DOMAIN_MISSING")
+    minimum = value.min if value.min is not None else constraints.min
+    maximum = value.max if value.max is not None else constraints.max
+    if minimum > maximum:
+        raise CollectorError("INVALID_FORM", "CONNECTION_RANGE_OUTSIDE_DOMAIN")
+    return minimum, maximum
+
+
+def _w_text(value: Decimal) -> str:
+    if value == value.to_integral():
+        return str(int(value)) + "w"
+    return format(value, "f").rstrip("0").rstrip(".") + "w"
+
+
+def _condition_readback_tokens(
+    plan: FilterPlan, capabilities: Capabilities
+) -> tuple[list[str], set[str]]:
+    """Expected visible tokens for a structured pre-search condition read-back.
+
+    Labels and selected option labels are exact platform text; numeric ranges are matched with
+    digit boundaries so 10w does not satisfy 100w. Region values remain gated by the exact final
+    request multiset; their chip formatting is not stable enough to assert here. Keyword visibility
+    is deliberately not required here: the platform renders its chip only after a search runs.
+    """
+
+    specs = {item.field: item for item in capabilities.fields}
+    expected: list[str] = []
+    allowed = {"已选条件", "清空", "达人报价"}
+    for item in plan.filters:
+        spec = specs.get(item.field)
+        if spec is None:
+            raise CollectorError("UNSUPPORTED_FILTER", item.field)
+        if item.field == "keyword":
+            # The selected-keyword chip only appears after the platform runs a search.  A
+            # keyword-only plan has no intermediate filter interaction to trigger one, and the
+            # final submit happens after this pre-submit check, so requiring the chip here
+            # deterministically rejected the most basic flow (2026-10-23: SELECTED_MISSING:搜索词).
+            # The keyword stays gated after submit: ``readback`` compares the registered input
+            # value with the plan binding, and ``request_match`` requires search_param.keyword.
+            # Keep both observed labels allowed so a chip rendered by an auto-search is expected.
+            allowed.update({"搜索词", "内容关键词"})
+            continue
+        label = spec.label or item.field
+        if item.field == "followers":
+            label = "粉丝数量"
+            allowed.update({"粉丝数量", "粉丝量级"})
+        expected.append(label)
+        allowed.add(label)
+        if item.field == "yellow_v":
+            expected.append("黄v")
+            allowed.add("黄v")
+        if item.field in {"gender", "education", "yellow_v"} and isinstance(item.value, str):
+            option = next((option for option in spec.options if option.value == item.value), None)
+            if option is None:
+                raise CollectorError("UNSUPPORTED_FILTER", item.field)
+            expected.append(option.label)
+            allowed.add(option.label)
+        elif item.field == "region" and isinstance(item.value, RegionCompound):
+            # Only the field label is asserted; selected province/city strings are compared by the
+            # exact final-request matcher, which is the authoritative multiset for this field.
+            continue
+        elif item.field == "connection_users" and isinstance(item.value, ConnectionUsersCompound):
+            for key in ("connected", "aware", "interested", "liked", "followed"):
+                value = getattr(item.value, key)
+                if value is None:
+                    continue
+                if value.min is not None:
+                    expected.append(_w_text(value.min))
+                if value.max is not None:
+                    expected.append(_w_text(value.max))
+            allowed.update(dimension.label for dimension in spec.dimensions)
+        elif item.field == "followers" and isinstance(item.value, NumberRange):
+            if item.value.min is not None:
+                expected.append(_w_text(item.value.min))
+            if item.value.max is not None:
+                expected.append(_w_text(item.value.max))
+        elif item.field in {"viewer_profile", "fan_profile"} and isinstance(
+            item.value, AudienceProfileCompound
+        ):
+            dimensions = {dimension.key: dimension for dimension in spec.dimensions}
+            for key in ("age", "device_brand", "city_level", "crowd"):
+                for selected in getattr(item.value, key):
+                    option = next(
+                        (option for option in dimensions[key].options if option.value == selected),
+                        None,
+                    )
+                    if option is None:
+                        raise CollectorError("UNSUPPORTED_FILTER", f"{item.field}.{key}")
+                    expected.append(option.label)
+                    allowed.add(option.label)
+            if item.value.gender:
+                option = next(
+                    (
+                        option
+                        for option in dimensions["gender"].options
+                        if option.value == item.value.gender
+                    ),
+                    None,
+                )
+                if option is None:
+                    raise CollectorError("UNSUPPORTED_FILTER", f"{item.field}.gender")
+                expected.append(option.label)
+                allowed.add(option.label)
+        else:
+            raise CollectorError("UNSUPPORTED_FILTER", item.field)
+    return expected, allowed
+
+
+def _readback_token_present(text: str, token: str) -> bool:
+    if token[:1].isdigit() and token.endswith("w"):
+        return re.search(r"(?<![0-9.])" + re.escape(token) + r"(?![0-9])", text) is not None
+    return token in text
+
+
 def _json_array(values: list[Any]) -> str:
     return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
 
@@ -300,25 +432,28 @@ def build_expected_attribute_filters(
             if isinstance(scale_value, bool) or not isinstance(scale_value, (int, str)):
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "INVALID_REQUEST_SCALE")
             scale = int(scale_value)
+            dimensions = {dimension.key: dimension for dimension in spec.dimensions}
             for key in ("connected", "aware", "interested", "liked", "followed"):
                 value = getattr(item.value, key)
                 if value is None:
                     continue
+                dimension = dimensions.get(key)
+                if dimension is None:
+                    raise CollectorError("PLATFORM_PAGE_CHANGED", "CONNECTION_RANGE_DOMAIN_MISSING")
+                minimum, maximum = _connection_range_bounds(value, dimension)
                 prefix = str(mapping[key])
-                if value.min is not None:
-                    result.append(
-                        AttributeFilterEntry(
-                            field_name=prefix + "__ge",
-                            field_value=_scaled_count(value.min, scale),
-                        )
+                result.append(
+                    AttributeFilterEntry(
+                        field_name=prefix + "__ge",
+                        field_value=_scaled_count(minimum, scale),
                     )
-                if value.max is not None:
-                    result.append(
-                        AttributeFilterEntry(
-                            field_name=prefix + "__le",
-                            field_value=_scaled_count(value.max, scale),
-                        )
+                )
+                result.append(
+                    AttributeFilterEntry(
+                        field_name=prefix + "__le",
+                        field_value=_scaled_count(maximum, scale),
                     )
+                )
         elif item.field == "followers" and isinstance(item.value, NumberRange):
             scale_value = mapping.get("scale")
             if isinstance(scale_value, bool) or not isinstance(scale_value, (int, str)):
@@ -535,6 +670,29 @@ class BrowserAdapter:
         if expected not in await self._selected_text(page):
             raise CollectorError("PLATFORM_CONDITION_MISMATCH", expected)
 
+    async def readback_conditions(self, page: Page, plan: FilterPlan) -> None:
+        """Verify the visible selected-condition chips before submitting the final search.
+
+        This is the v2 structured read-back that the original keyword/mode-only path lacked. It
+        asserts every planned field label, selected option label and numeric bound, and rejects a
+        known business field that was not in the plan. The exact final request multiset remains the
+        authoritative value gate; this check fails earlier, with a condition error rather than a
+        generic search-correlation failure.
+        """
+
+        expected, allowed = _condition_readback_tokens(plan, self.registry.capabilities)
+        text = await self._selected_text(page)
+        for token in expected:
+            if not _readback_token_present(text, token):
+                raise CollectorError("PLATFORM_CONDITION_MISMATCH", f"SELECTED_MISSING:{token}")
+        known: set[str] = {"搜索词", "粉丝数量", "黄v"}
+        for spec in self.registry.capabilities.fields:
+            if spec.label:
+                known.add(spec.label)
+        for label in sorted(known):
+            if label in text and label not in allowed:
+                raise CollectorError("PLATFORM_CONDITION_MISMATCH", f"UNEXPECTED:{label}")
+
     async def apply_xingtu_filters(self, page: Page, plan: FilterPlan) -> None:
         try:
             await self._apply_xingtu_filters(page, plan)
@@ -622,8 +780,9 @@ class BrowserAdapter:
                     await self._paced_click(outer.locator('[role="button"]').nth(index))
                     child = page.locator(".el-popper:visible").last
                     inputs = child.locator("input")
-                    await inputs.nth(0).fill(str(value.min) if value.min is not None else "")
-                    await inputs.nth(1).fill(str(value.max) if value.max is not None else "")
+                    minimum, maximum = _connection_range_bounds(value, dimension)
+                    await inputs.nth(0).fill(str(minimum))
+                    await inputs.nth(1).fill(str(maximum))
                     await self._paced_click(
                         child.locator(str(automation["inner_confirm_selector"])).first
                     )
@@ -966,6 +1125,7 @@ class BrowserAdapter:
         if spec.dynamic_filter_executor == "xingtu-market-v2":
             await self.actions(page, spec.apply_actions)
             await self.apply_xingtu_filters(page, plan)
+            await self.readback_conditions(page, plan)
             if not spec.final_actions:
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "FINAL_SEARCH_ACTION_MISSING")
             self.prepared_result = await self._search_operation(

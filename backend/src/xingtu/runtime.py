@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import fcntl
 import hashlib
 import json
 import os
@@ -21,6 +20,15 @@ from pydantic import Field, model_validator
 from .covers import CoverConfig
 from .domain import CollectorError, Model, NetworkMode, SegmentBudget, utcnow
 from .evidence import EvidenceConfig
+from .platform_runtime import (
+    ProfileLockBusy,
+    acquire_profile_lock,
+    apply_private_permissions,
+    discover_chrome_executable,
+    release_profile_lock,
+    validate_windows_private_path,
+    windows_chromium_lock_state,
+)
 from .request_census import RequestCensus, census_path_from_env
 
 
@@ -218,6 +226,12 @@ async def ensure_line(config: UnitConfig) -> None:
 
 
 def check_private(path: Path) -> None:
+    if sys.platform == "win32":
+        try:
+            validate_windows_private_path(path)
+        except OSError as exc:
+            raise CollectorError("RESOURCE_UNAVAILABLE", str(exc)) from exc
+        return
     if path.stat().st_mode & 0o077:
         raise CollectorError("RESOURCE_UNAVAILABLE", "PRIVATE_FILE_PERMISSIONS_REQUIRED")
 
@@ -245,6 +259,11 @@ class BrowserRuntime:
         self.browser_ua: str | None = None
         self.proxied = False
         self.network_mode = config.network_mode
+        self.browser_executable_path = (
+            discover_chrome_executable(config.browser_executable_path)
+            if config.browser_executable_path or not config.browser_channel
+            else None
+        )
         # Hybrid persistence bookkeeping (see the snapshot section below).
         self._context: BrowserContext | None = None
         self._snapshot_task: asyncio.Task[None] | None = None
@@ -272,8 +291,8 @@ class BrowserRuntime:
             "browser_version": self.browser_version,
             "user_agent": self.browser_ua,
             "headless": self.config.headless,
-            "executable": str(self.config.browser_executable_path)
-            if self.config.browser_executable_path
+            "executable": str(self.browser_executable_path)
+            if self.browser_executable_path
             else None,
             "channel": self.config.browser_channel,
             "service_workers": "block" if self.config.block_service_workers else "allow",
@@ -284,8 +303,10 @@ class BrowserRuntime:
 
     def _launch_options(self) -> dict[str, Any]:
         config = self.config
-        if config.browser_executable_path:
-            path = config.browser_executable_path
+        if config.browser_executable_path and not self.browser_executable_path:
+            raise CollectorError("RESOURCE_UNAVAILABLE", "BROWSER_EXECUTABLE_NOT_FOUND")
+        if self.browser_executable_path:
+            path = self.browser_executable_path
             if not path.is_file() or not os.access(path, os.X_OK):
                 raise CollectorError("RESOURCE_UNAVAILABLE", "BROWSER_EXECUTABLE_NOT_RUNNABLE")
         options: dict[str, Any] = {"headless": config.headless, "accept_downloads": False}
@@ -293,12 +314,12 @@ class BrowserRuntime:
             # Manual maintenance/log-in is easier in a real window sized by the OS, not a
             # fixed 1280x720 viewport.
             options["no_viewport"] = True
-        if config.browser_executable_path:
-            options["executable_path"] = str(config.browser_executable_path)
+        if self.browser_executable_path:
+            options["executable_path"] = str(self.browser_executable_path)
         elif config.browser_channel:
             options["channel"] = config.browser_channel
         if config.macos_system_keychain:
-            if sys.platform != "darwin" or not config.browser_executable_path:
+            if sys.platform != "darwin" or not self.browser_executable_path:
                 raise CollectorError(
                     "RESOURCE_UNAVAILABLE", "SYSTEM_KEYCHAIN_REQUIRES_MACOS_EXECUTABLE"
                 )
@@ -339,7 +360,7 @@ class BrowserRuntime:
         path = self.session_snapshot_path
         try:
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            os.chmod(path.parent, 0o700)
+            apply_private_permissions(path.parent, 0o700)
             temporary = path.with_suffix(".tmp")
             captured_at = datetime.now(UTC).isoformat()
             payload: dict[str, Any] = {
@@ -349,7 +370,7 @@ class BrowserRuntime:
                 "storage_state": state,
             }
             temporary.write_text(json.dumps(payload, ensure_ascii=False))
-            os.chmod(temporary, 0o600)
+            apply_private_permissions(temporary, 0o600)
             temporary.replace(path)
         except OSError:
             return False
@@ -430,15 +451,19 @@ class BrowserRuntime:
         profile = config.profile_directory.resolve()
         if not profile.is_relative_to(self.private_root) or profile == self.private_root:
             raise CollectorError("RESOURCE_UNAVAILABLE", "PROFILE_OUTSIDE_PROJECT_PRIVATE_ROOT")
+        try:
+            validate_windows_private_path(profile)
+        except OSError as exc:
+            raise CollectorError("RESOURCE_UNAVAILABLE", str(exc)) from exc
         await ensure_line(config)
         profile.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chmod(profile, 0o700)
+        apply_private_permissions(profile, 0o700)
         lock_path = profile.parent / (profile.name + ".lock")
-        with lock_path.open("a") as lock:
-            os.chmod(lock_path, 0o600)
+        with lock_path.open("a+b") as lock:
+            apply_private_permissions(lock_path, 0o600)
             try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
+                acquire_profile_lock(lock)
+            except ProfileLockBusy as exc:
                 raise CollectorError("RESOURCE_UNAVAILABLE", "PROFILE_IN_USE") from exc
             proxy: ProxySettings | None = None
             if not config.is_local_development:
@@ -517,7 +542,7 @@ class BrowserRuntime:
                             census.close()
                             census = None
             finally:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+                release_profile_lock(lock)
 
 
 async def close_browser_context(browser: BrowserContext, timeout_seconds: float = 20.0) -> None:
@@ -572,14 +597,25 @@ def confirm_local_browser_stopped(config: UnitConfig, private_root: Path) -> Non
     profile = config.profile_directory.resolve()
     if not profile.is_relative_to(private_root.resolve()):
         raise CollectorError("RESOURCE_UNAVAILABLE", "PROFILE_OUTSIDE_PROJECT_PRIVATE_ROOT")
+    try:
+        validate_windows_private_path(profile)
+    except OSError as exc:
+        raise CollectorError("RESOURCE_UNAVAILABLE", str(exc)) from exc
     if not profile.parent.exists():
         raise CollectorError("RESOURCE_UNAVAILABLE", "PROFILE_NOT_CREATED")
-    with (profile.parent / (profile.name + ".lock")).open("a") as lock:
+    with (profile.parent / (profile.name + ".lock")).open("a+b") as lock:
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
+            acquire_profile_lock(lock)
+        except ProfileLockBusy as exc:
             raise CollectorError("RESOURCE_UNAVAILABLE", "PROFILE_STILL_IN_USE") from exc
         try:
+            if sys.platform == "win32":
+                state = windows_chromium_lock_state(profile)
+                if state == "RUNNING":
+                    raise CollectorError("RESOURCE_UNAVAILABLE", "OLD_PROCESS_STILL_VISIBLE")
+                if state == "UNVERIFIABLE":
+                    raise CollectorError("RESOURCE_UNAVAILABLE", "SINGLETON_PROCESS_UNVERIFIABLE")
+                return
             singleton = profile / "SingletonLock"
             if singleton.exists() or singleton.is_symlink():
                 try:
@@ -603,7 +639,7 @@ def confirm_local_browser_stopped(config: UnitConfig, private_root: Path) -> Non
                 else:
                     raise CollectorError("RESOURCE_UNAVAILABLE", "OLD_PROCESS_STILL_VISIBLE")
         finally:
-            fcntl.flock(lock, fcntl.LOCK_UN)
+            release_profile_lock(lock)
 
 
 async def browser_compatibility_report(config: UnitConfig, private_root: Path) -> dict[str, Any]:
@@ -617,11 +653,11 @@ async def browser_compatibility_report(config: UnitConfig, private_root: Path) -
         "network_mode": config.network_mode.value,
         "proxy_configured": bool(config.proxy_server),
         "browser_channel": config.browser_channel,
-        "browser_executable_path": str(config.browser_executable_path)
-        if config.browser_executable_path
+        "browser_executable_path": str(runtime.browser_executable_path)
+        if runtime.browser_executable_path
         else None,
-        "executable_reported_version": browser_executable_version(config.browser_executable_path)
-        if config.browser_executable_path
+        "executable_reported_version": browser_executable_version(runtime.browser_executable_path)
+        if runtime.browser_executable_path
         else None,
         "playwright_version": playwright_version,
     }

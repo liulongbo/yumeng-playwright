@@ -2,8 +2,10 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
+from playwright.async_api import Error as BrowserError
 from xingtu.challenge import ChallengeHandler, ChallengePolicy
 from xingtu.domain import ChallengeState, CollectorError, TaskStatus
+from xingtu.worker import browser_transport_was_closed, registered_page_error_after_browser_failure
 
 
 class Clock:
@@ -194,3 +196,25 @@ def test_creator_and_task_recovery_limits_are_checkpointed():
     assert second.terminal_reason == "SECURITY_CHALLENGE_LIMIT"
     assert checkpoint.challenge_state == ChallengeState.LIMIT_EXCEEDED
     assert checkpoint.challenge_count == 2
+
+
+async def test_browser_action_failure_is_reclassified_from_registered_challenge():
+    page = object()
+
+    class Adapter:
+        detail_page = page
+        search_page = page
+
+        async def check_page_errors(self, checked_page):
+            assert checked_page is page
+            raise CollectorError("PLATFORM_SECURITY_CHALLENGE", "REGISTERED_PAGE_STATE")
+
+    error = await registered_page_error_after_browser_failure(Adapter())  # type: ignore[arg-type]
+
+    assert error is not None
+    assert error.code == "PLATFORM_SECURITY_CHALLENGE"
+
+
+def test_only_closed_playwright_targets_are_transport_failures():
+    assert browser_transport_was_closed(BrowserError("Target page has been closed"))
+    assert not browser_transport_was_closed(BrowserError("Locator.click: Timeout 90000ms exceeded"))

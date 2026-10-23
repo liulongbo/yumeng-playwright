@@ -582,6 +582,17 @@ F06 复用 13.4 的操作/响应关联器及 F05 字段解析器，但集合边�
 
 提供单元列表、创建维护会话和验证接口；验证真实账号、绑定线路及页面可用性，成功后通过幂等指令通知等待工作流。租约心跳、旧浏览器隔离与节点迁移采用第 14 章及 F11 规则。
 
+本地运行按平台适配但保持同一上层语义：macOS/Windows 返回 `LOCAL_WINDOW`，媒介切换到
+BrowserHost 已打开的原 Chrome；Linux/noVNC 保留 `REMOTE_VIEWER` 与既有 viewer 连接栅栏。
+本地模式不依赖 Xvfb/x11vnc，不新建浏览器、不抢焦点、不暴露 CDP。Profile 项目锁在 POSIX
+使用 `flock`，Windows 使用 `msvcrt`；Windows 的浏览器停止证明再结合 Chromium `lockfile`
+独占句柄，无法证明停止时 fail-closed，不删除锁或杀死不明进程。
+
+Collection Worker 在线性与任务租约分离：每个 Worker 实例独立登记启动、周期心跳、停止原因和
+`worker_generation`。空闲 Worker 仍心跳，同一单元在新鲜窗口内拒绝第二个实例；执行单元 API
+将 Worker、浏览器、租约和验证状态分列。Worker 失联只改变监测投影，不由监控线程改写任务，
+在途任务继续使用 Temporal heartbeat timeout/retry 和既有 lease/generation/owner 栅栏。
+
 使用 Playwright `launch_persistent_context` 为每个执行单元创建本项目独立 `user_data_dir`，不使用日常 Chrome 默认用户目录，不让多个进程同时打开同一目录。浏览器与 Playwright 版本按经测试组合固定；维护与采集复用同一受控 profile 和绑定代理环境，维护期间停止采集观察器及页面操作。
 
 macOS 上以系统 Google Chrome 写入的持久 profile 使用系统 Keychain 加密认证 Cookie；执行单元必须显式忽略 Playwright 默认 `--use-mock-keychain`，且只允许在 macOS + 固定浏览器可执行文件组合中启用，否则 fail-closed。该兼容设置纳入浏览器环境哈希。它只解决父账号认证可读性，不代表 session 型星图子账号业务会话能跨新进程恢复。
@@ -600,7 +611,9 @@ macOS 上以系统 Google Chrome 写入的持久 profile 使用系统 Keychain �
 
 ### 11.4 技术空缺
 
-远程浏览器承载方式、平台账号识别及登录成功判断的具体实现留空，需验证后确定（U06）。仅打开登录页不算该功能实现。
+macOS 本机原窗口接管及账号/受保护页判断已有实机证据；Windows 平台适配已有静态与隔离测试，
+仍须真实 Windows 10/11 主机验收。Linux/noVNC 实现继续保留，但本轮未新增实机远程承载证据。
+自然风控只有在平台真实出现并完成人工验证后才可记为真实通过；合成 Challenge 不替代该证据。
 
 ## 12. F11：蜂窝代理池与 Worker 资源管理
 

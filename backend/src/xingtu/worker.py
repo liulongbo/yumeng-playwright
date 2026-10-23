@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import platform
 from contextlib import suppress
 from pathlib import Path
 
@@ -18,7 +20,7 @@ from .browser_host import BrowserHost
 from .challenge import ChallengeHandler, ChallengePolicy
 from .contracts import PlatformRegistry
 from .covers import CoverPipeline, build_cover_store
-from .domain import CollectorError, ExecutionContext, TaskKind, TaskRecord, TaskStatus, utcnow
+from .domain import CollectorError, ExecutionContext, TaskKind, TaskRecord, TaskStatus, uid, utcnow
 from .engine import Engine
 from .evidence import build_evidence_sink
 from .repository import Repository
@@ -26,6 +28,48 @@ from .runtime import UnitConfig, ensure_line
 from .workflow import CollectionWorkflow
 
 logger = logging.getLogger(__name__)
+
+
+async def registered_page_error_after_browser_failure(
+    adapter: BrowserAdapter,
+) -> CollectorError | None:
+    """Recover a registered page state that interrupted a Playwright action.
+
+    A challenge can render after the last normal readiness check and intercept an in-flight
+    click.  Playwright then raises an action timeout, which is not evidence that Chrome closed.
+    Re-read only the contract's registered error selectors; never interact with the challenge.
+    """
+
+    seen: set[int] = set()
+    for page in (adapter.detail_page, adapter.search_page):
+        if page is None or id(page) in seen:
+            continue
+        seen.add(id(page))
+        try:
+            await asyncio.wait_for(adapter.check_page_errors(page), timeout=3.0)
+        except CollectorError as exc:
+            return exc
+        except (BrowserError, TimeoutError):
+            continue
+    return None
+
+
+def browser_transport_was_closed(exc: BrowserError) -> bool:
+    """Distinguish a closed transport from an ordinary locator/action failure."""
+
+    if type(exc).__name__ == "TargetClosedError":
+        return True
+    message = str(exc).lower()
+    return any(
+        marker in message
+        for marker in (
+            "browser has been closed",
+            "context has been closed",
+            "page has been closed",
+            "target page, context or browser has been closed",
+            "connection closed",
+        )
+    )
 
 
 def adopt_compatible_legacy_checkpoint(task: TaskRecord, registry: PlatformRegistry) -> bool:
@@ -473,9 +517,17 @@ class Activities:
                                 self.repo, adapter, ctx, evidence=evidence, covers=covers
                             )
                             try:
-                                if task.task_kind == TaskKind.COLLECTION:
-                                    return await engine.run()
-                                return await engine.run_update()
+                                try:
+                                    if task.task_kind == TaskKind.COLLECTION:
+                                        return await engine.run()
+                                    return await engine.run_update()
+                                except BrowserError as exc:
+                                    page_error = await registered_page_error_after_browser_failure(
+                                        adapter
+                                    )
+                                    if page_error is not None:
+                                        raise page_error from exc
+                                    raise
                             except CollectorError as exc:
                                 if exc.code in {
                                     "ACCOUNT_LOGIN_REQUIRED",
@@ -545,25 +597,30 @@ class Activities:
                                     raise
                                 return engine.record_error(exc)
                             except BrowserError as exc:
-                                # A transport failure used to collapse into a bare
-                                # RESOURCE_UNAVAILABLE:BROWSER_TRANSPORT, leaving nothing in the
-                                # log.  Diagnosing the 2026-10-13 zero-candidate incident required
-                                # temporarily patching this line, because the decisive detail (the
-                                # page had been navigated to `https://www.xingtu.cn/?redirect_uri=...`)
-                                # existed only inside this exception.  Keep it.
+                                # Preserve the decisive Playwright detail, but only classify an
+                                # actual closed target/transport as a resource loss. Locator and
+                                # action failures with no registered page state remain contract
+                                # failures and must not falsely claim that the user closed Chrome.
                                 logger.warning(
-                                    "browser transport failure attempt=%s %s: %s",
+                                    "browser action failure attempt=%s %s: %s",
                                     activity.info().attempt,
                                     type(exc).__name__,
                                     exc,
                                 )
-                                if activity.info().attempt < 4:
-                                    raise CollectorError(
-                                        "RESOURCE_UNAVAILABLE", "BROWSER_TRANSPORT"
-                                    ) from exc
-                                return engine.record_error(
-                                    CollectorError("PLATFORM_PAGE_CHANGED", "BROWSER_FAILURE")
+                                browser_error = CollectorError(
+                                    "RESOURCE_UNAVAILABLE"
+                                    if browser_transport_was_closed(exc)
+                                    else "PLATFORM_PAGE_CHANGED",
+                                    "BROWSER_CLOSED_OR_TRANSPORT_LOST"
+                                    if browser_transport_was_closed(exc)
+                                    else "BROWSER_ACTION_FAILED",
                                 )
+                                if (
+                                    browser_error.code == "RESOURCE_UNAVAILABLE"
+                                    and activity.info().attempt < 4
+                                ):
+                                    raise browser_error from exc
+                                return engine.record_error(browser_error)
                             finally:
                                 if host.mode == "collect":
                                     await adapter.close()
@@ -671,21 +728,60 @@ async def run_worker(
     client = await Client.connect(address)
     queue = f"xingtu-{config.unit_id}"
     activities = Activities(repo, config, private_root)
-    logger.info("collection worker polling %s on %s", queue, address)
-    async with Worker(
-        client,
-        task_queue=queue,
-        workflows=[CollectionWorkflow],
-        activities=[activities.collect],
-        max_concurrent_activities=1,
-    ):
+    worker_instance_id = uid()
+    worker_generation = repo.register_worker_instance(
+        config.unit_id,
+        worker_instance_id,
+        os.getpid(),
+        platform.system().lower() or "unknown",
+    )
+
+    async def worker_heartbeat() -> None:
         while True:
-            try:
-                # Local (normal collection/manual) dispatches start first.  Only then does this
-                # worker claim one unassigned update task from the shared pool.
-                await dispatch(repo, client, queue)
-                if repo.claim_unassigned_update(config.unit_id):
+            await asyncio.sleep(10)
+            repo.heartbeat_worker_instance(config.unit_id, worker_instance_id, worker_generation)
+
+    heartbeat_task = asyncio.create_task(worker_heartbeat())
+    stop_reason = "NORMAL_STOP"
+    try:
+        logger.info(
+            "collection worker polling %s on %s instance=%s generation=%s",
+            queue,
+            address,
+            worker_instance_id,
+            worker_generation,
+        )
+        async with Worker(
+            client,
+            task_queue=queue,
+            workflows=[CollectionWorkflow],
+            activities=[activities.collect],
+            max_concurrent_activities=1,
+        ):
+            while True:
+                if heartbeat_task.done():
+                    heartbeat_task.result()
+                try:
+                    # Local (normal collection/manual) dispatches start first.  Only then does
+                    # this worker claim one unassigned update task from the shared pool.
                     await dispatch(repo, client, queue)
-            except Exception as exc:  # noqa: BLE001 - the consumer must survive any tick error
-                logger.warning("collection dispatch tick failed: %s", type(exc).__name__)
-            await asyncio.sleep(2)
+                    if repo.claim_unassigned_update(config.unit_id):
+                        await dispatch(repo, client, queue)
+                except Exception as exc:  # noqa: BLE001 - dispatch survives a tick error
+                    logger.warning("collection dispatch tick failed: %s", type(exc).__name__)
+                await asyncio.sleep(2)
+    except BaseException as exc:
+        stop_reason = type(exc).__name__
+        raise
+    finally:
+        heartbeat_task.cancel()
+        await asyncio.gather(heartbeat_task, return_exceptions=True)
+        try:
+            repo.stop_worker_instance(
+                config.unit_id,
+                worker_instance_id,
+                worker_generation,
+                stop_reason,
+            )
+        except Exception as exc:  # noqa: BLE001 - shutdown must preserve the original failure
+            logger.warning("collection worker stop record failed: %s", type(exc).__name__)

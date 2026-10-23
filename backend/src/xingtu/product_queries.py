@@ -169,6 +169,24 @@ class ProductQueries:
 
     def _execution_unit_view(self, row: dict[str, Any]) -> ExecutionUnitView:
         deadline = row.get("event_deadline_at")
+        fresh_workers = int(row.get("fresh_worker_count") or 0)
+        worker_history = int(row.get("worker_history_count") or 0)
+        worker_status: Literal["ONLINE", "OFFLINE", "DUPLICATE", "UNKNOWN"] = (
+            "DUPLICATE"
+            if fresh_workers > 1
+            else "ONLINE"
+            if fresh_workers == 1
+            else "OFFLINE"
+            if worker_history
+            else "UNKNOWN"
+        )
+        actionable_reason = row.get("event_reason") or row.get("failure_reason")
+        if not actionable_reason and worker_status in {"OFFLINE", "DUPLICATE"}:
+            actionable_reason = (
+                "COLLECTION_WORKER_OFFLINE"
+                if worker_status == "OFFLINE"
+                else "DUPLICATE_COLLECTION_WORKERS"
+            )
         return ExecutionUnitView(
             unit_id=row["unit_id"],
             account_label=self._mask_reference(row.get("account_ref")),
@@ -179,19 +197,23 @@ class ProductQueries:
             current_root_task_id=str(row["current_root_task_id"])
             if row.get("current_root_task_id")
             else None,
+            worker_status=worker_status,
+            worker_instances=fresh_workers,
+            worker_last_heartbeat_at=row.get("worker_last_heartbeat_at"),
             browser_status=self._browser_status(row),
             verification_state=row.get("event_state"),
             takeover_state=row.get("takeover_state"),
             verification_deadline_at=deadline,
             last_heartbeat_at=row.get("last_heartbeat_at"),
-            actionable_reason=row.get("event_reason") or row.get("failure_reason"),
+            actionable_reason=actionable_reason,
         )
 
     def list_execution_units(self) -> list[ExecutionUnitView]:
         with self.repository.connect() as conn:
             rows = conn.execute(
                 """SELECT u.*,e.state AS event_state,e.reason AS event_reason,
-                e.deadline_at AS event_deadline_at,t.state AS takeover_state
+                e.deadline_at AS event_deadline_at,t.state AS takeover_state,
+                wh.fresh_worker_count,wh.worker_history_count,wh.worker_last_heartbeat_at
                 FROM execution_units u
                 LEFT JOIN LATERAL (
                   SELECT * FROM verification_events WHERE unit_id=u.unit_id
@@ -200,7 +222,15 @@ class ProductQueries:
                 LEFT JOIN LATERAL (
                   SELECT * FROM browser_takeover_sessions WHERE unit_id=u.unit_id
                   AND state IN ('REQUESTED','ACTIVE','VERIFYING') ORDER BY created_at DESC LIMIT 1
-                ) t ON true ORDER BY u.unit_id"""
+                ) t ON true
+                LEFT JOIN LATERAL (
+                  SELECT
+                    count(*) FILTER (WHERE stopped_at IS NULL
+                      AND last_heartbeat_at > now()-interval '45 seconds') AS fresh_worker_count,
+                    count(*) AS worker_history_count,
+                    max(last_heartbeat_at) AS worker_last_heartbeat_at
+                  FROM execution_unit_workers WHERE unit_id=u.unit_id
+                ) wh ON true ORDER BY u.unit_id"""
             ).fetchall()
             return [self._execution_unit_view(dict(row)) for row in rows]
 
@@ -230,7 +260,12 @@ class ProductQueries:
         ]
 
     def takeover_view(
-        self, row: dict[str, Any], *, viewer_url: str | None = None
+        self,
+        row: dict[str, Any],
+        *,
+        viewer_url: str | None = None,
+        access_mode: Literal["LOCAL_WINDOW", "REMOTE_VIEWER"] = "LOCAL_WINDOW",
+        operator_message: str | None = None,
     ) -> BrowserTakeoverView:
         probes: list[ManualProbeCreator] = []
         try:
@@ -257,6 +292,8 @@ class ProductQueries:
             expires_at=row["expires_at"],
             failure_reason=row.get("failure_reason"),
             viewer_url=viewer_url,
+            access_mode=access_mode,
+            operator_message=operator_message,
             manual_probe_creators=probes,
         )
 

@@ -191,6 +191,13 @@ async def synthetic_api(route: Route):
                             "title": "猫咪换粮的三件小事",
                             "platform_content_id": "video-001",
                             "canonical_link": "https://synthetic.invalid/video-001",
+                            "fields": [
+                                {
+                                    "field_key": "title",
+                                    "value": "猫咪换粮的三件小事",
+                                    "status": "COLLECTED",
+                                }
+                            ],
                         },
                     }
                 ],
@@ -238,7 +245,7 @@ async def test_product_login_establishes_session_and_restores_destination(fronte
         await expect(page.get_by_role("heading", name="欢迎回来")).to_be_visible()
         await page.screenshot(path=ARTIFACTS / "login.png", full_page=True)
         await page.get_by_label("产品账号").fill("media-a")
-        await page.get_by_label("密码").fill("a-secure-password")
+        await page.locator('input[type="password"]').fill("a-secure-password")
         await page.get_by_role("button", name="安全登录").click()
         await expect(page).to_have_url(f"{frontend_url}/tasks")
         await expect(page.get_by_role("heading", name="任务中心")).to_be_visible()
@@ -264,8 +271,8 @@ async def test_media_user_can_submit_track_and_open_results(frontend_url):
 
         await page.get_by_text("小满和两只猫").click()
         await expect(page.get_by_role("heading", name="小满和两只猫")).to_be_visible()
-        await expect(page.get_by_text("优秀传播视频")).to_be_visible()
-        await expect(page.get_by_text("猫咪换粮的三件小事")).to_be_visible()
+        await expect(page.get_by_role("heading", name="优秀传播视频", exact=True)).to_be_visible()
+        await expect(page.get_by_text("猫咪换粮的三件小事").first).to_be_visible()
         await page.screenshot(path=ARTIFACTS / "creator-detail.png", full_page=True)
 
         await page.goto(f"{frontend_url}/tasks/new")

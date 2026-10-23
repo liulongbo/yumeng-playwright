@@ -1,5 +1,29 @@
 # 开发任务索引
 
+# 2026-10-23 F10：macOS/Windows 本机 ExecutionUnit 与人工接管（待验收）
+
+[F10](F10.md) 已完成最小跨平台适配：POSIX/Windows Profile 锁、Windows Chrome `lockfile`
+停止证明、Chrome Stable 发现、Collection Worker 独立心跳/generation/重复启动拒绝、执行单元 Worker
+状态投影、`LOCAL_WINDOW|REMOTE_VIEWER` 接管和跨平台 Python supervisor。macOS 实测系统 Chrome、
+SessionHealth、Worker generation 与自然 Challenge 检测/通知/原窗口接管；人工未在 15 分钟内完成，
+任务按设计部分完成并保留 1 位达人，真实恢复 NOT TESTED。自动回归：单元 315、集成 95+1 skip、
+Contract 37、E2E 9、前端 84、F10 UI 34/34。Windows 实机 NOT TESTED，结论 **CONDITIONAL GO**。
+报告：[跨平台适配验收](../evidence/F10-local-cross-platform-2026-10-23.md)；手册：
+[macOS/Windows 本机运行](../F10-local-macos-windows.md)。当前 `unit-local-mac-02` 因自然 Challenge
+保持 `NEEDS_VERIFICATION / browser STOPPED`，再次真实采集前需人工合法验证。
+
+# 2026-10-22 IPPOOL-01：OpenWrt 多 IP 池建设与采集接入可行性评估（待验收）
+
+[IPPOOL-01](IPPOOL-01.md) 只做评估，未改代码/网络/执行单元配置，未发起真实采集。核查结论：当前 `ExecutionUnit = 账号 + 线路/代理 + 独立 profile`、并发 1，`account_ref` 全局唯一；正常采集在 `promote_intake` 固定到 Intake Worker 单元，`select_execution_unit` 未被使用，只有更新任务池化认领。因此**多出口并发上限 = 独立星图账号数，不是 SIM 数**；单账号只能单出口。参考方案的 3proxy `external wwanX` 语法错误（`external` 参数是 IP；按接口是 `-De`、按 netns 是 `-ne`），且 OpenWrt 24.10.0 x86_64 官方索引无 3proxy；推荐 **netns + 官方 tinyproxy（HTTP BasicAuth）+ 每 netns dnsmasq + veth 接入 LAN**，每个出口固定 `192.168.3.20N:6001`。Playwright 实测：HTTP 代理认证可用；**SOCKS5 认证不可用**；死代理 `ERR_PROXY_CONNECTION_FAILED`，不直连。基线（DB 只读）：10 位 17–32 min、20 位 38.7 min（31/h）、21 位 83.2 min（15.1/h，含 lease 丢失）；蜂窝性能、MF79U/J1900 兼容性、SIM 独立公网 IP 均**未实测/BLOCKED**。用户 2026-10-22/23 已确认 **3 个独立账号**、P0 吞吐 > P1 独立 IP > P2 冗余，接受 1.5×/1.8× 门槛；真实采集暂不授权、J1900 访问未确认、SIM 未购买。当前目标改为 **3 出口/3 单元**；Chrome profile 待代理就绪后逐个创建。未完成：J1900 实机信息、单出口 Phase 1、多出口/多单元调度。报告：[可行性评估](../evidence/IPPOOL-01-openwrt-multi-ip-feasibility-2026-10-22.md)。
+
+# 2026-10-22 QA-01：筛选组合稳定性与 20+ 分页验收（2026-10-23 第二轮更新，待验收）
+
+[QA-01](QA-01.md) 状态：待验收。已完成 connection_users 单边界修复、核心筛选、target=21 分页，以及新发现 1/2/3。**小数**：RangeInputs 增加 step=any；followers 12.5–25.5 真机请求 125000/255000 且读回 PASS；connection 0.5 被平台截断为 0，因此 ConnectionUsersRequirement 拒绝非整 w（0.5 返回 422），followers 小数保留。**结构化回读**：新增字段标签/选项标签/区间 token/计划外字段检查；contract 37 passed；min_only/background/viewer/followers 真机探针 PASS；A-07 v11 478fa8ac 与 v12 c37ee17b 产品任务均通过。**page=3**：真机 page1/2/3 各 20 位、page=3/has_more=true；契约升 v12、page_fetch_max_verified=3、continuous=false；unit 306 passed。既有：A-12 666114c3 COMPLETED；A-09/B-01/C-01 为真实空结果、SEARCH_EXHAUSTED；PG-03 829d4568 valid 21、40 候选、21 快照、前端 20→21。边界：page=4+/target=41 未跑；connection 0.5 不支持。证据：[新发现 1/2/3](../evidence/QA-01-new-findings-2026-10-22.md)、[page3](../evidence/QA-01-page3-verification-2026-10-22.md)、[分页](../evidence/QA-01-pagination-2026-10-22.md)。 **2026-10-23 第二轮**：连接用户五维上限改为 99999w（契约 featured-v13 / square-v3；平台 max=99999；请求 le=999990000；T1 f3aba74e valid 1；100000 API 422）；地域改为选择即写入（Hunan a1c874f9 valid 1，平台 province=["湖南省"]，19/19 湖南）；定向 unit 34/contract 37/frontend 84；合入前全量 unit 315 passed。未解决：无关键词 MISSING_BINDING、跨省地域、page4+。剩余字段正向真机已补齐（2cf27cbe/da2d67dd/2ff8ad00/2ec9f448 均 valid=1）。证据：[第二轮](../evidence/QA-01-round2-connection-max-region-2026-10-23.md)、[正向真机](../evidence/QA-01-positive-filters-2026-10-23.md)。 **2026-10-23 合入前修复**：keyword-only 计划不再在最终提交前强制 `搜索词` chip（平台只在搜索触发后渲染），keyword 仍由提交后注册 input 读回 + `search_param.keyword` 请求关联校验，计划外 keyword chip 仍拒绝；新增 2 条 Contract 用例，contract 39 passed；真实 keyword-only 回归待执行单元人工验证后补测。
+
+# 2026-10-22 OPS-02：本机全栈服务重启（已完成）
+
+[OPS-02](OPS-02.md) 按单机原生 `local-main` 配置重启全部应用服务（API `82777`、intake-worker `82802`、collection-worker `82805`、前端 npm `82885`），保留 PG/Redis/Temporal/MinIO 与业务数据。重启后验证：`/api/auth/me` 401、前端 200、`media-a` 登录 200（`127.0.0.1` 与 `localhost` 双 Origin）、任务 20 条、达人库 5 条、任务内达人 10 条、封面 200 `image/webp`、两个 Temporal 队列消费者在线且无重复 Worker、`./dev.sh status` 全绿，无头 Chromium 渲染任务中心与达人库无 JS 异常。**定时更新调度器按用户决定未启动**（22 位达人已到期，启动会立即创建真实周期更新任务）。运行态变更（不入库）：`.runtime/local-main/env` 增加 `http://localhost:5173` Origin、`.runtime/dev/pids.tsv` 记录实际 PID。证据：[OPS-02 重启验证](../evidence/OPS-02-local-restart-2026-10-22.md)。
+
 # 2026-10-21 LIVE-01：前端「户外 / 10 位」真实采集验收（待验收／部分通过）
 
 [LIVE-01](LIVE-01.md) 使用 Playwright MCP + 真实 Chrome，从「星采」前端以 `media-a` 登录并一次性提交「户外、目标 10 位」（任务 `b94d146b-98f5-41ee-8041-77f2b042d9d2`），真实跑通 P1 DeepSeek 转换、Temporal 排队、巨量星图检索（20 位候选）、F05/F06 采集、PostgreSQL 持久化与前端展示。终态 **`PARTIAL_COMPLETED`**：`valid_count=10/10`，10 位达人均有已发布快照；`profile_complete_count=5`、`featured_complete_count=9`、`failure_reason=PROFILE_SCOPE_INCOMPLETE`，页面如实显示「资料完整 5 / 精选完整 9 / 失败步骤 0」。达人详情展示真实星图 ID、粉丝、月深度用户、内容数据、CPM/CPE 与两组精选视频，封面 9/9 加载、控制台 0 错误。过程中修复 ①HTTP 504 被误判为 `PLATFORM_PAGE_CHANGED` 导致 9 位后整任务失败（改为模块级 `MODULE_COLLECTION_FAILED:PLATFORM_HTTP_5XX` + 契约测试）②API/Worker 封面目录不一致导致 404（对齐运行配置）。回归：单元 303、契约 34、观察器 17 通过；`ruff`/`mypy` 通过。遗留：带 `connection_users` 筛选的真实检索失败根因未确认；lease 丢失根因未证实（已自动恢复）；F05/F06 字段完整度未达 10/10。**未提交、未推送、未合并。** 证据：[LIVE-01 真实端到端验收证据](../evidence/LIVE-01-live-e2e-2026-10-21.md)。

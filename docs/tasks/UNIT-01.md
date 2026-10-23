@@ -1,7 +1,16 @@
 # UNIT-01：执行单元与平台核验
 
 状态：待验收  
-更新时间：2026-10-14T15:56:00+08:00
+更新时间：2026-10-23T21:07:56+08:00
+
+## 2026-10-23 macOS/Windows 本地化补充
+
+F10 本轮新增 POSIX/Windows Profile 锁适配、Windows Chromium `lockfile` 保守停止证明、系统
+Chrome Stable 发现、Collection Worker 独立 generation/心跳/停止记录与重复实例拒绝。macOS 已
+实测 Chrome 156.0.8078.47、可见模式 SessionHealth `VALID`、Worker generation 1→2 与重复启动
+拒绝；自然 Challenge 后浏览器/租约按超时路径安全释放。Windows 只有静态/隔离测试，实机仍为
+**NOT TESTED**，故本卡状态及 U06/U07/U08 未验收项不变。证据见
+[F10 跨平台适配验收](../evidence/F10-local-cross-platform-2026-10-23.md)。
 
 ## 2026-10-06 单元账号绑定变更（改绑）
 
@@ -103,6 +112,10 @@
 
 ## 交接信息
 
+- **当前运行态（2026-10-23T21:07+08:00）**：自然 Challenge 的人工接管窗口超时后，任务已
+  `PARTIAL_COMPLETED` 并安全释放浏览器/租约；Collection Worker generation 2 在线，执行单元保留
+  `NEEDS_VERIFICATION / browser STOPPED`。再次真实采集前必须由用户完成合法验证并重新形成
+  SessionHealth；不得依据 10 月 14 日的历史 `VALID` 直接放行。
 - 当前资源：用户已确认设备及账号具备；本轮实测到系统 Chrome 154.0.8037.57 + Playwright 1.63.0 可真实启动并访问 `https://www.xingtu.cn/`（HTTP 200）。
 - **会话现状（2026-10-14T15:49+08:00 实测）**：`unit-local-mac-02` 的星图登录状态为**有效**（`VALID`，受保护页可见，账号 = `ID: 1807978499337419`，快照在首个导航前恢复），可继续免人工登录发起采集；用户已按需打开专属 profile 的 Chrome 窗口（用完须 `Command-Q`，否则采集会 `PROFILE_IN_USE`）。注意 `star_sessionid` 为会话级 Cookie，登录态跨重启依赖私有快照，该结论只对“当前这一时段”成立。根因记录见[登录状态核验与快速失效根因记录](../evidence/SESSION-01-login-lifetime-root-cause-2026-10-14.md)。
 - 阻塞已解除（2026-09-27 本轮二）：真实登录、真实搜索与 2 位达人主页采集均已完成并落库（[真实采集证据](../evidence/UNIT-01-real-collection-2026-09-27.md)）。以下历史解除条件保留备查：
@@ -119,6 +132,10 @@
 - 历史资源说明仅代表 2026-09-26/2026-09-27 核验时情况；上节历史验证记录保留。
 
 ## 状态历史
+
+- 2026-10-23T21:07:56+08:00：保持待验收；macOS 本地锁/Chrome/Worker 心跳及自然 Challenge
+  接管已验证，Windows 实机未验证。自然 Challenge 未由人工完成，单元安全停在
+  `NEEDS_VERIFICATION / browser STOPPED`，再次采集前需人工恢复会话。
 
 - 2026-09-26T20:17:35+08:00：待办 → 进行中；用户批准开发方案。
 - 2026-09-26T21:50:00+08:00：进行中 → 阻塞；离线实现与合成验证完成，真实账号/线路/硬件核验因资源缺失无法推进。

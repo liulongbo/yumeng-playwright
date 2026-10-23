@@ -185,6 +185,10 @@ class SessionHealth(Model):
         return self
 
 
+# The live Xingtu range control reports min=0/max=99999 in w (10,000-count) units.
+CONNECTION_USERS_MAX_W = Decimal("99999")
+
+
 class NumberRange(Model):
     min: Decimal | None = None
     max: Decimal | None = None
@@ -469,9 +473,10 @@ class Capabilities(Model):
                     f.value.followed,
                 ):
                     if value is not None and any(
-                        bound is not None and bound > 100 for bound in (value.min, value.max)
+                        bound is not None and bound > CONNECTION_USERS_MAX_W
+                        for bound in (value.min, value.max)
                     ):
-                        raise CollectorError("INVALID_FORM", "connection users exceeds 100w")
+                        raise CollectorError("INVALID_FORM", "connection users exceeds 99999w")
             if f.field == "followers" and isinstance(f.value, NumberRange):
                 if f.unit == "ten_thousand_count" and any(
                     value is not None and value > 5000 for value in (f.value.min, f.value.max)

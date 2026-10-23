@@ -50,6 +50,7 @@
 | `make dev` / `make stop` | Docker、`.runtime/development.env` | 启动/停止依赖服务；不启动真实采集 |
 | `make m3-check` | 无（只读） | 前置自检：环境文件、DB/迁移、Temporal、注册表、执行单元、模型凭据与模型可用性；不启动进程 |
 | `make m3-up [M3_UP_FLAGS="--with-collection --with-frontend"]` | 同上；模型凭据就绪 | 启动 API + Intake Worker（可选 P2 Worker 与前端），门禁通过后保持前台监督；Ctrl-C 一并停止 |
+| `python scripts/m3_up.py --status --with-collection --unit-config <file>` | 同上 | macOS/Windows 通用只读状态入口；Windows 不依赖 bash/lsof/pgrep。配置、启动、停止与 F10 本机接管见[本机运行手册](F10-local-macos-windows.md) |
 | `make api` | 已迁移业务库；`XINGTU_DATABASE_URL`、Redis、登录 HMAC、允许 Origin 等 M3 环境变量 | 启动 FastAPI 产品 API；自动加载 `.runtime/m3-app.env`；不会自动创建任务 |
 | `make intake-worker UNIT_CONFIG=<file>` | 产品 API 环境、Temporal、live 注册表、有效执行单元和 `DEEPSEEK_API_KEY` | 校验模型后消费 `intake_dispatches`；成功才派发现有 P2 |
 | `make collection-worker UNIT_CONFIG=<file>` | 同上 + 真实浏览器与采集授权 | 消费 `xingtu-<unit>` 队列并执行 F04/F05/F06 采集；也执行手动/定时更新任务 |

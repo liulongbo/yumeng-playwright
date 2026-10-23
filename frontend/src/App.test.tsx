@@ -114,6 +114,10 @@ describe("M3 product application", () => {
           { field: "region", label: "所在地域", group: "背景信息", control: "cascader", options: [], ...emptyMeta, region_tree: [{ value: "110000", label: "北京市", children: [{ value: "朝阳区", label: "朝阳区", children: [] }] }] },
           { field: "education", label: "学历", group: "背景信息", control: "single-select", options: [option("master", "硕士生")], ...emptyMeta },
           { field: "yellow_v", label: "黄v认证", group: "背景信息", control: "single-select", options: [option("technology", "科技创作者")], ...emptyMeta },
+          { field: "followers", label: "粉丝量级", group: "受众画像", control: "range", options: [{ value: "10_100", label: "10w-100w", request_value: null, range: { min: "10", max: "100" } }], ...emptyMeta, range_constraints: { min: 0, max: 5000, unit: "ten_thousand_count" } },
+          { field: "connection_users", label: "连接用户数", group: "受众画像", control: "range-group", options: [], ...emptyMeta, dimensions: [
+            { key: "connected", label: "连接用户数", control: "range", options: [], range_constraints: { min: 0, max: 99999, unit: "ten_thousand_count" } },
+          ] },
           { field: "viewer_profile", label: "观众画像", group: "受众画像", control: "profile-group", options: [], ...emptyMeta, dimensions: profileDimensions, incompatible_with: ["fan_profile"] },
           { field: "fan_profile", label: "粉丝画像", group: "受众画像", control: "profile-group", options: [], ...emptyMeta, dimensions: profileDimensions, incompatible_with: ["viewer_profile"] },
         ],
@@ -129,7 +133,19 @@ describe("M3 product application", () => {
     renderApp("/tasks/new");
     expect(await screen.findByText("背景信息")).toBeInTheDocument();
     expect(screen.getByText("巨量星图仅允许观众画像与粉丝画像二选一；选择一侧会清空另一侧。")).toBeInTheDocument();
+    const rangeInputs = screen.getAllByLabelText("下限");
+    expect(rangeInputs.length).toBeGreaterThan(0);
+    for (const input of rangeInputs) {
+      expect(input).toHaveAttribute("step", "any");
+      expect(input).toHaveAttribute("max", "99999");
+    }
+    await userEvent.type(screen.getAllByLabelText("上限")[0], "99999");
     await userEvent.selectOptions(screen.getByText("达人性别").closest("label")!.querySelector("select")!, "female");
+    await userEvent.selectOptions(screen.getByLabelText("省级地域"), "110000");
+    expect(await screen.findByRole("button", { name: "北京市 ×" })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("二级地域"), "朝阳区");
+    expect(await screen.findByRole("button", { name: "北京市 / 朝阳区 ×" })).toBeInTheDocument();
+    expect(screen.getByText("所在地域：1 项")).toBeInTheDocument();
     const ages = screen.getAllByLabelText("18-23岁居多");
     await userEvent.click(ages[0]);
     expect(ages[0]).toBeChecked();
@@ -142,6 +158,8 @@ describe("M3 product application", () => {
     expect(JSON.parse(String(create.init?.body))).toMatchObject({
       schema_version: "requirement_form.v2",
       creator_gender: "female",
+      creator_regions: [{ province_code: "110000", city: "朝阳区" }],
+      connection_users: { connected: { max: 99999, unit: "ten_thousand_count" } },
       viewer_profile: null,
       fan_profile: { crowd: ["gen_z"] },
     });
@@ -213,6 +231,47 @@ describe("M3 product application", () => {
     expect(screen.getByText("≈4,889.9w")).toBeInTheDocument();
     expect(screen.getByText("数据不完整")).toBeInTheDocument();
     expect(screen.getAllByText("CPM / CPE 原始值").length).toBeGreaterThan(0);
+  });
+
+  it("shows independent worker health and local original-Chrome takeover guidance", async () => {
+    const unit = {
+      unit_id: "unit-local-win-01", platform: "douyin_xingtu", account_label: "•••acct",
+      line_label: "•••local", state: "LEASED", mode: "maintenance",
+      allowed_task_kinds: ["collection"], current_root_task_id: task.root_task_id,
+      worker_status: "ONLINE", worker_instances: 1,
+      worker_last_heartbeat_at: "2026-10-23T02:00:00Z", browser_status: "MAINTENANCE",
+      verification_state: "OPEN", takeover_state: null,
+      verification_deadline_at: "2026-10-23T03:00:00Z",
+      last_heartbeat_at: "2026-10-23T02:00:00Z", actionable_reason: "PLATFORM_SECURITY_CHALLENGE",
+    };
+    const takeover = {
+      takeover_id: "22222222-2222-4222-8222-222222222222", unit_id: unit.unit_id,
+      root_task_id: task.root_task_id, state: "ACTIVE", expires_at: "2026-10-23T03:00:00Z",
+      failure_reason: null, viewer_url: null, access_mode: "LOCAL_WINDOW",
+      operator_message: "请切换到本机已经打开的执行单元 Chrome 窗口完成验证。",
+      manual_probe_creators: [],
+    };
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const path = String(input);
+      if (path === "/api/auth/me") return json(user);
+      if (path === "/api/execution-units") return json([unit]);
+      if (path === "/api/verification-events?open_only=true") return json([{
+        event_id: "33333333-3333-4333-8333-333333333333", unit_id: unit.unit_id,
+        root_task_id: task.root_task_id, state: "OPEN", reason: "PLATFORM_SECURITY_CHALLENGE",
+        detected_at: "2026-10-23T02:00:00Z", last_detected_at: "2026-10-23T02:00:00Z",
+        deadline_at: "2026-10-23T03:00:00Z", reappearance_count: 0, remaining_seconds: 600,
+      }]);
+      if (path === `/api/execution-units/${unit.unit_id}/takeovers` && init?.method === "POST") return json(takeover, 202);
+      if (path === `/api/takeovers/${takeover.takeover_id}`) return json(takeover);
+      return json({}, 404);
+    });
+    renderApp("/execution-units");
+    expect(await screen.findByText("ONLINE")).toBeInTheDocument();
+    expect(screen.getByText(/1 实例/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "接管浏览器" }));
+    expect(await screen.findByText("请切换到本机原 Chrome 窗口")).toBeInTheDocument();
+    expect(screen.getByText("请切换到本机已经打开的执行单元 Chrome 窗口完成验证。")).toBeInTheDocument();
+    expect(screen.queryByTitle("原 Chromium 浏览器")).not.toBeInTheDocument();
   });
 });
 

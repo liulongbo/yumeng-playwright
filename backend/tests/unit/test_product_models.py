@@ -82,8 +82,12 @@ def test_unverified_form_field_never_becomes_an_executable_plan():
 
 
 def test_v2_rejects_invalid_ranges_regions_and_mutually_exclusive_profiles():
-    with pytest.raises(ValidationError, match="100w"):
-        RequirementForm(connection_users={"connected": {"min": 101}})
+    RequirementForm(connection_users={"connected": {"min": 99999}})
+    with pytest.raises(ValidationError, match="99999w"):
+        RequirementForm(connection_users={"connected": {"min": 100000}})
+    with pytest.raises(ValidationError, match="whole ten-thousand"):
+        RequirementForm(connection_users={"connected": {"min": 0.5}})
+    RequirementForm(followers={"min": 12.5, "max": 25.5})
     with pytest.raises(ValidationError, match="5000w"):
         RequirementForm(followers={"min": 5001})
     with pytest.raises(ValidationError, match="province and its child"):

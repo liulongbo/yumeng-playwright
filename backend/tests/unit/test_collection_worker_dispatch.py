@@ -80,6 +80,21 @@ class FakeRepository:
         self.connect_error = connect_error
         self.statements: list[tuple[str, tuple[Any, ...]]] = []
         self.states: dict[str, str] = {}
+        self.worker_stops: list[tuple[str, str, int, str]] = []
+
+    def register_worker_instance(
+        self, unit_id: str, instance_id: str, pid: int, platform_name: str
+    ) -> int:
+        del unit_id, instance_id, pid, platform_name
+        return 1
+
+    def heartbeat_worker_instance(self, unit_id: str, instance_id: str, generation: int) -> None:
+        del unit_id, instance_id, generation
+
+    def stop_worker_instance(
+        self, unit_id: str, instance_id: str, generation: int, reason: str
+    ) -> None:
+        self.worker_stops.append((unit_id, instance_id, generation, reason))
 
     def connect(self) -> FakeConnection:
         if self.connect_error:

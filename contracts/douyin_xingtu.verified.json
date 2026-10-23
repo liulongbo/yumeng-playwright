@@ -1,10 +1,10 @@
 {
   "schema_version": "platform_registry.v1",
-  "contract_version": "xingtu-ad-creator-featured-v11",
+  "contract_version": "xingtu-ad-creator-featured-v13",
   "adapter_version": "browser-v9",
   "status": "VERIFIED",
   "sample_kind": "live",
-  "verified_at": "2026-10-08T22:18:00+08:00",
+  "verified_at": "2026-10-23T12:05:00+08:00",
   "account_permission_type": "巨量星图广告主(客户)账号，具备达人广场找达人搜索权益；首个账号客户权益等级不足（search_for_author_square 返回 10003），本契约使用第二个已核验账号的真实观察",
   "evidence_refs": [
     "docs/evidence/DIAG-01-A3-fix-issue-fields-2026-10-15.md",
@@ -14,14 +14,19 @@
     "docs/evidence/AUTO-01-profile-pagination-implementation-2026-10-06.md",
     "docs/evidence/F05-six-fields-2026-10-08.md",
     "docs/evidence/FILTER-01-live-filter-dictionary-2026-10-14.md",
+    "docs/evidence/QA-01-page3-verification-2026-10-22.md",
+    "docs/evidence/QA-01-round2-connection-max-region-2026-10-23.md",
+    "docs/evidence/QA-01-positive-filters-2026-10-23.md",
     "docs/tasks/CD-08.md"
   ],
   "capabilities": {
-    "version": "xingtu-ad-creator-square-v2",
+    "version": "xingtu-ad-creator-square-v3",
     "status": "VERIFIED",
     "sample_kind": "live",
     "evidence_refs": [
-      "docs/evidence/FILTER-01-live-filter-dictionary-2026-10-14.md"
+      "docs/evidence/FILTER-01-live-filter-dictionary-2026-10-14.md",
+      "docs/evidence/QA-01-round2-connection-max-region-2026-10-23.md",
+      "docs/evidence/QA-01-positive-filters-2026-10-23.md"
     ],
     "fields": [
       {
@@ -2655,7 +2660,7 @@
             "control": "range",
             "range_constraints": {
               "min": 0,
-              "max": 100,
+              "max": 99999,
               "unit": "ten_thousand_count"
             }
           },
@@ -2665,7 +2670,7 @@
             "control": "range",
             "range_constraints": {
               "min": 0,
-              "max": 100,
+              "max": 99999,
               "unit": "ten_thousand_count"
             }
           },
@@ -2675,7 +2680,7 @@
             "control": "range",
             "range_constraints": {
               "min": 0,
-              "max": 100,
+              "max": 99999,
               "unit": "ten_thousand_count"
             }
           },
@@ -2685,7 +2690,7 @@
             "control": "range",
             "range_constraints": {
               "min": 0,
-              "max": 100,
+              "max": 99999,
               "unit": "ten_thousand_count"
             }
           },
@@ -2695,7 +2700,7 @@
             "control": "range",
             "range_constraints": {
               "min": 0,
-              "max": 100,
+              "max": 99999,
               "unit": "ten_thousand_count"
             }
           }
@@ -3259,6 +3264,7 @@
       ]
     },
     "compatible_plan_versions": [
+      "xingtu-ad-creator-square-v2",
       "xingtu-ad-creator-square-v1"
     ]
   },
@@ -3385,7 +3391,7 @@
     "exhausted_value": "false",
     "pagination": "page",
     "next_page_mode": "page_fetch",
-    "page_fetch_max_verified": 2,
+    "page_fetch_max_verified": 3,
     "resume_supported": false,
     "initial_cursor": "1",
     "fixed_sort": true,
@@ -3396,7 +3402,7 @@
       }
     },
     "coverage_gaps": [
-      "页面 UI 滚动到底不产生下一页请求；已核验同一页面上下文复用原生请求头与请求体可取得 page=2。当前 page_fetch_max_verified=2，page=3 及以后和真实终点尚未核验，达到边界会以 SEARCH_CAPABILITY_LIMIT 停止而不报告平台耗尽",
+      "页面 UI 滚动到底不产生下一页请求；已核验同一页面上下文复用原生请求头与请求体可取得 page=2 和 page=3（page=3 实测 20 位、pagination.page=3、has_more=true）。当前 page_fetch_max_verified=3，page=4 及以后和真实终点尚未核验，达到边界会以 SEARCH_CAPABILITY_LIMIT 停止而不报告平台耗尽",
       "response_match 为空：平台搜索响应不回显关键词/页码，请求归属只由方法/主机/路径+请求体绑定判定",
       "访问节奏未实测：action_interval_seconds=2.0 为保守值，平台限流阈值尚未核验",
       "本能力版本只发布背景信息与受众画像中已实测的八个控件；合作诉求/匹配度/性价比/主题推荐等其他筛选仍未核验，不对产品开放",

@@ -191,6 +191,9 @@ export interface ExecutionUnit {
   mode: string | null;
   allowed_task_kinds: TaskKind[];
   current_root_task_id: string | null;
+  worker_status: "ONLINE" | "OFFLINE" | "DUPLICATE" | "UNKNOWN";
+  worker_instances: number;
+  worker_last_heartbeat_at: string | null;
   browser_status: "ONLINE" | "MAINTENANCE" | "STOPPED" | "SUSPECTED_OFFLINE" | "QUARANTINED";
   verification_state: string | null;
   takeover_state: string | null;
@@ -207,6 +210,8 @@ export interface BrowserTakeover {
   expires_at: string;
   failure_reason: string | null;
   viewer_url: string | null;
+  access_mode: "LOCAL_WINDOW" | "REMOTE_VIEWER";
+  operator_message: string | null;
   manual_probe_creators: ManualProbeCreator[];
 }
 

@@ -21,6 +21,7 @@ import argparse
 import asyncio
 import os
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -34,11 +35,18 @@ from typing import Any
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
+BACKEND_SRC = ROOT / "backend" / "src"
+if str(BACKEND_SRC) not in sys.path:
+    sys.path.insert(0, str(BACKEND_SRC))
 RUNTIME = ROOT / ".runtime"
 LOG_DIR = RUNTIME / "logs"
 M3_ENV = RUNTIME / "m3-app.env"
 MODEL_ENV = RUNTIME / "deepseek.env"
-DEFAULT_UNIT_CONFIG = RUNTIME / "units" / "local-dev-mac-02.json"
+DEFAULT_UNIT_CONFIG = (
+    RUNTIME / "local-main" / "units" / "unit-local-mac-02.json"
+    if (RUNTIME / "local-main" / "units" / "unit-local-mac-02.json").exists()
+    else RUNTIME / "units" / "local-dev-mac-02.json"
+)
 DEFAULT_UNIT_ID = "unit-local-mac-02"
 API_PORT = 8000
 FRONTEND_PORT = 5173
@@ -358,6 +366,19 @@ def _on_signal(signum: int, frame: object) -> None:
     raise KeyboardInterrupt
 
 
+def python_module(module: str, *args: str) -> list[str]:
+    """Use the active virtualenv on both ``.venv/bin`` and ``.venv/Scripts`` layouts."""
+
+    return [sys.executable, "-m", module, *args]
+
+
+def frontend_command() -> list[str]:
+    if sys.platform == "win32":
+        command = os.environ.get("COMSPEC", "cmd.exe")
+        return [command, "/d", "/s", "/c", "npm", "run", "dev"]
+    return [shutil.which("npm") or "npm", "run", "dev"]
+
+
 def main() -> int:
     # The supervisor is usually started from a pipe (make/CI), where stdout is block buffered and
     # the readiness verdict would only appear on exit.
@@ -366,6 +387,11 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _on_signal)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="preflight only; start nothing")
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="preflight plus current ports/Temporal consumers; start nothing",
+    )
     parser.add_argument("--with-collection", action="store_true", help="also start the P2 worker")
     parser.add_argument("--with-frontend", action="store_true", help="also start the Vite UI")
     parser.add_argument("--unit-config", type=Path, default=DEFAULT_UNIT_CONFIG)
@@ -377,6 +403,26 @@ def main() -> int:
     for check in pre.checks:
         print("  " + check.render())
 
+    if args.status:
+        from xingtu.worker_health import check_queues
+
+        address = pre.env.get("XINGTU_TEMPORAL_ADDRESS", "127.0.0.1:57233")
+        try:
+            results = asyncio.run(check_queues(address, pre.queues))
+        except Exception as exc:  # noqa: BLE001 - status must still show ports/preflight
+            results = {}
+            print(f"\nTEMPORAL_STATUS_UNAVAILABLE: {type(exc).__name__}: {str(exc)[:90]}")
+        print("\n=== local runtime status ===")
+        print(f"  api       {'ONLINE' if port_open('127.0.0.1', API_PORT) else 'OFFLINE'}")
+        print(f"  frontend  {'ONLINE' if port_open('127.0.0.1', FRONTEND_PORT) else 'OFFLINE'}")
+        for queue, health in results.items():
+            state = "ONLINE" if health.alive else "OFFLINE" if health.alive is False else "UNKNOWN"
+            print(
+                f"  {queue:<28} {state} fresh_pollers={health.fresh_pollers} "
+                f"freshest_age={health.freshest_age_seconds} error={health.error}"
+            )
+        return 0 if pre.ok else 2
+
     if not pre.ok:
         failed = [check.code for check in pre.checks if not check.ok]
         print("\nPREFLIGHT_FAILED: " + ", ".join(failed))
@@ -385,7 +431,6 @@ def main() -> int:
     if args.check:
         print("\nPREFLIGHT_OK: all required prerequisites are satisfied.")
         return 0
-
     env = dict(pre.env)
     env.setdefault("PYTHONUNBUFFERED", "1")
     supervisor = Supervisor()
@@ -398,12 +443,25 @@ def main() -> int:
             note = "healthcheck 401 confirmed" if api_health_ok() else "healthcheck NOT recognised"
             print(f"  [reuse] api already listening on 127.0.0.1:{API_PORT} ({note})")
         else:
-            supervisor.start("api", [str(ROOT / ".venv/bin/xingtu-api")], env)
+            supervisor.start(
+                "api",
+                python_module(
+                    "uvicorn",
+                    "xingtu.product_api:get_application",
+                    "--factory",
+                    "--host",
+                    env.get("XINGTU_API_HOST", "127.0.0.1"),
+                    "--port",
+                    env.get("XINGTU_API_PORT", str(API_PORT)),
+                    "--no-proxy-headers",
+                ),
+                env,
+            )
             started.append("api")
         supervisor.start(
             "intake-worker",
             [
-                str(ROOT / ".venv/bin/xingtu-product"),
+                *python_module("xingtu.product_cli"),
                 "intake-worker",
                 "--unit-config",
                 str(args.unit_config),
@@ -415,7 +473,7 @@ def main() -> int:
             supervisor.start(
                 "collection-worker",
                 [
-                    str(ROOT / ".venv/bin/xingtu"),
+                    *python_module("xingtu.cli"),
                     "worker",
                     "--config",
                     str(args.unit_config),
@@ -424,7 +482,7 @@ def main() -> int:
             )
             started.append("collection-worker")
         if args.with_frontend and not frontend_running:
-            supervisor.start("frontend", ["npm", "run", "dev"], env, cwd=ROOT / "frontend")
+            supervisor.start("frontend", frontend_command(), env, cwd=ROOT / "frontend")
             started.append("frontend")
 
         address = env.get("XINGTU_TEMPORAL_ADDRESS", "127.0.0.1:57233")

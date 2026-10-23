@@ -4,7 +4,7 @@
 
 - 状态：待验收
 - 是否验收：否
-- 更新时间：2026-10-10T22:45:00+08:00
+- 更新时间：2026-10-23T21:07:56+08:00
 - 关联功能：F05、F06、F07、F10
 - 关联验收：安全验证期间零业务请求、连续稳定 5 秒后恢复、达人/任务恢复上限、超时部分完成、进度复用与产品状态展示
 - 前置任务：[F05](F05.md)、[F06](F06.md)、[CONSOLE-01](CONSOLE-01.md)、[SESSION-01](SESSION-01.md)
@@ -36,6 +36,10 @@
 - 2026-10-10：完成官方能力字段矩阵、DEC-015 和专项单元／集成／Browser Contract 验证。产品 UI 因 Lazyweb 工具不可用而未实施；真实平台自然挑战和重复请求降幅仍待验收。
 - 2026-10-10 续作：恢复上次中断上下文后，补齐 React 任务详情页的 `WAITING_FOR_VERIFICATION` 状态枚举、等待安全验证提示、挑战摘要面板和前端测试；未改动采集核心链路。
 - 2026-10-10 冒烟复核：高级 QA 独立执行 F04/F05/F06/M3 核心冒烟，自动化层继续通过；安全验证托管专项仅覆盖合成/离线路径，真实自然挑战未触发，保持待验收。
+- 2026-10-23：真实小样本自然出现 `captcha_container`。确认 Playwright 动作超时曾被误归类为
+  transport 关闭，最小修复为动作异常后只读复核注册表 Challenge selector，只有目标/连接确实关闭
+  才进入资源错误。自然检测、通知、原窗口 LOCAL_WINDOW 接管通过；人工未在 15 分钟内完成，按设计
+  `SECURITY_CHALLENGE_TIMEOUT` 部分完成并保留 1 位已持久达人。真实恢复仍待验收。
 
 ## 验证证据
 
@@ -44,6 +48,9 @@
 - 续作验证（2026-10-10T21:29+08:00）：`ruff check`、`ruff format --check`、`mypy backend/src` 通过；`backend/tests/unit` 164 passed；`backend/tests/contract` 28 passed（沙箱外启动项目 Chromium）；`backend/tests/integration` 67 passed、1 skipped；`tests/e2e` 7 passed；`npm --prefix frontend run lint`、`npm --prefix frontend test`（3 passed）和 `npm --prefix frontend run build` 均通过。挑战专项集成 `backend/tests/integration/test_challenge.py` 2 passed。
 - 核心冒烟复核（2026-10-10T22:45+08:00）：完整报告见 [F04/F05/F06/M3 核心冒烟测试报告](../testing/smoke-test-f04-f05-f06-m3.md)。本轮确认挑战相关单元、契约、集成与 E2E 均随套件通过；真实 UI 读取到既有任务 `f47eb1cf-f038-4f9f-ae3d-e02aa8a995d3` 的历史部分完成状态，但没有自然出现新的 `WAITING_FOR_VERIFICATION` 场景。
 - 真实平台验证：本轮默认不主动触发安全验证；需要自然触发或受控人工验收，未取得前不得宣称真实平台验收完成。
+- 2026-10-23：[F10 跨平台验收](../evidence/F10-local-cross-platform-2026-10-23.md)：自然 Challenge
+  检测/通知/接管/超时保护有真实证据；合成失败、重复接管与恢复 34/34。人工完成后的同 Context
+  恢复与 session_version 单次递增仍为 **NOT TESTED**。
 
 ## 交接信息
 
@@ -53,6 +60,9 @@
 - Lazyweb 说明：本轮仍未暴露 Lazyweb MCP 工具，无法生成 Lazyweb 报告；本次仅补齐既有设计中的状态/数据展示缺口，没有进行重新设计或视觉优化。
 
 ## 状态历史
+
+- 2026-10-23T21:07:56+08:00：保持待验收；新增自然 Challenge 检测、LOCAL_WINDOW 接管与超时
+  部分完成证据，并修复动作超时误归类。人工未完成验证，真实恢复相关未勾选项保持不变。
 
 - 2026-10-10T22:45:00+08:00：待验收 → 待验收；F04/F05/F06/M3 冒烟复核中，安全验证托管合成/自动化路径通过，真实平台自然挑战、同页恢复和重复请求下降证据仍未取得。报告见[核心冒烟测试报告](../testing/smoke-test-f04-f05-f06-m3.md)。
 

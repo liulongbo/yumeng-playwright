@@ -430,6 +430,84 @@ class Repository:
                 raise CollectorError("RESOURCE_UNAVAILABLE", "unit not registered")
             return row
 
+    def register_worker_instance(
+        self,
+        unit: str,
+        worker_instance_id: str,
+        process_id: int,
+        platform: str,
+        *,
+        stale_after_seconds: int = 45,
+    ) -> int:
+        """Register exactly one fresh Collection Worker without borrowing a browser lease."""
+
+        if process_id <= 0 or stale_after_seconds <= 0:
+            raise CollectorError("INVALID_FORM", "INVALID_WORKER_REGISTRATION")
+        with self.connect() as conn:
+            execution_unit = conn.execute(
+                "SELECT worker_generation FROM execution_units WHERE unit_id=%s FOR UPDATE",
+                (unit,),
+            ).fetchone()
+            if not execution_unit:
+                raise CollectorError("RESOURCE_UNAVAILABLE", "unit not registered")
+            fresh = conn.execute(
+                """SELECT worker_instance_id FROM execution_unit_workers
+                WHERE unit_id=%s AND stopped_at IS NULL
+                AND last_heartbeat_at > now()-(%s * interval '1 second')
+                FOR UPDATE""",
+                (unit, stale_after_seconds),
+            ).fetchall()
+            if fresh:
+                raise CollectorError("RESOURCE_UNAVAILABLE", "DUPLICATE_WORKER_FOR_UNIT")
+            conn.execute(
+                """UPDATE execution_unit_workers SET stopped_at=now(),stop_reason='STALE_REPLACED'
+                WHERE unit_id=%s AND stopped_at IS NULL""",
+                (unit,),
+            )
+            generation = int(execution_unit["worker_generation"]) + 1
+            conn.execute(
+                "UPDATE execution_units SET worker_generation=%s WHERE unit_id=%s",
+                (generation, unit),
+            )
+            conn.execute(
+                """INSERT INTO execution_unit_workers(
+                worker_instance_id,unit_id,worker_generation,process_id,platform)
+                VALUES(%s,%s,%s,%s,%s)""",
+                (worker_instance_id, unit, generation, process_id, platform),
+            )
+            return generation
+
+    def heartbeat_worker_instance(
+        self, unit: str, worker_instance_id: str, worker_generation: int
+    ) -> None:
+        with self.connect() as conn:
+            updated = conn.execute(
+                """UPDATE execution_unit_workers w SET last_heartbeat_at=now()
+                FROM execution_units u
+                WHERE w.worker_instance_id=%s AND w.unit_id=%s
+                AND w.worker_generation=%s AND w.stopped_at IS NULL
+                AND u.unit_id=w.unit_id AND u.worker_generation=w.worker_generation
+                RETURNING w.worker_instance_id""",
+                (worker_instance_id, unit, worker_generation),
+            ).fetchone()
+            if not updated:
+                raise CollectorError("RESOURCE_UNAVAILABLE", "WORKER_INSTANCE_FENCED")
+
+    def stop_worker_instance(
+        self,
+        unit: str,
+        worker_instance_id: str,
+        worker_generation: int,
+        reason: str,
+    ) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """UPDATE execution_unit_workers SET stopped_at=now(),stop_reason=%s
+                WHERE worker_instance_id=%s AND unit_id=%s AND worker_generation=%s
+                AND stopped_at IS NULL""",
+                (reason, worker_instance_id, unit, worker_generation),
+            )
+
     def select_execution_unit(self, task_kind: TaskKind) -> str | None:
         """First non-quarantined unit that allows this task kind; no load balancing in MVP."""
         with self.connect() as conn:

@@ -167,6 +167,18 @@ def main() -> int:
             "系统已暂停自动页面检测与采集操作" in body,
             "mutual-exclusion notice rendered",
         )
+        local_takeover = evaluate(
+            client,
+            """(() => ({
+              guidance: document.body.innerText.includes('请切换到本机原 Chrome 窗口'),
+              viewerCount: document.querySelectorAll('.takeover-viewer iframe').length,
+            }))()""",
+        )
+        check(
+            "TAKEOVER-06",
+            bool(local_takeover.get("guidance")) and local_takeover.get("viewerCount") == 0,
+            f"local original-Chrome guidance={local_takeover!r}",
+        )
         screenshot(client, "03-takeover-active")
 
         check("REAPPEAR-01", click_text(client, "仍有验证/无法完成"), "feedback opened")

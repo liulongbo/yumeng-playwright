@@ -271,20 +271,21 @@ function RegionField({ field, form, update }: { field: CapabilityField; form: Re
   const [province, setProvince] = useState("");
   const [city, setCity] = useState("");
   const node = field.region_tree.find((item) => item.value === province);
-  function add() {
-    if (!province) return;
-    let next = form.creator_regions.filter((item) => item.province_code !== province || (city ? item.city : false));
-    if (city) next = next.filter((item) => !(item.province_code === province && !item.city));
-    const candidate = { province_code: province, ...(city ? { city } : {}) };
-    if (!next.some((item) => item.province_code === province && (item.city ?? null) === (city || null))) next.push(candidate);
+  function commit(provinceCode: string, cityValue: string) {
+    if (!provinceCode) return;
+    let next = form.creator_regions.filter((item) => item.province_code !== provinceCode || (cityValue ? item.city : false));
+    if (cityValue) next = next.filter((item) => !(item.province_code === provinceCode && !item.city));
+    const candidate = { province_code: provinceCode, ...(cityValue ? { city: cityValue } : {}) };
+    if (!next.some((item) => item.province_code === provinceCode && (item.city ?? null) === (cityValue || null))) next.push(candidate);
     update("creator_regions", next);
   }
-  return <div className="field full"><span>{field.label} <i>已核验</i></span><div className="region-picker"><select aria-label="省级地域" value={province} onChange={(event) => { setProvince(event.target.value); setCity(""); }}><option value="">选择省份</option>{field.region_tree.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select><select aria-label="二级地域" value={city} onChange={(event) => setCity(event.target.value)} disabled={!node?.children.length}><option value="">整省</option>{node?.children.map((item) => <option value={item.label} key={item.value}>{item.label}</option>)}</select><button type="button" className="button secondary" onClick={add}>添加</button></div><div className="selection-chips">{form.creator_regions.map((item) => { const provinceLabel = field.region_tree.find((nodeItem) => nodeItem.value === item.province_code)?.label ?? item.province_code; const label = item.city ? `${provinceLabel} / ${item.city}` : provinceLabel; return <button type="button" key={`${item.province_code}:${item.city ?? ""}`} onClick={() => update("creator_regions", form.creator_regions.filter((current) => current !== item))}>{label} ×</button>; })}</div></div>;
+  function add() { commit(province, city); }
+  return <div className="field full"><span>{field.label} <i>已核验</i></span><div className="region-picker"><select aria-label="省级地域" value={province} onChange={(event) => { const value = event.target.value; setProvince(value); setCity(""); if (value) commit(value, ""); }}><option value="">选择省份</option>{field.region_tree.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select><select aria-label="二级地域" value={city} onChange={(event) => { const value = event.target.value; setCity(value); if (province) commit(province, value); }} disabled={!node?.children.length}><option value="">整省</option>{node?.children.map((item) => <option value={item.label} key={item.value}>{item.label}</option>)}</select><button type="button" className="button secondary" onClick={add}>添加</button></div><div className="selection-chips">{form.creator_regions.map((item) => { const provinceLabel = field.region_tree.find((nodeItem) => nodeItem.value === item.province_code)?.label ?? item.province_code; const label = item.city ? `${provinceLabel} / ${item.city}` : provinceLabel; return <button type="button" key={`${item.province_code}:${item.city ?? ""}`} onClick={() => update("creator_regions", form.creator_regions.filter((current) => current !== item))}>{label} ×</button>; })}</div></div>;
 }
 
 function RangeInputs({ value, constraint, onChange }: { value: RangeValue | null; constraint?: { min: number; max: number } | null; onChange: (value: RangeValue | null) => void }) {
   function bound(key: "min" | "max", raw: string) { const next = { min: value?.min ?? null, max: value?.max ?? null, unit: "ten_thousand_count" as const, [key]: raw === "" ? null : Number(raw) }; onChange(next.min === null && next.max === null ? null : next); }
-  return <div className="range-fields"><input aria-label="下限" type="number" min={constraint?.min ?? 0} max={constraint?.max} value={value?.min ?? ""} placeholder="下限" onChange={(event) => bound("min", event.target.value)} /><b>—</b><input aria-label="上限" type="number" min={constraint?.min ?? 0} max={constraint?.max} value={value?.max ?? ""} placeholder="上限" onChange={(event) => bound("max", event.target.value)} /><em>w</em></div>;
+  return <div className="range-fields"><input aria-label="下限" type="number" step="any" min={constraint?.min ?? 0} max={constraint?.max} value={value?.min ?? ""} placeholder="下限" onChange={(event) => bound("min", event.target.value)} /><b>—</b><input aria-label="上限" type="number" step="any" min={constraint?.min ?? 0} max={constraint?.max} value={value?.max ?? ""} placeholder="上限" onChange={(event) => bound("max", event.target.value)} /><em>w</em></div>;
 }
 
 function ConnectionField({ field, value, onChange }: { field: CapabilityField; value: Record<string, RangeValue | null> | null; onChange: (value: Record<string, RangeValue | null> | null) => void }) {
@@ -988,6 +989,8 @@ function unitLabel(unit: ExecutionUnit) {
   if (unit.verification_state) return "等待人工验证";
   if (unit.browser_status === "QUARANTINED") return "已隔离";
   if (unit.browser_status === "SUSPECTED_OFFLINE") return "疑似失联";
+  if (unit.worker_status === "DUPLICATE") return "Worker 重复运行";
+  if (unit.worker_status === "OFFLINE") return "Worker 离线";
   if (unit.mode === "collect") return "采集中";
   return unit.state === "READY" ? "空闲可用" : unit.state;
 }
@@ -1012,7 +1015,8 @@ function TakeoverWorkspace({ takeover, close }: { takeover: BrowserTakeover; clo
       <div className="takeover-viewer">
         {takeover.state === "REQUESTED" && <LoadingState label="正在确认原浏览器实例仍在线" />}
         {takeover.state === "ACTIVE" && takeover.viewer_url && <iframe title="原 Chromium 浏览器" src={takeover.viewer_url} allow="clipboard-read; clipboard-write" />}
-        {takeover.state === "ACTIVE" && !takeover.viewer_url && <div className="state-panel"><MonitorCog /><strong>远程浏览器正在就绪</strong><span>接管已被 Worker 确认。Linux noVNC 网关配置完成后，此处将显示原 Chromium 窗口。</span></div>}
+        {takeover.state === "ACTIVE" && takeover.access_mode === "LOCAL_WINDOW" && <div className="state-panel"><MonitorCog /><strong>请切换到本机原 Chrome 窗口</strong><span>{takeover.operator_message || "系统已暂停自动操作；请在已经打开的执行单元 Chrome 中完成人工验证。"}</span></div>}
+        {takeover.state === "ACTIVE" && takeover.access_mode === "REMOTE_VIEWER" && !takeover.viewer_url && <div className="state-panel"><MonitorCog /><strong>远程浏览器暂不可用</strong><span>Worker 已确认接管，但远程查看器尚未就绪。请稍后重试，不要启动第二个浏览器。</span></div>}
         {takeover.state === "VERIFYING" && <LoadingState label="正在检查验证、账号与受保护业务页面" />}
         {["FAILED", "EXPIRED", "RELEASED", "RESUMED"].includes(takeover.state) && <div className="state-panel"><ShieldCheck /><strong>{takeover.state === "RESUMED" ? "验证通过，任务已恢复" : "本次接管已结束"}</strong><span>{takeover.failure_reason || "请返回执行单元查看最新状态。"}</span></div>}
       </div>
@@ -1053,12 +1057,12 @@ export function ExecutionUnitsPage() {
     <PageHeader eyebrow="RESOURCE CONTROL" title="执行单元管理" description="查看采集资源状态，并在平台要求时接管原浏览器完成人工验证。" />
     {waiting.length > 0 && <section className="verification-alert"><TriangleAlert size={20} /><div><strong>{waiting.length} 个执行单元需要人工验证</strong><span>{waiting.map((event) => `${event.unit_id}（剩余 ${Math.floor(event.remaining_seconds / 60)} 分钟）`).join(" · ")}</span>{nearingDeadline && <em>当前验证等待窗口剩余 {Math.floor(nearingDeadline.remaining_seconds / 60)}:{String(nearingDeadline.remaining_seconds % 60).padStart(2, "0")}。若平台再次出现验证，请在原浏览器内完成后重新提交校验。</em>}</div></section>}
     <section className="unit-summary-grid">
-      <div className="panel"><span>可用单元</span><strong>{units.data.filter((unit) => unit.state === "READY").length}</strong></div>
+      <div className="panel"><span>可用单元</span><strong>{units.data.filter((unit) => unit.state === "READY" && unit.worker_status === "ONLINE").length}</strong></div>
       <div className="panel"><span>采集中</span><strong>{units.data.filter((unit) => unit.mode === "collect").length}</strong></div>
       <div className="panel warning"><span>待人工验证</span><strong>{waiting.length}</strong></div>
-      <div className="panel danger"><span>隔离/异常</span><strong>{units.data.filter((unit) => ["QUARANTINED", "SUSPECTED_OFFLINE"].includes(unit.browser_status)).length}</strong></div>
+      <div className="panel danger"><span>隔离/异常</span><strong>{units.data.filter((unit) => ["QUARANTINED", "SUSPECTED_OFFLINE"].includes(unit.browser_status) || ["OFFLINE", "DUPLICATE"].includes(unit.worker_status)).length}</strong></div>
     </section>
-    <section className="panel unit-table-wrap"><table className="unit-table"><thead><tr><th>执行单元</th><th>运行状态</th><th>绑定账号/线路</th><th>当前任务</th><th>浏览器</th><th>验证</th><th>最近心跳</th><th /></tr></thead><tbody>{units.data.map((unit) => <tr key={unit.unit_id}><td><strong>{unit.unit_id}</strong><small>{unit.platform}</small></td><td><b>{unitLabel(unit)}</b><small>{unit.actionable_reason || "—"}</small></td><td><span>{unit.account_label}</span><small>{unit.line_label}</small></td><td>{unit.current_root_task_id ? <Link to={`/tasks/${unit.current_root_task_id}`}>{shortId(unit.current_root_task_id)}</Link> : "—"}</td><td>{unit.browser_status}</td><td>{unit.verification_state ? <><b>{unit.takeover_state || unit.verification_state}</b><small>{secondsLabel(unit.verification_deadline_at)}</small></> : "正常"}</td><td>{formatDate(unit.last_heartbeat_at)}</td><td>{unit.verification_state ? <button className="button primary" disabled={request.isPending || unit.takeover_state === "VERIFYING"} onClick={() => request.mutate(unit.unit_id)}>{unit.takeover_state === "ACTIVE" ? "重新进入" : unit.takeover_state === "REQUESTED" ? "查看接管" : unit.takeover_state === "VERIFYING" ? "系统校验中" : "接管浏览器"}</button> : <button className="button ghost" disabled>查看</button>}</td></tr>)}</tbody></table></section>
+    <section className="panel unit-table-wrap"><table className="unit-table"><thead><tr><th>执行单元</th><th>运行状态</th><th>绑定账号/线路</th><th>当前任务</th><th>Worker</th><th>浏览器</th><th>验证</th><th>最近心跳</th><th /></tr></thead><tbody>{units.data.map((unit) => <tr key={unit.unit_id}><td><strong>{unit.unit_id}</strong><small>{unit.platform}</small></td><td><b>{unitLabel(unit)}</b><small>{unit.actionable_reason || "—"}</small></td><td><span>{unit.account_label}</span><small>{unit.line_label}</small></td><td>{unit.current_root_task_id ? <Link to={`/tasks/${unit.current_root_task_id}`}>{shortId(unit.current_root_task_id)}</Link> : "—"}</td><td><b>{unit.worker_status}</b><small>{unit.worker_instances} 实例 · {formatDate(unit.worker_last_heartbeat_at)}</small></td><td>{unit.browser_status}</td><td>{unit.verification_state ? <><b>{unit.takeover_state || unit.verification_state}</b><small>{secondsLabel(unit.verification_deadline_at)}</small></> : "正常"}</td><td>{formatDate(unit.last_heartbeat_at)}</td><td>{unit.verification_state ? <button className="button primary" disabled={request.isPending || unit.takeover_state === "VERIFYING"} onClick={() => request.mutate(unit.unit_id)}>{unit.takeover_state === "ACTIVE" ? "重新进入" : unit.takeover_state === "REQUESTED" ? "查看接管" : unit.takeover_state === "VERIFYING" ? "系统校验中" : "接管浏览器"}</button> : <button className="button ghost" disabled>查看</button>}</td></tr>)}</tbody></table></section>
     {request.isError && <div className="form-error" role="alert"><AlertCircle size={16} />{friendlyError(request.error)}</div>}
     {takeover.data && <TakeoverWorkspace takeover={takeover.data} close={() => { setTakeoverId(null); queryClient.invalidateQueries({ queryKey: ["execution-units"] }); }} />}
   </div>;

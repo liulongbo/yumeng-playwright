@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from xingtu.domain import utcnow
+from xingtu.product_queries import ProductQueries
 from xingtu.worker_health import (
     DEFAULT_FRESHNESS_SECONDS,
     INTAKE_QUEUE,
@@ -89,3 +90,38 @@ def test_queue_health_is_unobserved_when_transport_failed():
 
 def test_collection_queue_name_is_derived_from_unit():
     assert collection_queue("unit-local-mac-02") == "xingtu-unit-local-mac-02"
+
+
+def test_execution_unit_worker_liveness_is_independent_from_browser_state():
+    row = {
+        "unit_id": "unit-local",
+        "account_ref": "account",
+        "line_ref": "local",
+        "state": "READY",
+        "mode": None,
+        "allowed_task_kinds": ["collection"],
+        "current_root_task_id": None,
+        "browser_stopped": True,
+        "lease_until": None,
+        "event_state": None,
+        "event_reason": None,
+        "event_deadline_at": None,
+        "takeover_state": None,
+        "failure_reason": None,
+        "last_heartbeat_at": None,
+        "fresh_worker_count": 1,
+        "worker_history_count": 1,
+        "worker_last_heartbeat_at": utcnow(),
+    }
+    queries = ProductQueries(None)  # type: ignore[arg-type]
+    online = queries._execution_unit_view(row)
+    assert online.worker_status == "ONLINE"
+    assert online.browser_status == "STOPPED"
+
+    offline = queries._execution_unit_view({**row, "fresh_worker_count": 0})
+    assert offline.worker_status == "OFFLINE"
+    assert offline.actionable_reason == "COLLECTION_WORKER_OFFLINE"
+
+    duplicate = queries._execution_unit_view({**row, "fresh_worker_count": 2})
+    assert duplicate.worker_status == "DUPLICATE"
+    assert duplicate.worker_instances == 2

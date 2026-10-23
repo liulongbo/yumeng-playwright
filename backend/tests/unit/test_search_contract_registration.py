@@ -3,6 +3,8 @@
 Pure unit tests: no browser, no platform traffic, no database.
 """
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 from xingtu.adapter import map_bindings, resolve_homepage
@@ -148,6 +150,16 @@ def test_single_page_contract_requires_a_coverage_gap():
     registry(
         search(next_actions=[], single_page_only=True, coverage_gaps=["page 2+ not verified"])
     ).require_enabled(live=False)
+
+
+def test_published_contract_verifies_page_three_but_stays_bounded():
+    current = PlatformRegistry.model_validate_json(
+        Path("contracts/douyin_xingtu.verified.json").read_text()
+    )
+    assert current.search is not None
+    assert current.search.page_fetch_max_verified == 3
+    assert current.search.page_fetch_continuous_verified is False
+    assert any("page=3" in gap for gap in current.search.coverage_gaps)
 
 
 def test_page_fetch_contract_requires_live_bounded_or_continuous_evidence():

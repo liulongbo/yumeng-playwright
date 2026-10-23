@@ -119,6 +119,34 @@ def test_browser_takeover_is_fenced_mutually_exclusive_and_reusable(repo, starte
     assert repo.takeover(str(replacement["takeover_id"]))["state"] == "EXPIRED"
 
 
+def test_collection_worker_registration_heartbeats_and_fences_stale_instances(repo, started):
+    first_generation = repo.register_worker_instance("unit", "worker-one", 101, "synthetic")
+    repo.heartbeat_worker_instance("unit", "worker-one", first_generation)
+    with pytest.raises(CollectorError, match="DUPLICATE_WORKER_FOR_UNIT"):
+        repo.register_worker_instance("unit", "worker-two", 102, "synthetic")
+
+    with repo.connect() as conn:
+        conn.execute(
+            """UPDATE execution_unit_workers
+            SET last_heartbeat_at=now()-interval '1 minute'
+            WHERE worker_instance_id='worker-one'"""
+        )
+    second_generation = repo.register_worker_instance("unit", "worker-two", 102, "synthetic")
+    assert second_generation > first_generation
+    with pytest.raises(CollectorError, match="WORKER_INSTANCE_FENCED"):
+        repo.heartbeat_worker_instance("unit", "worker-one", first_generation)
+    repo.stop_worker_instance("unit", "worker-two", second_generation, "NORMAL_STOP")
+    with repo.connect() as conn:
+        rows = conn.execute(
+            """SELECT worker_instance_id,stop_reason FROM execution_unit_workers
+            ORDER BY worker_generation"""
+        ).fetchall()
+    assert [(row["worker_instance_id"], row["stop_reason"]) for row in rows] == [
+        ("worker-one", "STALE_REPLACED"),
+        ("worker-two", "NORMAL_STOP"),
+    ]
+
+
 def test_lease_expiry_quarantines_and_rejects_stale_write(repo, started):
     with repo.connect() as conn:
         conn.execute("UPDATE execution_units SET lease_until=now()-interval '1 second'")
@@ -229,8 +257,9 @@ def test_network_mode_is_persisted_and_immutable(repo):
     # task completion moment, 013 the requirement form v2, 014 the F10 browser takeover, 015 the
     # creator video/metric fields, 016 their backfilled provenance and 017 the correction that
     # drops provenance entries describing a NULL column (DATA-02), 018 the creator update task
-    # kinds and scheduling state (UPD): the set is asserted exhaustively so a migration that
-    # silently stops being applied is caught here.
+    # kinds and scheduling state (UPD), and 019 the independent Collection Worker liveness
+    # generation/heartbeat records: the set is asserted exhaustively so a migration that silently
+    # stops being applied is caught here.
     assert [row["version"] for row in versions] == [
         1,
         2,
@@ -250,6 +279,7 @@ def test_network_mode_is_persisted_and_immutable(repo):
         16,
         17,
         18,
+        19,
     ]
 
 

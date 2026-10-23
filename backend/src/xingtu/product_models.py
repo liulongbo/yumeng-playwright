@@ -6,7 +6,14 @@ from typing import Literal, Self
 
 from pydantic import Field, JsonValue, model_validator
 
-from .domain import Capabilities, FilterPlan, Model, TaskKind, TaskStatus
+from .domain import (
+    CONNECTION_USERS_MAX_W,
+    Capabilities,
+    FilterPlan,
+    Model,
+    TaskKind,
+    TaskStatus,
+)
 
 
 class RequirementRange(Model):
@@ -54,9 +61,15 @@ class ConnectionUsersRequirement(Model):
             if value is not None and value.unit != "ten_thousand_count":
                 raise ValueError("connection user ranges use ten_thousand_count")
             if value is not None and any(
-                bound is not None and bound > 100 for bound in (value.min, value.max)
+                bound is not None and bound > CONNECTION_USERS_MAX_W
+                for bound in (value.min, value.max)
             ):
-                raise ValueError("connection user range exceeds 100w")
+                raise ValueError("connection user range exceeds 99999w")
+            if value is not None and any(
+                bound is not None and bound != bound.to_integral_value()
+                for bound in (value.min, value.max)
+            ):
+                raise ValueError("connection user ranges use whole ten-thousand counts")
         return self
 
 
@@ -455,6 +468,8 @@ class BrowserTakeoverView(Model):
     expires_at: datetime
     failure_reason: str | None = None
     viewer_url: str | None = None
+    access_mode: Literal["LOCAL_WINDOW", "REMOTE_VIEWER"] = "LOCAL_WINDOW"
+    operator_message: str | None = None
     manual_probe_creators: list[ManualProbeCreator] = Field(default_factory=list)
 
 
@@ -467,6 +482,9 @@ class ExecutionUnitView(Model):
     mode: str | None = None
     allowed_task_kinds: list[str] = Field(default_factory=list)
     current_root_task_id: str | None = None
+    worker_status: Literal["ONLINE", "OFFLINE", "DUPLICATE", "UNKNOWN"] = "UNKNOWN"
+    worker_instances: int = 0
+    worker_last_heartbeat_at: datetime | None = None
     browser_status: Literal["ONLINE", "MAINTENANCE", "STOPPED", "SUSPECTED_OFFLINE", "QUARANTINED"]
     verification_state: str | None = None
     takeover_state: str | None = None
