@@ -2,7 +2,7 @@
 
 状态：待验收（修复已实施；macOS 真实 Chrome E2E 通过；Windows/F10 未测）
 是否验收：否（Windows 实机、F10 真实接管、封面/完整性残余、completed_at 既有问题）
-更新时间：2026-10-24T12:35:00+08:00
+更新时间：2026-10-24T20:44:00+08:00
 关联功能：F10、QA-01、UNIT-01、AUTO-01、SESSION-01
 关联任务：`383474a1-40b6-4343-ac22-9a4efcdc6af7`、`2ff8ad00-1436-4be6-850f-c2129881849b`、`60a67287-4bc0-46cf-a50a-f62bc38c658f`
 
@@ -23,7 +23,7 @@
 - 不新增 Schema/迁移；不删除 Profile/Cookie/锁；不杀未知 Chrome。
 - 不创建新采集任务；使用既有 `383474a1`。
 - 不做 graceful shutdown 改造（8.3 建议另立卡片）、不做 API/UI 恢复按钮、不做 `profile_ref`/launchd 清理。
-- 不 commit/push/merge。
+- 提交/推送/合并按 2026-10-24 用户单独授权执行（见状态历史）。
 
 ## 关联与依赖
 
@@ -31,7 +31,7 @@
 - 修复与回归：[DIAG-02-fix-2026-10-24](../evidence/DIAG-02-fix-2026-10-24.md)。
 - 证据 JSON：[fix-evidence.json](../evidence/assets/diag02/fix-evidence.json)。
 - 前置/相关：[F10](F10.md)、[QA-01](QA-01.md)、[UNIT-01](UNIT-01.md)、[AUTO-01](AUTO-01.md)、[SESSION-01](SESSION-01.md)。
-- 代码版本：分支 `快手_1024`，基线 HEAD `024f879`；本轮修复未提交。
+- 代码版本：分支 `快手_1024`，基线 HEAD `024f879`；本轮提交 `3a7be00`，与 RETRY-01 的 `61f76d2` 一起合并为 `fa28876`。
 - 运行态：Worker generation 5（PID 34571）；单元 `unit-local-mac-02` 最终 `READY`；任务 `383474a1` 最终 `PARTIAL_COMPLETED`。
 
 ## 验收清单
@@ -88,7 +88,7 @@
   3. Windows 实机、F10 真实挑战/接管 **NOT TESTED**。
   4. `execution_units.profile_ref` 旧 checkout、launchd 遗留 agent 未处理。
 - **下一步**：用户审阅；如需继续，建议另立卡片：(a) graceful stop / supervisor 信号；(b) 封面入库与完整性；(c) `completed_at` 重试语义；(d) profile_ref/launchd 清理；(e) Windows/F10 实机验收。
-- **未提交**：本轮代码与文档均未 commit/push/merge。
+- **提交状态**：`3a7be00`（含本卡与证据），经 merge `fa28876` 合入 `main` 并推送；合入前重跑单元/契约/集成/E2E/前端/静态检查通过（集成用临时 PostgreSQL `xingtu_test_retry01`，验证后已删除，未触碰开发库）。
 
 ## 状态历史
 
@@ -97,3 +97,4 @@
 - 2026-10-24T12:17:39+08:00：修复代码启动；新 Worker generation 5 自动回收隔离单元（audit 437）。
 - 2026-10-24T12:28:05+08:00：真实 Chrome E2E 到 `PARTIAL_COMPLETED`，valid 2/2；单元 READY。
 - 2026-10-24T12:35:00+08:00：进行中 → 待验收。修复/真实回归完成；Windows/F10 与残余项未完成，故不标已完成。
+- 2026-10-24T20:44:00+08:00：状态保持待验收。用户授权提交/合并：本卡代码与文档提交 `3a7be00`，经 merge `fa28876` 合入 `main` 并推送（合入前单元/契约/集成/E2E/前端/静态检查通过）；Windows 实机、F10 真实接管与残余项仍未完成。

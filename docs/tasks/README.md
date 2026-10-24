@@ -1,6 +1,6 @@
 # 开发任务索引
 
-# 2026-10-24 RETRY-01：「继续采集」与「补采缺失字段」双语义拆分（进行中：真实 E2E 与 MCP 验收发现 F1/F2/F5 待修）
+# 2026-10-24 RETRY-01：「继续采集」与「补采缺失字段」双语义拆分（进行中：F1/F2/F5 待修；已提交 `61f76d2`、合并 `fa28876`）
 
 [RETRY-01](RETRY-01.md) 把单一「重试失败步骤」拆成两种业务行为：有效数未达目标时只补足数量、
 本次不重访已入库达人；已达目标时只补缺失资料、不搜索不新增达人。实现为单一派生策略
@@ -9,10 +9,9 @@
 终态收口只写内容变化的达人快照；安全验证终态在接口层同样拒绝重试。前端按目标输出「继续采集
 （还差 N 位）」/「补采缺失字段（M 位）」与二次确认，计数卡增加「还差/待补采」，完成时间改称
 「首次完成时间」。自动检查：单元 **327**、契约 **39**、集成 **103 passed / 1 skipped**、E2E **9**、前端
-**89**、mypy/ruff 通过（`scripts/acceptance` 11 个 UP031 为既有问题）。真实 Chrome 小样本 E2E
-已完成真实 Chrome E2E（2026-10-24）：13 通过 / 2 失败（另 F3 环境阻塞）——继续采集 0 次重访、补采 0 次搜索批次核心语义通过；发现 F1 无变化重试重发快照、F2 搜索耗尽后继续采集死循环、F3 封面存储不可达导致补采循环。报告：[真实 E2E](../evidence/RETRY-01-real-e2e-2026-10-24.md)、[Playwright MCP 验收](../evidence/RETRY-01-mcp-acceptance-2026-10-24.md)；[PRD](../prd/RETRY-01-retry-and-backfill.md)、[DEC-019](../decisions/DEC-019-retry-scope-split.md)。MCP 验收（0.0.77 + Chrome 156，23 工具）：5/5 文案、2/2 接口 409、继续采集 0 重访（快照 4→4）、补采 0 搜索（只重读 basic）；MCP-10 新建 `8b0f0393` 首次采集正常；补采中触发 F5 执行单元运行期隔离，重启 Worker 后自动续跑。未 commit。
+**89**、mypy/ruff 通过（`scripts/acceptance` 11 个 UP031 为既有问题）。真实 Chrome E2E（2026-10-24）：13 通过 / 2 失败（另 F3 环境阻塞）——继续采集 0 次重访、补采 0 次搜索批次核心语义通过；发现 F1 无变化重试重发快照、F2 搜索耗尽后继续采集死循环、F3 封面存储不可达导致补采循环。报告：[真实 E2E](../evidence/RETRY-01-real-e2e-2026-10-24.md)、[Playwright MCP 验收](../evidence/RETRY-01-mcp-acceptance-2026-10-24.md)；[PRD](../prd/RETRY-01-retry-and-backfill.md)、[DEC-019](../decisions/DEC-019-retry-scope-split.md)。MCP 验收（0.0.77 + Chrome 156，23 工具）：5/5 文案、2/2 接口 409、继续采集 0 重访（快照 4→4）、补采 0 搜索（只重读 basic）；MCP-10 新建 `8b0f0393` 首次采集正常；补采中触发 F5 执行单元运行期隔离，重启 Worker 后自动续跑。提交 `61f76d2`，经 merge `fa28876` 合入 `main` 并推送。
 
-# 2026-10-24 DIAG-02：ExecutionUnit「old browser requires isolation」专项诊断与最小修复（待验收）
+# 2026-10-24 DIAG-02：ExecutionUnit「old browser requires isolation」专项诊断与最小修复（待验收；已提交 `3a7be00`、合并 `fa28876`）
 
 [DIAG-02](DIAG-02.md) 先只读定位 `383474a1-40b6-4343-ac22-9a4efcdc6af7` 的
 `RESOURCE_UNAVAILABLE: old browser requires isolation`：**不是旧 Chrome 仍在运行**，而是 11:20
@@ -27,7 +26,7 @@ Playwright MCP + 真实 Chrome 156 重试，`QUEUED→SEARCHING→COLLECTING→P
 （12:28:05），`valid=2/2`、2 快照、4 精选集合/6 卡片；单元 `READY`、无残留租约/浏览器/接管。
 自动检查：unit 321、contract 39、mypy 35 files、ruff 通过；活跃租约/Profile 锁/重复 Worker/OPEN
 验证事件负向分支通过。残余：`completed_at` 仍为首次失败时间、封面 6/6 FAILED、`profile_complete=0`、
-Windows 实机与 F10 真实接管 NOT TESTED。本轮未创建新任务、未 commit/push/merge。报告：
+Windows 实机与 F10 真实接管 NOT TESTED。本轮未创建新任务；提交 `3a7be00`，经 merge `fa28876` 合入 `main` 并推送。报告：
 [诊断](../evidence/DIAG-02-browser-isolation-2026-10-24.md)、[修复与回归](../evidence/DIAG-02-fix-2026-10-24.md)。
 
 # 2026-10-23 F10：macOS/Windows 本机 ExecutionUnit 与人工接管（待验收）
@@ -41,6 +40,10 @@ Contract 37、E2E 9、前端 84、F10 UI 34/34。Windows 实机 NOT TESTED，结
 报告：[跨平台适配验收](../evidence/F10-local-cross-platform-2026-10-23.md)；手册：
 [macOS/Windows 本机运行](../F10-local-macos-windows.md)。当前 `unit-local-mac-02` 因自然 Challenge
 保持 `NEEDS_VERIFICATION / browser STOPPED`，再次真实采集前需人工合法验证。
+
+# 2026-10-24 IPPOOL-02：OpenWrt 3 路蜂窝出口搭建（进行中：Phase 0 盘点待执行）
+
+[IPPOOL-02](IPPOOL-02.md) 按 IPPOOL-01 方案 C 开始施工：J1900 作为旁路主机（`192.168.3.2`，关闭 LAN DHCP），3 个 netns（`ns-sim1/2/3`）+ 官方 tinyproxy（HTTP BasicAuth）+ 每 netns dnsmasq + veth 固定 `192.168.3.201/202/203:6001`；netns 只保留蜂窝默认路由，断线失败关闭。施工手册：[OpenWrt 3 路蜂窝出口施工手册](../evidence/IPPOOL-02-openwrt-build-runbook-2026-10-24.md)。当前只完成手册，**未执行 J1900 命令、未改网络/执行单元/代码、未创建 Chrome profile**；等待用户执行 Phase 0 只读盘点（OpenWrt 版本、`ip -br addr`/`route`、`uci show network/dhcp`、`opkg`、`lsusb`/`dmesg`、单台 USB 接口名、主路由 DHCP 池）。先单条 PASS，再复制 3 条；P0 性能待真实采集授权。
 
 # 2026-10-22 IPPOOL-01：OpenWrt 多 IP 池建设与采集接入可行性评估（待验收）
 
