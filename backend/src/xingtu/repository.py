@@ -430,6 +430,27 @@ class Repository:
                 raise CollectorError("RESOURCE_UNAVAILABLE", "unit not registered")
             return row
 
+    def has_active_unit_claim(self, unit: str) -> bool:
+        """Whether a live lease, verification event or takeover still owns the unit.
+
+        Startup reconciliation must never clear a quarantined unit while a person or another
+        process is still acting on it.  This is a read-only pre-check; ``recover_stopped_unit``
+        still takes the unit row lock and performs its own state transition.
+        """
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT (
+                EXISTS(SELECT 1 FROM execution_units
+                       WHERE unit_id=%s AND owner IS NOT NULL AND lease_until > now())
+                OR EXISTS(SELECT 1 FROM verification_events
+                          WHERE unit_id=%s AND state IN ('OPEN','ACKNOWLEDGED'))
+                OR EXISTS(SELECT 1 FROM browser_takeover_sessions
+                          WHERE unit_id=%s AND state IN ('REQUESTED','ACTIVE','VERIFYING'))
+                ) AS active""",
+                (unit, unit, unit),
+            ).fetchone()
+            return bool(row and row["active"])
+
     def register_worker_instance(
         self,
         unit: str,

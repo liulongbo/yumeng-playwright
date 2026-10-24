@@ -176,6 +176,7 @@
 - `IDENTITY_UNREADABLE` 在达人级重建详情页并最多尝试 3 次；仍失败记录该候选并继续补位。只有不同主体连续复现且跨新浏览器租约确认后才禁用相应 Contract scope，不再单次禁用整版本。
 - scoped Contract 健康默认启用；紧急回滚可设置 `XINGTU_SCOPED_CONTRACT_HEALTH=false`，此时不读取或推进 scope 状态，旧 `contract_health.disabled` 全局人工覆盖仍生效。该开关只用于回滚，不会自动清除已有 scope 记录。
 - `xingtu recover-unit` 可直接回收已过期的 `LEASED` 或 `QUARANTINED` 单元；隔离判断使用项目 `flock` + Chromium `SingletonLock` PID，不再依赖 `/bin/ps`。回收后为 `SESSION_UNVERIFIED`，下次运行必须实测 Session。
+- Collection Worker 启动时也会对 `QUARANTINED` 单元执行一次同样的本地隔离证明与回收：仅当无活跃租约/验证事件/接管且证明通过时调用 `recover_stopped_unit()`，actor 为 `collection-worker:<instance>` 并写 `audit_logs`；证明失败保持隔离。手工 `recover-unit` 仍保留。
 - `xingtu session-diagnostics --config ...` 要求本机环境变量 `XINGTU_DIAGNOSTIC_HMAC_KEY`（至少 32 字节），在 `.runtime/session-diagnostics/` 写 `0600` 报告。Cookie/Storage 值只保存 HMAC，不打印明文；该命令会真实冷启动并访问注册表中的受保护入口，不属于离线检查。
 - 真实单账号清理、5/10/20 位平台任务与 30 天分阶段长测尚未执行；代码通过不等于这些验收已通过。
 
