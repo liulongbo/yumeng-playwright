@@ -24,7 +24,7 @@ from .domain import CollectorError, ExecutionContext, TaskKind, TaskRecord, Task
 from .engine import Engine
 from .evidence import build_evidence_sink
 from .repository import Repository
-from .runtime import UnitConfig, ensure_line
+from .runtime import UnitConfig, confirm_local_browser_stopped, ensure_line
 from .workflow import CollectionWorkflow
 
 logger = logging.getLogger(__name__)
@@ -722,6 +722,58 @@ def _finalise_cancelled(repo: Repository, root: str) -> None:
         task.state = TaskStatus.CANCELLED
 
 
+# Quarantined is produced only by an expired owner or an unconfirmed browser exit.  Both are
+# recoverable after the local profile lock and Chromium singleton/lockfile checks prove no
+# browser is still running; there is no manual quarantine reason to filter here.
+def reconcile_quarantined_unit(
+    repo: Repository,
+    config: UnitConfig,
+    private_root: Path,
+    worker_instance_id: str,
+) -> bool:
+    """Recover one locally proven stopped unit, or leave it quarantined.
+
+    This runs only at Collection Worker startup, after this process registered its own worker
+    generation.  It deliberately does not touch a unit with an active lease, verification event
+    or takeover, and it never kills a process, deletes a lock or clears a profile.  If the local
+    isolation proof fails for any reason the unit stays quarantined and the Worker continues;
+    recovery must never be a prerequisite for serving the queue.
+    """
+    unit = repo.unit(config.unit_id)
+    if unit["state"] != "QUARANTINED":
+        return False
+    reason = str(unit.get("failure_reason") or "UNKNOWN")
+    if repo.has_active_unit_claim(config.unit_id):
+        logger.warning(
+            "quarantined unit %s still has an active lease/verification/takeover; left isolated",
+            config.unit_id,
+        )
+        return False
+    try:
+        confirm_local_browser_stopped(config, private_root)
+    except (CollectorError, OSError) as exc:
+        logger.warning(
+            "quarantined unit %s remains isolated: %s",
+            config.unit_id,
+            str(exc) or type(exc).__name__,
+        )
+        return False
+    try:
+        repo.recover_stopped_unit(config.unit_id, "collection-worker:" + worker_instance_id)
+    except CollectorError as exc:
+        logger.warning(
+            "quarantined unit %s recovery refused: %s", config.unit_id, str(exc) or exc.code
+        )
+        return False
+    logger.info(
+        "recovered quarantined unit %s after local isolation proof (reason=%s, worker=%s)",
+        config.unit_id,
+        reason,
+        worker_instance_id,
+    )
+    return True
+
+
 async def run_worker(
     repo: Repository, config: UnitConfig, address: str, private_root: Path
 ) -> None:
@@ -735,6 +787,12 @@ async def run_worker(
         os.getpid(),
         platform.system().lower() or "unknown",
     )
+    try:
+        reconcile_quarantined_unit(repo, config, private_root, worker_instance_id)
+    except Exception as exc:  # noqa: BLE001 - startup must not be blocked by recovery bookkeeping
+        logger.warning(
+            "quarantined unit reconciliation failed: %s: %s", type(exc).__name__, str(exc)
+        )
 
     async def worker_heartbeat() -> None:
         while True:

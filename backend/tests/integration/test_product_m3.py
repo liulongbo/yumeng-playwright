@@ -904,3 +904,101 @@ def test_completed_at_is_recorded_once_a_task_reaches_a_terminal_state(repo):
     after = queries.get_task(created.root_task_id)
     assert after.completed_at == cancelled.completed_at
     assert after.updated_at > cancelled.updated_at
+
+
+def create_retryable_task(repo, plan, *, target, valid):
+    scoped = plan.model_copy(update={"target_count": target})
+    root = repo.create(
+        scoped,
+        "unit",
+        f"retry-plan-{target}-{valid}",
+        "test",
+        adapter_version="synthetic-v1",
+        contract_version="synthetic-v1",
+        modules=["basic"],
+    )
+    with repo.edit(root) as (task, _):
+        for index in range(valid):
+            task.checkpoint.candidates.append(
+                Candidate(
+                    ref=CreatorRef(
+                        platform_creator_id=f"creator-{index}",
+                        verified_homepage=f"https://synthetic.invalid/creator/creator-{index}",
+                        first_position=index,
+                    ),
+                    state="failed",
+                    valid=True,
+                )
+            )
+        task.valid_count = valid
+        task.profile_complete_count = 0
+        task.state = TaskStatus.PARTIAL_COMPLETED
+        task.failure_reason = "MODULE_COLLECTION_FAILED"
+    return root
+
+
+def test_retry_plan_derives_scope_from_the_creator_count(repo, plan):
+    queries = ProductQueries(repo)
+    continue_root = create_retryable_task(repo, plan, target=2, valid=1)
+    continue_detail = queries.get_task(continue_root)
+    assert "retry" in continue_detail.allowed_actions
+    assert continue_detail.retry_plan is not None
+    assert continue_detail.retry_plan.scope == "continue"
+    assert continue_detail.retry_plan.remaining_to_target == 1
+    assert continue_detail.retry_plan.incomplete_valid_count == 1
+    assert continue_detail.retry_plan.retryable_creator_count == 1
+
+    backfill_root = create_retryable_task(repo, plan, target=1, valid=1)
+    backfill_detail = queries.get_task(backfill_root)
+    assert backfill_detail.retry_plan is not None
+    assert backfill_detail.retry_plan.scope == "backfill"
+    assert backfill_detail.retry_plan.remaining_to_target == 0
+
+
+def test_retry_command_keeps_counted_creators_and_records_the_goal(repo, plan):
+    products = ProductRepository(repo)
+    user_id = product_user(products)
+    root = create_retryable_task(repo, plan, target=2, valid=1)
+    queries = ProductQueries(repo)
+    detail = queries.get_task(root)
+    accepted = queries.command(
+        root,
+        "retry",
+        expected_version=detail.version,
+        user_id=user_id,
+        idempotency_key="retry-continue-goal",
+    )
+    assert accepted.status == TaskStatus.QUEUED
+    assert accepted.retry_plan is not None
+    assert accepted.retry_plan.last_retry_at is not None
+    assert accepted.retry_plan.changed_since_last_retry == 0
+    # A creator that already counts is not re-queued for collection.
+    task = repo.get(root)
+    assert task.checkpoint.candidates[0].state == "failed"
+    with repo.connect() as conn:
+        action = conn.execute(
+            "SELECT action FROM audit_logs WHERE root_task_id=%s ORDER BY id DESC LIMIT 1",
+            (root,),
+        ).fetchone()["action"]
+    assert action == "retry:continue"
+
+
+def test_product_retry_rejects_security_challenge_terminal(repo, plan):
+    products = ProductRepository(repo)
+    user_id = product_user(products)
+    root = create_retryable_task(repo, plan, target=2, valid=1)
+    with repo.edit(root) as (task, _):
+        task.failure_reason = "SECURITY_CHALLENGE_TIMEOUT"
+    queries = ProductQueries(repo)
+    detail = queries.get_task(root)
+    assert "retry" not in detail.allowed_actions
+    with pytest.raises(CollectorError) as error:
+        queries.command(
+            root,
+            "retry",
+            expected_version=detail.version,
+            user_id=user_id,
+            idempotency_key="retry-challenge",
+        )
+    assert error.value.code == "INVALID_FORM"
+    assert error.value.reason == "ACTION_NOT_ALLOWED"

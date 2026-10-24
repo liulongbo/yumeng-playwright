@@ -7,13 +7,13 @@
 
 ## 1. 结果
 
-本轮 4 个正向任务均达到 **valid=1**，搜索成功；任务终态为 PARTIAL_COMPLETED，原因是既有 F05/F06 资料或精选完整度，不是筛选失败。
+本轮 4 个正向任务均达到 **valid=1**，搜索成功；初始终态为 PARTIAL_COMPLETED，原因是既有 F05/F06 资料或精选完整度，不是筛选失败。2ff8ad00 后续用于重试语义测试，已取消（CANCELLED），valid=1、快照=1 保留。
 
 | 任务 | 正向字段 | 关键词 | 终态 | valid | 入库达人 |
 |---|---|---|---|---|---|
 | 2cf27cbe-2f86-4eb3-b70e-19b959874d21 | followers=10–100w | 户外 | PARTIAL_COMPLETED / PROFILE_SCOPE_INCOMPLETE | 1 | 户外胡三浪（749,848 粉丝） |
 | da2d67dd-0f1e-4fd6-a01b-33a149528af8 | fan_profile.age=24–30岁居多 | 美妆 | PARTIAL_COMPLETED / FEATURED_COLLECTION_INCOMPLETE | 1 | 仟仟QIAN（871,001 粉丝） |
-| 2ff8ad00-1436-4be6-850f-c2129881849b | gender=female + education=大学生 | 大学生 | PARTIAL_COMPLETED / PROFILE_SCOPE_INCOMPLETE | 1 | 菜就多练（102,318 粉丝） |
+| 2ff8ad00-1436-4be6-850f-c2129881849b | gender=female + education=大学生 | 大学生 | 初始 PARTIAL_COMPLETED / PROFILE_SCOPE_INCOMPLETE；重试测试后 CANCELLED | 1 | 菜就多练（102,318 粉丝） |
 | 2ec9f448-4d7b-4067-863d-50ab87613925 | gender=female + yellow_v=美妆创作者 | 美妆 | PARTIAL_COMPLETED / FEATURED_COLLECTION_INCOMPLETE | 1 | 遥遥小宝（3,879,450 粉丝） |
 
 加上此前已正向通过的地域任务 a1c874f9（湖南）、连接用户任务 f3aba74e（五维 99999）和观众画像任务 666114c3（A-12），当前已支持字段均已有至少一个正向真实任务或既有正向任务证据。

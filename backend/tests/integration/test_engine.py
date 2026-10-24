@@ -606,3 +606,170 @@ async def test_evidence_records_exhaustion_and_module_failure(repo, started, tmp
     with repo.connect() as conn:
         kinds = conn.execute("SELECT kind,count(*) AS n FROM raw_evidence GROUP BY kind").fetchall()
     assert {row["kind"]: row["n"] for row in kinds} == {"failure": 2, "summary": 1}
+
+
+class CountingAdapter(SyntheticAdapter):
+    """Counts search batches so a retry segment can prove it did not search."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.searches = 0
+
+    async def search(self, plan, cp, ctx):
+        self.searches += 1
+        return await super().search(plan, cp, ctx)
+
+
+class AbortOnFourth(SyntheticAdapter):
+    """Interrupts the run before creator 4 becomes valid, leaving it mid-collection."""
+
+    async def collect_module(self, key, creator, ctx, row_covers=None):
+        if creator.platform_creator_id == "4" and key == "basic":
+            raise CollectorError("PLATFORM_PAGE_CHANGED", "SYNTHETIC_ABORT")
+        return await super().collect_module(key, creator, ctx, row_covers)
+
+
+def snapshots(repo, root):
+    with repo.connect() as conn:
+        return conn.execute(
+            "SELECT count(*) AS n FROM creator_snapshots WHERE root_task_id=%s", (root,)
+        ).fetchone()["n"]
+
+
+async def test_continue_retry_only_collects_the_remaining_creators(repo, plan):
+    """AC-1/AC-3: a counted creator is never re-visited while the target is still missing."""
+    ctx = start(repo, plan, 5)
+    first = AbortOnFourth(["1", "2", "3", "4", "5"], page_size=3, failed_module="fans")
+    engine = Engine(repo, first, ctx)
+    with pytest.raises(CollectorError):
+        await engine.run()
+    engine.record_error(CollectorError("PLATFORM_PAGE_CHANGED", "SYNTHETIC_ABORT"))
+    old = repo.get(ctx.root_task_id)
+    assert old.state == TaskStatus.FAILED
+    assert old.valid_count == 3 and old.target_count == 5
+    first_snapshots = snapshots(repo, ctx.root_task_id)
+    assert first_snapshots == 3
+
+    repo.release(
+        "unit",
+        ctx.attempt_id,
+        ctx.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.VERIFIED_READY,
+    )
+    repo.command(old.root_task_id, "retry", old.version, "test")
+    task = repo.get(old.root_task_id)
+    generation, _ = repo.acquire("unit", task.attempt_id)
+    retry_ctx = ctx.model_copy(
+        update={"attempt_id": task.attempt_id, "lease_generation": generation}
+    )
+
+    retry = CountingAdapter(["1", "2", "3", "4", "5"], page_size=3)
+    await Engine(repo, retry, retry_ctx).run()
+
+    current = repo.get(old.root_task_id)
+    assert retry.visits == ["4", "5"]
+    assert all(identity not in {"1", "2", "3"} for identity, _ in retry.modules)
+    assert retry.searches == 0
+    assert current.valid_count == 5
+    # The three creators collected before the interruption keep the failure they had; the task is
+    # partial until a separate backfill completes them (the two-phase product rule).
+    assert current.state == TaskStatus.PARTIAL_COMPLETED
+    assert current.profile_complete_count == 2
+    # Only the two new creators gained a snapshot: unchanged creators are not re-published.
+    assert snapshots(repo, ctx.root_task_id) == first_snapshots + 2
+
+
+def featured_modules():
+    def cards(prefix):
+        return [
+            {
+                "platform_content_id": f"{prefix}-1",
+                "link": f"https://synthetic.invalid/work/{prefix}-1",
+                "title": f"title {prefix}-1",
+                "play": 10,
+                "cover": f"https://cdn.synthetic.invalid/{prefix}-1.png",
+            }
+        ]
+
+    return {
+        "excellent_reach": {"cards": cards("reach"), "set_key": "set-reach"},
+        "excellent_seeding": {"cards": cards("seeding"), "set_key": "set-seeding"},
+    }
+
+
+def start_featured(repo, plan):
+    root = repo.create(
+        plan,
+        "unit",
+        uid(),
+        "test",
+        adapter_version="synthetic-v1",
+        contract_version="synthetic-v1",
+        modules=["basic", "commercial", "fans"],
+        featured_types=["excellent_reach", "excellent_seeding"],
+        featured_checkpoint_versions={"excellent_reach": 1, "excellent_seeding": 1},
+    )
+    task = repo.get(root)
+    generation, session = repo.acquire("unit", task.attempt_id)
+    return ExecutionContext(
+        root_task_id=root,
+        task_id=task.task_id,
+        attempt_id=task.attempt_id,
+        execution_unit_id="unit",
+        lease_generation=generation,
+        session_version=session,
+        capability_version="synthetic-v1",
+        adapter_version="synthetic-v1",
+        contract_version="synthetic-v1",
+    )
+
+
+async def test_backfill_retry_does_not_search_and_skips_complete_modules(repo, plan):
+    """AC-2/AC-9: the target is met, so the retry only completes the missing profile steps."""
+    ctx = start_featured(repo, plan)
+    first = SyntheticAdapter(
+        ["1", "2"], failed_module="fans", featured=featured_modules(), cover_spec=False
+    )
+    assert await Engine(repo, first, ctx).run() == TaskStatus.PARTIAL_COMPLETED
+    old = repo.get(ctx.root_task_id)
+    assert old.valid_count == 2 and old.profile_complete_count == 0
+    assert old.featured_complete_count == 2
+
+    repo.release(
+        "unit",
+        ctx.attempt_id,
+        ctx.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.VERIFIED_READY,
+    )
+    repo.command(old.root_task_id, "retry", old.version, "test")
+    task = repo.get(old.root_task_id)
+    generation, _ = repo.acquire("unit", task.attempt_id)
+    retry_ctx = ctx.model_copy(
+        update={"attempt_id": task.attempt_id, "lease_generation": generation}
+    )
+
+    retry = CountingAdapter(["1", "2"], featured=featured_modules(), cover_spec=False)
+    assert await Engine(repo, retry, retry_ctx).run() == TaskStatus.COMPLETED
+
+    current = repo.get(old.root_task_id)
+    assert current.valid_count == 2 and current.profile_complete_count == 2
+    assert retry.searches == 0
+    # Only the failed module is re-read; the complete modules keep their observation identity.
+    assert retry.modules == [("1", "fans"), ("2", "fans")]
+    assert retry.featured_calls == []
+    assert current.checkpoint.candidates[0].modules["basic"].module_observation_id == (
+        old.checkpoint.candidates[0].modules["basic"].module_observation_id
+    )
+
+
+async def test_security_challenge_partial_completion_rejects_a_direct_retry(repo, started):
+    with repo.edit(started.root_task_id) as (task, _):
+        task.state = TaskStatus.PARTIAL_COMPLETED
+        task.failure_reason = "SECURITY_CHALLENGE_TIMEOUT"
+    task = repo.get(started.root_task_id)
+    with pytest.raises(CollectorError) as error:
+        repo.command(task.root_task_id, "retry", task.version, "test")
+    assert error.value.code == "INVALID_FORM"
+    assert error.value.reason == "ACTION_NOT_ALLOWED"

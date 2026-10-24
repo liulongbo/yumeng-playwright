@@ -1,0 +1,742 @@
+{
+  "phase": "create",
+  "at": "2026-10-24T15:29:24+08:00",
+  "root_task_id": "7a9b1991-7c63-4232-a6c5-d5974d103fbc",
+  "transitions": [
+    {
+      "at": "2026-10-24T15:23:41+08:00",
+      "status": "RECEIVED",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 0,
+        "valid_count": 0,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:23:51+08:00",
+      "status": "QUEUED",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 0,
+        "valid_count": 0,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:24:01+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 0,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:24:11+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:24:21+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:24:31+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:24:41+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:24:51+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:25:01+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:25:11+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:25:21+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:25:31+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:25:41+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:25:52+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:26:02+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:26:12+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:26:22+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:26:32+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:26:42+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:26:52+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:27:02+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:27:12+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:27:22+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:27:32+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:27:42+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:27:52+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:28:02+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:28:12+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:28:22+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:28:32+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:28:42+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:28:52+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:29:02+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:29:12+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:29:22+08:00",
+      "status": "PARTIAL_COMPLETED",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    }
+  ],
+  "status_after": "PARTIAL_COMPLETED",
+  "counts_after": {
+    "target_count": 1,
+    "discovered_count": 20,
+    "valid_count": 1,
+    "profile_complete_count": 0,
+    "featured_complete_count": 0,
+    "failed_count": 0
+  },
+  "failure_reason_after": "PROFILE_SCOPE_INCOMPLETE",
+  "retry_plan_after": {
+    "scope": "backfill",
+    "remaining_to_target": 0,
+    "incomplete_valid_count": 1,
+    "retryable_creator_count": 1,
+    "search_exhausted": false,
+    "last_retry_at": null,
+    "changed_since_last_retry": null
+  },
+  "screenshot": "docs/evidence/assets/retry01/create-after.png",
+  "db": {
+    "root_task_id": "7a9b1991-7c63-4232-a6c5-d5974d103fbc",
+    "state": "PARTIAL_COMPLETED",
+    "version": 112,
+    "updated_at": "2026-10-24T15:29:21.219849+08:00",
+    "completed_at": "2026-10-24T15:29:21.219849+08:00",
+    "valid_count": 1,
+    "profile_complete_count": 0,
+    "featured_complete_count": 0,
+    "pipeline_complete": false,
+    "failure_reason": "PROFILE_SCOPE_INCOMPLETE",
+    "task_kind": "collection",
+    "checkpoint": {
+      "cursor": "2",
+      "search_generation": 0,
+      "exhausted": false,
+      "processed_operations": 1,
+      "navigation_count": 4,
+      "observed_requests": 68,
+      "scanned_ids": 20,
+      "failure_counts": {}
+    },
+    "candidates": [
+      {
+        "id": "6763236841366749188",
+        "state": "done",
+        "valid": true,
+        "failure_reason": "PROFILE_SCOPE_INCOMPLETE",
+        "modules": {
+          "fans": {
+            "observation_id": "e551e663-5458-40b0-bebc-8a4dba5631f9",
+            "status": null
+          },
+          "basic": {
+            "observation_id": "eaa40abb-ee6a-4dbd-9f7f-5d0ae6be93c8",
+            "status": null
+          },
+          "spread": {
+            "observation_id": "dee6569c-f092-401f-a5b1-96ee6cf3eedc",
+            "status": null
+          },
+          "seeding": {
+            "observation_id": "1a317d79-db30-4c2b-b458-5cdb6e5d6dd5",
+            "status": null
+          },
+          "creation": {
+            "observation_id": "d63f2ef7-3e5b-4109-834d-699cebfc7d35",
+            "status": null
+          },
+          "commercial": {
+            "observation_id": "21145d1e-11cd-4d8b-b5b8-c7674ecc53ae",
+            "status": null
+          },
+          "conversion": {
+            "observation_id": "bc5c737f-d5f6-4288-9164-518ea604a88a",
+            "status": null
+          },
+          "fulfillment": {
+            "observation_id": "c6254818-a7f1-4189-a86f-0902ebaa5af1",
+            "status": null
+          }
+        },
+        "module_history": 8,
+        "collections": {
+          "excellent_reach": {
+            "observation_id": "67532e78-0fb2-45b0-8612-d67574703cfa",
+            "status": "INCOMPLETE"
+          },
+          "excellent_seeding": {
+            "observation_id": "7996ce19-f6aa-435d-a640-3423792d1a23",
+            "status": "INCOMPLETE"
+          }
+        },
+        "collection_history": 2,
+        "snapshot_count": 1
+      },
+      {
+        "id": "6779401118494490632",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7360610271510921225",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "6983857505726103560",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7153794378790600712",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "6989750547695796260",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7400222099362873356",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7432461539556196402",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7201315409155342395",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7010025243259437070",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7592223648438550554",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7010482587680374798",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7081253928620261390",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7254389871895117885",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7164111719164280864",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7146467537721491463",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7160520829556490270",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7132427522733506597",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "6954340939770888205",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7476412142658846771",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      }
+    ],
+    "snapshots": {
+      "count": 1,
+      "last": "2026-10-24T15:29:21.219849+08:00"
+    },
+    "audit": [
+      "product_intake.promote",
+      "product_task.create"
+    ]
+  }
+}

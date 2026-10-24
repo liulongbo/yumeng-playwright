@@ -252,6 +252,8 @@ async def test_collection_reuse_change_recovery_and_cover_retry(repo, plan, tmp_
     assert seeding_2.collection_observation_id == seeding_first.collection_observation_id
     assert len(candidate.collection_history) == 3  # reach re-collected + seeding reused
     assert candidate.collections["excellent_reach"].status.value == "COMPLETE"
+    reach_2 = candidate.collections["excellent_reach"]
+    assert reach_2.collection_observation_id != observation_1
     with repo.connect() as conn:
         old = conn.execute(
             "SELECT count(*) AS n FROM featured_cards WHERE collection_observation_id=%s",
@@ -259,7 +261,9 @@ async def test_collection_reuse_change_recovery_and_cover_retry(repo, plan, tmp_
         ).fetchone()
         assert old["n"] == 2  # the incomplete observation is preserved unchanged
 
-    # Run 3: the default set changes; a new observation is created for that module only.
+    # Run 3: a profile-only backfill (RETRY-01) must not reload an already complete default set.
+    # The platform may have changed, but a "补采缺失字段" click only completes missing steps; the
+    # committed observation is kept instead of creating a mixed or refreshed list.
     repo.release(
         "unit",
         ctx2.attempt_id,
@@ -286,15 +290,65 @@ async def test_collection_reuse_change_recovery_and_cover_retry(repo, plan, tmp_
     assert final.pipeline_complete is True and final.featured_status == "COMPLETED"
     candidate = final.checkpoint.candidates[0]
     reach_3 = candidate.collections["excellent_reach"]
-    assert reach_3.collection_observation_id != observation_1
-    assert [card.platform_content_id for card in reach_3.cards] == ["v1", "v2", "v3"]
-    assert len(candidate.collection_history) == 4
+    assert reach_3.collection_observation_id == reach_2.collection_observation_id
+    assert [card.platform_content_id for card in reach_3.cards] == ["v1", "v2"]
+    assert len(candidate.collection_history) == 3
     assert observation_1 in {o.collection_observation_id for o in candidate.collection_history}
     with repo.connect() as conn:
-        # Both observations are stored; history is append-only, never rewritten.
+        # The original observation is still stored; history is append-only, never rewritten.
         rows = conn.execute(
             """SELECT payload FROM featured_collections
             WHERE collection_observation_id=ANY(%s) ORDER BY observed_at""",
-            ([observation_1, reach_3.collection_observation_id],),
+            ([observation_1, reach_2.collection_observation_id],),
         ).fetchall()
         assert len(rows) == 2
+
+
+async def test_changed_set_is_recollected_only_while_the_module_is_incomplete(repo, plan, tmp_path):
+    """T27 via the affected module: a changed set is observed when (and only when) it is re-read."""
+    ctx = start(repo, plan)
+    covers, _ = pipeline(repo, tmp_path)
+    first = SyntheticAdapter(
+        ["1", "2"],
+        featured=featured(
+            reach={"cards": cards(["v1", "v2"]), "set_key": "set-a", "load_complete": False}
+        ),
+    )
+    assert await Engine(repo, first, ctx, covers=covers).run() == TaskStatus.PARTIAL_COMPLETED
+    old = repo.get(ctx.root_task_id)
+    old_reach = old.checkpoint.candidates[0].collections["excellent_reach"]
+    assert old_reach.status.value == "INCOMPLETE"
+
+    repo.release(
+        "unit",
+        ctx.attempt_id,
+        ctx.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.VERIFIED_READY,
+    )
+    repo.command(ctx.root_task_id, "retry", old.version, "test")
+    task = repo.get(ctx.root_task_id)
+    generation, session = repo.acquire("unit", task.attempt_id)
+    ctx2 = ctx.model_copy(
+        update={
+            "attempt_id": task.attempt_id,
+            "lease_generation": generation,
+            "session_version": session,
+        }
+    )
+    changed = featured()
+    changed["excellent_reach"]["cards"] = cards(["v1", "v2", "v3"])
+    second = SyntheticAdapter(["1", "2"], featured=changed)
+    assert await Engine(repo, second, ctx2, covers=covers).run() == TaskStatus.COMPLETED
+
+    final = repo.get(ctx.root_task_id)
+    reach = final.checkpoint.candidates[0].collections["excellent_reach"]
+    assert reach.collection_observation_id != old_reach.collection_observation_id
+    assert [card.platform_content_id for card in reach.cards] == ["v1", "v2", "v3"]
+    with repo.connect() as conn:
+        preserved = conn.execute(
+            """SELECT count(*) AS n FROM featured_cards
+            WHERE collection_observation_id=%s""",
+            (old_reach.collection_observation_id,),
+        ).fetchone()
+        assert preserved["n"] == 2

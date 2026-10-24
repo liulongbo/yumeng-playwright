@@ -88,6 +88,14 @@ class FakeRepository:
         del unit_id, instance_id, pid, platform_name
         return 1
 
+    def unit(self, unit_id: str) -> dict[str, Any]:
+        del unit_id
+        return {"state": "READY", "failure_reason": None}
+
+    def has_active_unit_claim(self, unit_id: str) -> bool:
+        del unit_id
+        return False
+
     def heartbeat_worker_instance(self, unit_id: str, instance_id: str, generation: int) -> None:
         del unit_id, instance_id, generation
 

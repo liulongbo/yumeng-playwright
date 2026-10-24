@@ -82,6 +82,12 @@ Windows Profile 独占使用标准库 `msvcrt` 字节锁。浏览器关闭确认
   同一单元若出现多个新鲜实例显示 `DUPLICATE`。
 - Worker 异常退出不会由监控线程改写任务；在途 Activity 仍沿用 Temporal 45 秒 heartbeat
   timeout/retry。浏览器关闭或 transport 断开会安全释放 lease，停止状态无法确认则隔离单元。
+- Collection Worker 启动时，在注册自己的 Worker generation 后，会对 `QUARANTINED` 单元做一次
+  本地停止证明与审计回收：仅在没有活跃租约、`OPEN/ACKNOWLEDGED` 验证事件或
+  `REQUESTED/ACTIVE/VERIFYING` 接管，且项目 Profile 锁 + Chromium SingletonLock/lockfile 证明
+  浏览器已停止时，调用既有 `recover_stopped_unit()`（actor 为 `collection-worker:<instance>`）。
+  证明失败或存在活跃 claim 时保持隔离，Worker 继续服务队列；不得删除锁、杀进程或改 generation。
+  仍可手工执行 `xingtu recover-unit --config … --actor …` 作为兜底。
 - 用户点击完成但 Challenge 仍在、账号不符、受保护页不可用或 Worker 已失联时拒绝恢复，并显示
   可行动原因。不要修改 Cookie、删除 Singleton/lockfile，或启动第二个 Chrome 处理同一 Profile。
 - 休眠恢复后先运行 `--status`。若 Worker 为 `OFFLINE`，确认旧进程已退出并等待心跳超时，再启动；

@@ -1,0 +1,32 @@
+{
+  "phase": "api",
+  "at": "2026-10-24T15:48:31+08:00",
+  "checks": {
+    "completed": {
+      "http_status": 409,
+      "body": {
+        "code": "INVALID_FORM",
+        "message": "ACTION_NOT_ALLOWED",
+        "field_errors": [],
+        "request_id": "67b4cf9a-c583-4dbd-8950-7033be2d182c",
+        "current_version": 114,
+        "allowed_actions": []
+      },
+      "task_status": "COMPLETED",
+      "allowed_actions": []
+    },
+    "challenge": {
+      "http_status": 409,
+      "body": {
+        "code": "INVALID_FORM",
+        "message": "ACTION_NOT_ALLOWED",
+        "field_errors": [],
+        "request_id": "54a6c699-18c9-49f5-990d-0c3203a448ff",
+        "current_version": 106,
+        "allowed_actions": []
+      },
+      "task_status": "PARTIAL_COMPLETED",
+      "allowed_actions": []
+    }
+  }
+}

@@ -399,7 +399,7 @@ describe("UI-01 page optimisations", () => {
       return json({}, 404);
     });
     renderApp(`/tasks/${task.root_task_id}`);
-    expect(await screen.findByText("完成时间")).toBeInTheDocument();
+    expect(await screen.findByText("首次完成时间")).toBeInTheDocument();
     expect(screen.getAllByText("最近更新").length).toBeGreaterThan(0);
   });
 
@@ -646,5 +646,115 @@ describe("UI-01 page optimisations", () => {
     expect(document.querySelector(".chapter-tabs button.active")?.textContent).toBe("商业能力");
     expect(fromTask.queryByRole("tab", { name: "达人概览" })).not.toBeInTheDocument();
     expect(fromTask.getByText("本任务采集快照")).toBeInTheDocument();
+  });
+});
+
+describe("RETRY-01 retry scope", () => {
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+  type Recorded = { path: string; init?: RequestInit };
+
+  function mockDetail(overrides: Record<string, unknown>, calls: Recorded[] = []) {
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const path = String(input);
+      calls.push({ path, init });
+      if (path === "/api/auth/me") return json(user);
+      if (path === `/api/tasks/${task.root_task_id}` && init?.method !== "POST") return json(overrides);
+      if (path === `/api/tasks/${task.root_task_id}/retry` && init?.method === "POST") return json(overrides);
+      if (path.startsWith(`/api/tasks/${task.root_task_id}/creators`)) return json({ items: [], next_cursor: null });
+      return json({}, 404);
+    });
+  }
+
+  const continueDetail = {
+    ...taskDetail,
+    status: "PARTIAL_COMPLETED",
+    stage: "部分完成",
+    allowed_actions: ["retry", "cancel"],
+    failure_reason: "PROFILE_SCOPE_INCOMPLETE",
+    counts: { target_count: 100, discovered_count: 140, valid_count: 99, profile_complete_count: 19, featured_complete_count: 80, failed_count: 0 },
+    retry_plan: {
+      scope: "continue", remaining_to_target: 1, incomplete_valid_count: 80,
+      retryable_creator_count: 80, search_exhausted: false,
+      last_retry_at: null, changed_since_last_retry: null,
+    },
+  };
+
+  const backfillDetail = {
+    ...taskDetail,
+    status: "PARTIAL_COMPLETED",
+    stage: "部分完成",
+    allowed_actions: ["retry", "cancel"],
+    failure_reason: "PROFILE_SCOPE_INCOMPLETE",
+    counts: { target_count: 100, discovered_count: 140, valid_count: 100, profile_complete_count: 20, featured_complete_count: 80, failed_count: 0 },
+    retry_plan: {
+      scope: "backfill", remaining_to_target: 0, incomplete_valid_count: 80,
+      retryable_creator_count: 80, search_exhausted: true,
+      last_retry_at: "2026-10-24T06:00:00Z", changed_since_last_retry: 2,
+    },
+  };
+
+  it("offers 继续采集 with the remaining creator count", async () => {
+    mockDetail(continueDetail);
+    renderApp(`/tasks/${task.root_task_id}`);
+    expect(await screen.findByRole("button", { name: /继续采集（还差 1 位）/ })).toBeInTheDocument();
+    expect(screen.getByText(/只补数量，不会重新采集已入库达人/)).toBeInTheDocument();
+    expect(screen.getByText(/待补采 80 位/)).toBeInTheDocument();
+    expect(screen.getByText(/目标 100 · 还差 1 位/)).toBeInTheDocument();
+  });
+
+  it("offers 补采缺失字段 only for already-counted creators and shows the last retry", async () => {
+    mockDetail(backfillDetail);
+    renderApp(`/tasks/${task.root_task_id}`);
+    expect(await screen.findByRole("button", { name: /补采缺失字段（80 位）/ })).toBeInTheDocument();
+    expect(screen.getByText(/只补这些达人的缺失部分，不会新增达人/)).toBeInTheDocument();
+    expect(screen.getByText("上次重试")).toBeInTheDocument();
+    expect(screen.getByText(/更新了 2 位达人的资料/)).toBeInTheDocument();
+  });
+
+  it("falls back to 重试失败步骤 when the server sends no retry plan", async () => {
+    mockDetail({ ...taskDetail, status: "FAILED", stage: "执行失败", allowed_actions: ["retry", "cancel"], failure_reason: "MODULE_COLLECTION_FAILED" });
+    renderApp(`/tasks/${task.root_task_id}`);
+    expect(await screen.findByRole("button", { name: /重试失败步骤/ })).toBeInTheDocument();
+  });
+
+  it("confirms the retry goal and does nothing when declined", async () => {
+    const calls: Recorded[] = [];
+    mockDetail(continueDetail, calls);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderApp(`/tasks/${task.root_task_id}`);
+    const button = await screen.findByRole("button", { name: /继续采集（还差 1 位）/ });
+    await userEvent.click(button);
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("只补足剩余 1 位有效达人"));
+    expect(calls.filter((call) => call.path.endsWith("/retry"))).toHaveLength(0);
+  });
+});
+
+describe("RETRY-01 update tasks", () => {
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+  it("keeps the neutral retry wording for manual update batches", async () => {
+    const updateDetail = {
+      ...taskDetail,
+      task_kind: "manual_update",
+      status: "PARTIAL_COMPLETED",
+      stage: "部分完成",
+      allowed_actions: ["retry", "cancel"],
+      failure_reason: "MODULE_COLLECTION_FAILED",
+      update_targets: [],
+      retry_plan: {
+        scope: "backfill", remaining_to_target: 0, incomplete_valid_count: 1,
+        retryable_creator_count: 1, search_exhausted: true,
+        last_retry_at: null, changed_since_last_retry: null,
+      },
+    };
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const path = String(input);
+      if (path === "/api/auth/me") return json(user);
+      if (path === `/api/tasks/${task.root_task_id}` && init?.method !== "POST") return json(updateDetail);
+      if (path.startsWith(`/api/tasks/${task.root_task_id}/creators`)) return json({ items: [], next_cursor: null });
+      return json({}, 404);
+    });
+    renderApp(`/tasks/${task.root_task_id}`);
+    expect(await screen.findByRole("button", { name: /重试失败步骤/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /补采缺失字段/ })).not.toBeInTheDocument();
   });
 });

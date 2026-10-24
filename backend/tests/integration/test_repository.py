@@ -171,6 +171,15 @@ def test_recover_stopped_unit_handles_expired_lease_in_one_step(repo, started):
     assert generation > started.lease_generation
 
 
+def test_has_active_unit_claim_observes_the_lease(repo, started):
+    """Startup reconciliation must not clear a unit whose lease is still live."""
+
+    assert repo.has_active_unit_claim("unit") is True
+    with repo.connect() as conn:
+        conn.execute("UPDATE execution_units SET owner=NULL,lease_until=NULL WHERE unit_id='unit'")
+    assert repo.has_active_unit_claim("unit") is False
+
+
 async def test_snapshot_database_immutability(repo, started):
     from xingtu.engine import Engine
 

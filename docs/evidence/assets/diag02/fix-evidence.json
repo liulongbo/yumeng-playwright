@@ -1,0 +1,130 @@
+{
+  "generated_at": "2026-10-24T12:31:39.800933+08:00",
+  "code": {
+    "repository.py:433": "has_active_unit_claim",
+    "worker.py:728": "reconcile_quarantined_unit",
+    "worker.py:791": "run_worker startup call"
+  },
+  "tests": {
+    "unit": "321 passed",
+    "contract": "39 passed (PLAYWRIGHT_BROWSERS_PATH=.runtime/browsers)",
+    "mypy": "35 source files, no issues",
+    "ruff": "changed files pass",
+    "live_negative": [
+      "active lease -> reconcile=False; rollback unchanged",
+      "profile flock busy -> RESOURCE_UNAVAILABLE: PROFILE_STILL_IN_USE",
+      "duplicate worker -> RESOURCE_UNAVAILABLE: DUPLICATE_WORKER_FOR_UNIT",
+      "open verification event (rollback) -> has_active_unit_claim=True"
+    ]
+  },
+  "live_recovery": {
+    "worker_stopped_pid": 28208,
+    "worker_started_pid": 34571,
+    "worker_generation": 5,
+    "log": "2026-10-24 12:17:39,673 recovered quarantined unit unit-local-mac-02 after local isolation proof (reason=EXPIRED_OWNER, worker=b612f21a-...)",
+    "audit": [
+      {
+        "id": 437,
+        "actor": "collection-worker:b612f21a-4873-48f7-80cc-9681c3f63eeb",
+        "action": "recover_stopped_unit:unit-local-mac-02",
+        "created_at": "2026-10-24T12:17:39.671859+08:00"
+      },
+      {
+        "id": 439,
+        "actor": "product:1d1221b5-bab8-4af1-b2f0-ea33da31d041",
+        "action": "retry",
+        "created_at": "2026-10-24T12:23:25.833120+08:00"
+      }
+    ]
+  },
+  "first_attempt_after_recovery": {
+    "failed_at": "2026-10-24T12:17:58.204156+08:00",
+    "failure_reason": "PLATFORM_PAGE_CHANGED:BROWSER_ACTION_FAILED",
+    "worker_log": "Page.goto: net::ERR_NETWORK_CHANGED at https://www.xingtu.cn/ad/creator/market"
+  },
+  "retry": {
+    "audit": [
+      {
+        "id": 439,
+        "actor": "product:1d1221b5-bab8-4af1-b2f0-ea33da31d041",
+        "action": "retry",
+        "created_at": "2026-10-24T12:23:25.833120+08:00"
+      }
+    ],
+    "status_timeline": [
+      "QUEUED 12:23:32",
+      "SEARCHING 12:23:51",
+      "COLLECTING 12:23:57",
+      "PARTIAL_COMPLETED 12:28:11"
+    ],
+    "final_task": {
+      "state": "PARTIAL_COMPLETED",
+      "version": 240,
+      "created_at": "2026-10-24T11:48:42.326193+08:00",
+      "updated_at": "2026-10-24T12:28:05.891435+08:00",
+      "completed_at": "2026-10-24T12:17:58.204156+08:00",
+      "failure_reason": "PROFILE_SCOPE_INCOMPLETE",
+      "valid_count": "2"
+    },
+    "final_unit": {
+      "state": "READY",
+      "owner": null,
+      "lease_until": null,
+      "browser_stopped": true,
+      "mode": null,
+      "current_root_task_id": null,
+      "generation": 139,
+      "worker_generation": 5,
+      "session_version": 9,
+      "last_session_status": "VALID",
+      "last_session_reason": "PROTECTED_PAGE_AND_ACCOUNT_VERIFIED",
+      "failure_reason": "PROTECTED_PAGE_AND_ACCOUNT_VERIFIED"
+    },
+    "counts": {
+      "task_creators": 2,
+      "creator_snapshots": 2,
+      "featured_collections": 4,
+      "featured_cards": 6,
+      "covers_failed": 6,
+      "media_objects": 0
+    },
+    "open_verification_events": 0,
+    "open_takeovers": 0,
+    "worker": {
+      "worker_instance_id": "b612f21a-4873-48f7-80cc-9681c3f63eeb",
+      "worker_generation": 5,
+      "process_id": 34571,
+      "started_at": "2026-10-24T12:17:39.662481+08:00",
+      "last_heartbeat_at": "2026-10-24T12:31:30.474019+08:00",
+      "stopped_at": null,
+      "stop_reason": null
+    }
+  },
+  "mcp": {
+    "server": "@playwright/mcp 0.0.77 (Playwright 1.62.0-alpha-2026-06-29)",
+    "chrome": "Google Chrome 156.0.8078.47",
+    "mode": "MCP --cdp-endpoint http://127.0.0.1:9222 attached to a real system Chrome; MCP-managed launch crashed SIGTRAP in the sandbox",
+    "tools_used": [
+      "browser_navigate",
+      "browser_type",
+      "browser_click",
+      "browser_evaluate",
+      "browser_take_screenshot"
+    ],
+    "screenshots": [
+      "fix-task-before-retry.png",
+      "fix-task-collecting.png",
+      "fix-task-final.png",
+      "fix-units-ready.png",
+      "fix-creator-detail.png"
+    ]
+  },
+  "residuals": [
+    "completed_at still 12:17:58 (first failure) while state PARTIAL_COMPLETED at 12:28:05; pre-existing terminal timestamp behavior",
+    "covers 6/6 FAILED, media_objects=0; cover pipeline/S3 environment, not isolation",
+    "profile_complete=0, featured_complete=0; task PARTIAL_COMPLETED/PROFILE_SCOPE_INCOMPLETE",
+    "Windows real machine NOT TESTED",
+    "F10 challenge/takeover not triggered in this E2E",
+    "profile_ref old path and stale launchd agent not addressed"
+  ]
+}
