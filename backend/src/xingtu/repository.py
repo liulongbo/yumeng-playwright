@@ -33,6 +33,12 @@ from .domain import (
     uid,
     utcnow,
 )
+from .retry_policy import (
+    challenge_blocks_retry,
+    decide_retry_scope,
+    is_retryable,
+    requeue_for_retry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1571,17 +1577,18 @@ class Repository:
                 if task.state not in allowed:
                     raise CollectorError("INVALID_FORM", "ACTION_NOT_ALLOWED")
                 if action == "retry" and task.state == TaskStatus.PARTIAL_COMPLETED:
+                    if challenge_blocks_retry(task):
+                        raise CollectorError("INVALID_FORM", "ACTION_NOT_ALLOWED")
                     if not any(self.retryable(c) for c in task.checkpoint.candidates):
                         raise CollectorError("INVALID_FORM", "NO_RETRYABLE_FAILURE")
+                scope = decide_retry_scope(task)
                 task.segment += 1
                 task.attempt_id = uid()
                 task.state = TaskStatus.QUEUED
                 task.failure_reason = None
                 task.checkpoint.active_seconds = 0
                 task.checkpoint.scanned_ids = []
-                for c in task.checkpoint.candidates:
-                    if self.retryable(c):
-                        c.state = "pending"
+                requeue_for_retry(task, scope)
                 conn.execute(
                     "INSERT INTO task_attempts(attempt_id,root_task_id,segment) VALUES(%s,%s,%s)",
                     (task.attempt_id, root, task.segment),
@@ -1592,9 +1599,12 @@ class Repository:
                 )
             else:
                 raise CollectorError("INVALID_FORM", "UNKNOWN_ACTION")
+            audit_action = action
+            if action in {"continue", "retry"}:
+                audit_action = f"{action}:{scope.value}"
             conn.execute(
                 "INSERT INTO audit_logs(root_task_id,actor,action) VALUES(%s,%s,%s)",
-                (root, actor, action),
+                (root, actor, audit_action),
             )
 
     def persist_creators(
@@ -1606,6 +1616,26 @@ class Repository:
         only_creator: str | None = None,
     ) -> None:
         # Called inside the same locked transaction as module/checkpoint/count changes.
+        # A terminal closeout publishes every valid creator, but one retry segment usually changes
+        # only a few. Compare with each creator's latest snapshot payload so an unchanged creator
+        # keeps its published version: append-only history stays intact and no duplicate snapshot
+        # row, `latest_snapshot_id` move or library sync happens.
+        published: dict[str, Any] = {}
+        if publish:
+            latest_ids = [
+                candidate.snapshot_ids[-1]
+                for candidate in task.checkpoint.candidates
+                if candidate.valid
+                and candidate.snapshot_ids
+                and (only_creator is None or candidate.ref.platform_creator_id == only_creator)
+            ]
+            if latest_ids:
+                rows = conn.execute(
+                    "SELECT snapshot_id,payload FROM creator_snapshots "
+                    "WHERE snapshot_id=ANY(%s::uuid[])",
+                    (latest_ids,),
+                ).fetchall()
+                published = {str(row["snapshot_id"]): row["payload"] for row in rows}
         for candidate in task.checkpoint.candidates:
             if not candidate.valid or (
                 only_creator and candidate.ref.platform_creator_id != only_creator
@@ -1641,7 +1671,6 @@ class Repository:
                         not old or field.observed_at > datetime.fromisoformat(old["observed_at"])
                     ):
                         fields[key] = field.model_dump(mode="json")
-            snapshot_id = uid()
             snapshot: dict[str, Any] = {
                 "schema_version": "profile_snapshot.v1",
                 "modules": {
@@ -1699,6 +1728,10 @@ class Repository:
                         or task.failure_reason
                         or "UPSTREAM_INTERRUPTED",
                     }
+            previous = published.get(candidate.snapshot_ids[-1]) if candidate.snapshot_ids else None
+            if previous == snapshot:
+                continue
+            snapshot_id = uid()
             for observation in candidate.collections.values():
                 self._persist_collection(conn, task, ref.creator_id, observation)
             snapshot_row = conn.execute(
@@ -1821,13 +1854,7 @@ class Repository:
     @staticmethod
     def retryable(candidate: Candidate) -> bool:
         """A candidate is retryable when a step is failed or an attempted step is incomplete."""
-        if candidate.state == "failed":
-            return True
-        if not candidate.valid:
-            return False
-        return any(not m.complete for m in candidate.modules.values()) or any(
-            not o.complete for o in candidate.collections.values()
-        )
+        return is_retryable(candidate)
 
     def cover_reference(self, root_task_id: str, object_id: str) -> dict[str, Any] | None:
         """Authenticated-access check: an object is only reachable through its own task's rows.

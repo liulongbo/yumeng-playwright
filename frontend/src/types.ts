@@ -244,9 +244,24 @@ export interface TaskDetail extends TaskSummary {
   challenge: ChallengeSummary | null;
   intake: IntakeProgress | null;
   update_targets: UpdateTargetView[];
+  retry_plan?: RetryPlan | null;
 }
 
 export interface TaskPage { items: TaskSummary[]; next_cursor: string | null }
+
+/**
+ * What one retry click would do. The scope is derived by the server from the task's own counts
+ * (`valid < target` = 继续采集, otherwise 补采缺失字段); the UI only renders it.
+ */
+export interface RetryPlan {
+  scope: "continue" | "backfill";
+  remaining_to_target: number;
+  incomplete_valid_count: number;
+  retryable_creator_count: number;
+  search_exhausted: boolean;
+  last_retry_at: string | null;
+  changed_since_last_retry: number | null;
+}
 
 export interface CreatorSummary {
   creator_id: string;

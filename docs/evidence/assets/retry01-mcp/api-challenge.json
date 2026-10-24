@@ -1,0 +1,13 @@
+{
+  "http_status": 409,
+  "body": {
+    "code": "INVALID_FORM",
+    "message": "ACTION_NOT_ALLOWED",
+    "field_errors": [],
+    "request_id": "54a6c699-18c9-49f5-990d-0c3203a448ff",
+    "current_version": 106,
+    "allowed_actions": []
+  },
+  "task_status": "PARTIAL_COMPLETED",
+  "allowed_actions": []
+}

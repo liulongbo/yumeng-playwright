@@ -588,7 +588,11 @@ class Engine:
                     )
                     if not c.valid:
                         return
-                if self.adapter.featured_keys:
+                if self.adapter.featured_keys and not self.repo.featured_complete(
+                    self.repo.get(self.root), identity
+                ):
+                    # A backfill only completes the missing steps: an already complete default set
+                    # is not reloaded. A first collection has no observation yet, so it still runs.
                     await self.collect_featured(identity)
                 with self.repo.edit(self.root, self.ctx) as (current, _):
                     c = next(

@@ -42,6 +42,7 @@ from .product_models import (
     ManualProbeCreator,
     P1WorkflowState,
     RequirementForm,
+    RetryPlan,
     TaskCounts,
     TaskDetail,
     TaskPage,
@@ -50,6 +51,15 @@ from .product_models import (
     VerificationEventView,
 )
 from .repository import TERMINAL_COMPLETED_AT_CLAUSE, TERMINAL_TASK_STATES, Repository
+from .retry_policy import (
+    RetryScope,
+    challenge_blocks_retry,
+    decide_retry_scope,
+    incomplete_valid_count,
+    remaining_to_target,
+    requeue_for_retry,
+    retryable_creator_count,
+)
 from .worker_health import INTAKE_QUEUE, WorkerHealthMonitor
 
 # The same terminal set the task write path uses to stamp `completed_at`; kept as the query layer's
@@ -106,7 +116,7 @@ def allowed_actions(status: TaskStatus, task: TaskRecord | None) -> list[str]:
     if (
         status == TaskStatus.PARTIAL_COMPLETED
         and task
-        and not (task.failure_reason or "").startswith("SECURITY_CHALLENGE_")
+        and not challenge_blocks_retry(task)
         and any(Repository.retryable(candidate) for candidate in task.checkpoint.candidates)
     ):
         actions.append("retry")
@@ -429,6 +439,7 @@ class ProductQueries:
             challenge=self._challenge_summary(task),
             intake=self._intake_progress(row),
             update_targets=self._update_targets(task),
+            retry_plan=self._retry_plan(task) if task is not None else None,
         )
 
     @staticmethod
@@ -613,6 +624,40 @@ class ProductQueries:
             failure_reason=failure,
         )
 
+    def _retry_plan(self, task: TaskRecord) -> RetryPlan:
+        """Describe what one retry click would do, using only existing persisted facts.
+
+        The audit row and the snapshot history are enough to say when the last retry happened and
+        how many creators it changed; the plan itself is derived from the task's own counts, so no
+        new column, payload field or migration is required.
+        """
+        last_retry_at: datetime | None = None
+        changed: int | None = None
+        with self.repository.connect() as conn:
+            row = conn.execute(
+                """SELECT max(created_at) AS last_retry_at FROM audit_logs
+                WHERE root_task_id=%s AND (action='retry' OR action LIKE 'retry:%%')""",
+                (task.root_task_id,),
+            ).fetchone()
+            if row:
+                last_retry_at = row["last_retry_at"]
+            if last_retry_at is not None:
+                changed_row = conn.execute(
+                    """SELECT count(DISTINCT creator_id) AS changed FROM creator_snapshots
+                    WHERE root_task_id=%s AND created_at > %s""",
+                    (task.root_task_id, last_retry_at),
+                ).fetchone()
+                changed = int(changed_row["changed"]) if changed_row else 0
+        return RetryPlan(
+            scope=decide_retry_scope(task).value,
+            remaining_to_target=remaining_to_target(task),
+            incomplete_valid_count=incomplete_valid_count(task),
+            retryable_creator_count=retryable_creator_count(task),
+            search_exhausted=bool(task.checkpoint.exhausted),
+            last_retry_at=last_retry_at,
+            changed_since_last_retry=changed,
+        )
+
     @staticmethod
     def _collect_workflow_started(conn: Any, root_task_id: str, segment: int) -> bool:
         """Whether a P2 collection workflow was actually started for this task segment.
@@ -668,6 +713,8 @@ class ProductQueries:
                 raise CollectorError("INVALID_FORM", "STATE_VERSION_CONFLICT")
             status = TaskStatus(row["state"])
             payload = row["payload"]
+            # Only the P2 branch decides a retry goal; the P1 (intake) branch has no creator queue.
+            scope: RetryScope | None = None
             if "task_id" not in payload:
                 if action == "cancel" and status in {TaskStatus.RECEIVED, TaskStatus.PARSING}:
                     payload = {**payload, "failure_reason": "TASK_CANCELLED"}
@@ -760,24 +807,22 @@ class ProductQueries:
                     )
                     if task.state not in expected_state:
                         raise CollectorError("INVALID_FORM", "ACTION_NOT_ALLOWED")
-                    if (
-                        action == "retry"
-                        and task.state == TaskStatus.PARTIAL_COMPLETED
-                        and not any(
+                    if action == "retry" and task.state == TaskStatus.PARTIAL_COMPLETED:
+                        if challenge_blocks_retry(task):
+                            raise CollectorError("INVALID_FORM", "ACTION_NOT_ALLOWED")
+                        if not any(
                             Repository.retryable(candidate)
                             for candidate in task.checkpoint.candidates
-                        )
-                    ):
-                        raise CollectorError("INVALID_FORM", "NO_RETRYABLE_FAILURE")
+                        ):
+                            raise CollectorError("INVALID_FORM", "NO_RETRYABLE_FAILURE")
+                    scope = decide_retry_scope(task)
                     task.segment += 1
                     task.attempt_id = uid()
                     task.state = TaskStatus.QUEUED
                     task.failure_reason = None
                     task.checkpoint.active_seconds = 0
                     task.checkpoint.scanned_ids = []
-                    for candidate in task.checkpoint.candidates:
-                        if Repository.retryable(candidate):
-                            candidate.state = "pending"
+                    requeue_for_retry(task, scope)
                     conn.execute(
                         """INSERT INTO task_attempts(attempt_id,root_task_id,segment)
                         VALUES(%s,%s,%s)""",
@@ -825,10 +870,14 @@ class ProductQueries:
                     Jsonb({"root_task_id": root_task_id, "accepted": True}),
                 ),
             )
+            audit_action: str = action
+            if scope is not None:
+                # The audit row records which goal the click served (quantity vs completeness).
+                audit_action = f"{action}:{scope.value}"
             conn.execute(
                 """INSERT INTO audit_logs(root_task_id,actor,actor_user_id,action)
                 VALUES(%s,%s,%s,%s)""",
-                (root_task_id, actor, user_id, action),
+                (root_task_id, actor, user_id, audit_action),
             )
         if terminal_update:
             try:

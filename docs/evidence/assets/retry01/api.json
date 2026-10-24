@@ -1,0 +1,36 @@
+{
+  "phase": "api",
+  "at": "2026-10-24T15:22:02+08:00",
+  "checks": {
+    "completed": {
+      "task_status": "COMPLETED",
+      "allowed_actions": [],
+      "retry_plan": {
+        "scope": "backfill",
+        "remaining_to_target": 0,
+        "incomplete_valid_count": 0,
+        "retryable_creator_count": 0,
+        "search_exhausted": false,
+        "last_retry_at": null,
+        "changed_since_last_retry": null
+      },
+      "http_status": 422,
+      "error": "INVALID_FORM"
+    },
+    "challenge": {
+      "task_status": "PARTIAL_COMPLETED",
+      "allowed_actions": [],
+      "retry_plan": {
+        "scope": "backfill",
+        "remaining_to_target": 0,
+        "incomplete_valid_count": 1,
+        "retryable_creator_count": 1,
+        "search_exhausted": false,
+        "last_retry_at": null,
+        "changed_since_last_retry": null
+      },
+      "http_status": 422,
+      "error": "INVALID_FORM"
+    }
+  }
+}

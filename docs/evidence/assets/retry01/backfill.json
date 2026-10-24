@@ -1,0 +1,753 @@
+{
+  "phase": "backfill",
+  "at": "2026-10-24T15:22:02+08:00",
+  "root_task_id": "2cf27cbe-2f86-4eb3-b70e-19b959874d21",
+  "button": "补采缺失字段（1 位）",
+  "button_ok": true,
+  "status_before": "PARTIAL_COMPLETED",
+  "retry_plan_before": {
+    "scope": "backfill",
+    "remaining_to_target": 0,
+    "incomplete_valid_count": 1,
+    "retryable_creator_count": 1,
+    "search_exhausted": false,
+    "last_retry_at": null,
+    "changed_since_last_retry": null
+  },
+  "attention": "已采到 1/1 位有效达人，其中 1 位资料不完整（读取失败或未完成）。点击「补采缺失字段」只补这些达人的缺失部分，不会新增达人。",
+  "before": {
+    "root_task_id": "2cf27cbe-2f86-4eb3-b70e-19b959874d21",
+    "state": "PARTIAL_COMPLETED",
+    "version": 146,
+    "updated_at": "2026-10-23T11:57:35.286023+08:00",
+    "completed_at": "2026-10-23T11:57:35.286023+08:00",
+    "valid_count": 1,
+    "profile_complete_count": 0,
+    "featured_complete_count": 0,
+    "pipeline_complete": false,
+    "failure_reason": "PROFILE_SCOPE_INCOMPLETE",
+    "task_kind": "collection",
+    "checkpoint": {
+      "cursor": null,
+      "search_generation": 1,
+      "exhausted": false,
+      "processed_operations": 1,
+      "navigation_count": 6,
+      "observed_requests": 154,
+      "scanned_ids": 20,
+      "failure_counts": {
+        "RESOURCE_UNAVAILABLE": 2
+      }
+    },
+    "candidates": [
+      {
+        "id": "7601962113082327090",
+        "state": "done",
+        "valid": true,
+        "failure_reason": "PROFILE_SCOPE_INCOMPLETE",
+        "modules": {
+          "fans": {
+            "observation_id": "56ed9409-f819-4ead-9603-04cbdb80bc3f",
+            "status": null
+          },
+          "basic": {
+            "observation_id": "f6acc460-2eb0-4705-b595-bb3e7f564b63",
+            "status": null
+          },
+          "spread": {
+            "observation_id": "ddd5ab3c-55f6-4f53-b836-ea7384898db0",
+            "status": null
+          },
+          "seeding": {
+            "observation_id": "b3f4bfc8-8ae5-4207-8618-66ae227deeb9",
+            "status": null
+          },
+          "creation": {
+            "observation_id": "1f09c54d-094f-42fa-993d-8097f478a286",
+            "status": null
+          },
+          "commercial": {
+            "observation_id": "31b63f1a-c1c7-4b38-9e6b-00d33fd9cf7f",
+            "status": null
+          },
+          "conversion": {
+            "observation_id": "7527312c-6990-41aa-a73a-56f84519387b",
+            "status": null
+          },
+          "fulfillment": {
+            "observation_id": "4502ed4f-7387-4a20-a56a-89e6b8d52472",
+            "status": null
+          }
+        },
+        "module_history": 9,
+        "collections": {
+          "excellent_reach": {
+            "observation_id": "f8f96a1c-9fcb-40c2-a20f-36a5f583df95",
+            "status": "INCOMPLETE"
+          },
+          "excellent_seeding": {
+            "observation_id": "08b7018c-0d94-455f-a9e8-94a3a7458e16",
+            "status": "INCOMPLETE"
+          }
+        },
+        "collection_history": 2,
+        "snapshot_count": 1
+      },
+      {
+        "id": "7210153948588539963",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7026180065461272584",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7567692037719916582",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7068669701424939044",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7436379508468351003",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7273353131268767802",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7090016004104781835",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "6877486375348748301",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7507217656076828682",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7572024830966497331",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7562404445507207214",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7204217833004204070",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7109839465782181927",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "6850615844360159245",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7114268850341806094",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7147706656594329608",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "6879561674265722893",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7177821992207253539",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7568701938007539750",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      }
+    ],
+    "snapshots": {
+      "count": 1,
+      "last": "2026-10-23T11:57:35.286023+08:00"
+    },
+    "audit": [
+      "product_intake.promote",
+      "product_task.create"
+    ]
+  },
+  "screenshot_before": "docs/evidence/assets/retry01/backfill-before.png",
+  "console_errors": [
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ],
+  "confirm_text": "本次只为 1 位已入库达人补采缺失资料，不会搜索或新增达人。是否继续？",
+  "cancel_sent_no_request": true,
+  "accept_sent_request": true,
+  "transitions": [
+    {
+      "at": "2026-10-24T15:22:04+08:00",
+      "status": "QUEUED",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:22:14+08:00",
+      "status": "QUEUED",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:22:24+08:00",
+      "status": "QUEUED",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:22:34+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:22:44+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:22:54+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:23:04+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:23:14+08:00",
+      "status": "COLLECTING",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    },
+    {
+      "at": "2026-10-24T15:23:24+08:00",
+      "status": "PARTIAL_COMPLETED",
+      "counts": {
+        "target_count": 1,
+        "discovered_count": 20,
+        "valid_count": 1,
+        "profile_complete_count": 0,
+        "featured_complete_count": 0,
+        "failed_count": 0
+      }
+    }
+  ],
+  "status_after": "PARTIAL_COMPLETED",
+  "counts_after": {
+    "target_count": 1,
+    "discovered_count": 20,
+    "valid_count": 1,
+    "profile_complete_count": 0,
+    "featured_complete_count": 0,
+    "failed_count": 0
+  },
+  "retry_plan_after": {
+    "scope": "backfill",
+    "remaining_to_target": 0,
+    "incomplete_valid_count": 1,
+    "retryable_creator_count": 1,
+    "search_exhausted": false,
+    "last_retry_at": "2026-10-24T15:22:03.991384+08:00",
+    "changed_since_last_retry": 1
+  },
+  "failure_reason_after": "PROFILE_SCOPE_INCOMPLETE",
+  "button_after": "补采缺失字段（1 位）",
+  "attention_after": "已采到 1/1 位有效达人，其中 1 位资料不完整（读取失败或未完成）。点击「补采缺失字段」只补这些达人的缺失部分，不会新增达人。",
+  "screenshot_after": "docs/evidence/assets/retry01/backfill-after.png",
+  "after": {
+    "root_task_id": "2cf27cbe-2f86-4eb3-b70e-19b959874d21",
+    "state": "PARTIAL_COMPLETED",
+    "version": 209,
+    "updated_at": "2026-10-24T15:23:16.206721+08:00",
+    "completed_at": "2026-10-23T11:57:35.286023+08:00",
+    "valid_count": 1,
+    "profile_complete_count": 0,
+    "featured_complete_count": 0,
+    "pipeline_complete": false,
+    "failure_reason": "PROFILE_SCOPE_INCOMPLETE",
+    "task_kind": "collection",
+    "checkpoint": {
+      "cursor": null,
+      "search_generation": 1,
+      "exhausted": false,
+      "processed_operations": 1,
+      "navigation_count": 10,
+      "observed_requests": 185,
+      "scanned_ids": 0,
+      "failure_counts": {
+        "RESOURCE_UNAVAILABLE": 2
+      }
+    },
+    "candidates": [
+      {
+        "id": "7601962113082327090",
+        "state": "done",
+        "valid": true,
+        "failure_reason": "PROFILE_SCOPE_INCOMPLETE",
+        "modules": {
+          "fans": {
+            "observation_id": "56ed9409-f819-4ead-9603-04cbdb80bc3f",
+            "status": null
+          },
+          "basic": {
+            "observation_id": "9527f0cd-f75d-4b7e-a4f4-8d5b527feb68",
+            "status": null
+          },
+          "spread": {
+            "observation_id": "ddd5ab3c-55f6-4f53-b836-ea7384898db0",
+            "status": null
+          },
+          "seeding": {
+            "observation_id": "b3f4bfc8-8ae5-4207-8618-66ae227deeb9",
+            "status": null
+          },
+          "creation": {
+            "observation_id": "1f09c54d-094f-42fa-993d-8097f478a286",
+            "status": null
+          },
+          "commercial": {
+            "observation_id": "31b63f1a-c1c7-4b38-9e6b-00d33fd9cf7f",
+            "status": null
+          },
+          "conversion": {
+            "observation_id": "7527312c-6990-41aa-a73a-56f84519387b",
+            "status": null
+          },
+          "fulfillment": {
+            "observation_id": "4502ed4f-7387-4a20-a56a-89e6b8d52472",
+            "status": null
+          }
+        },
+        "module_history": 10,
+        "collections": {
+          "excellent_reach": {
+            "observation_id": "e3c498b9-7391-4e7d-9598-60be2313b04d",
+            "status": "INCOMPLETE"
+          },
+          "excellent_seeding": {
+            "observation_id": "817ed892-c8f7-4dbf-bb3f-5ed9764bd317",
+            "status": "INCOMPLETE"
+          }
+        },
+        "collection_history": 4,
+        "snapshot_count": 2
+      },
+      {
+        "id": "7210153948588539963",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7026180065461272584",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7567692037719916582",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7068669701424939044",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7436379508468351003",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7273353131268767802",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7090016004104781835",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "6877486375348748301",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7507217656076828682",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7572024830966497331",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7562404445507207214",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7204217833004204070",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7109839465782181927",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "6850615844360159245",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7114268850341806094",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7147706656594329608",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "6879561674265722893",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7177821992207253539",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      },
+      {
+        "id": "7568701938007539750",
+        "state": "pending",
+        "valid": false,
+        "failure_reason": null,
+        "modules": {},
+        "module_history": 0,
+        "collections": {},
+        "collection_history": 0,
+        "snapshot_count": 0
+      }
+    ],
+    "snapshots": {
+      "count": 2,
+      "last": "2026-10-24T15:23:16.206721+08:00"
+    },
+    "audit": [
+      "retry:backfill",
+      "product_intake.promote",
+      "product_task.create"
+    ]
+  },
+  "finished_at": "2026-10-24T15:23:26+08:00"
+}

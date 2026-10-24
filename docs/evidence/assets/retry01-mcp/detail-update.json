@@ -1,0 +1,84 @@
+{
+  "root_task_id": "d1813612-a73a-424d-b5e2-c10cc60156f3",
+  "task_kind": "scheduled_update",
+  "status": "FAILED",
+  "stage": "执行失败",
+  "version": 84,
+  "created_at": "2026-10-23T10:51:51.990009+08:00",
+  "updated_at": "2026-10-23T10:53:17.442547+08:00",
+  "completed_at": "2026-10-23T10:53:17.442547+08:00",
+  "created_by": null,
+  "created_by_name": null,
+  "source": "internal_acceptance",
+  "keyword": null,
+  "counts": {
+    "target_count": 5,
+    "discovered_count": 5,
+    "valid_count": 1,
+    "profile_complete_count": 1,
+    "featured_complete_count": 0,
+    "failed_count": 0
+  },
+  "allowed_actions": [
+    "retry"
+  ],
+  "failure_reason": "PLATFORM_PAGE_CHANGED:RESPONSE_SCHEMA_MISMATCH",
+  "requirement": null,
+  "capability_version": null,
+  "plan": null,
+  "field_errors": [],
+  "origin_root_task_id": null,
+  "challenge": null,
+  "intake": null,
+  "update_targets": [
+    {
+      "creator_id": "c6db38d4-8e02-41c5-8116-3736d3c8a7b5",
+      "platform_creator_id": "6849131371793743886",
+      "display_name": null,
+      "first_position": 0,
+      "state": "done",
+      "failure_reason": "FEATURED_COLLECTION_INCOMPLETE"
+    },
+    {
+      "creator_id": "c1a54190-9ad3-4c04-85ac-65a0224631b1",
+      "platform_creator_id": "6763236841366749188",
+      "display_name": null,
+      "first_position": 1,
+      "state": "collecting",
+      "failure_reason": null
+    },
+    {
+      "creator_id": "b3999697-8121-489f-b95e-bd8b60d15916",
+      "platform_creator_id": "7070064864936493092",
+      "display_name": null,
+      "first_position": 2,
+      "state": "pending",
+      "failure_reason": null
+    },
+    {
+      "creator_id": "a0811ce1-6595-49ee-b086-c44d964fd346",
+      "platform_creator_id": "7312258696573091881",
+      "display_name": null,
+      "first_position": 3,
+      "state": "pending",
+      "failure_reason": null
+    },
+    {
+      "creator_id": "8ace9ea4-3566-4461-9b27-02f910492012",
+      "platform_creator_id": "7282701602991898661",
+      "display_name": null,
+      "first_position": 4,
+      "state": "pending",
+      "failure_reason": null
+    }
+  ],
+  "retry_plan": {
+    "scope": "continue",
+    "remaining_to_target": 4,
+    "incomplete_valid_count": 0,
+    "retryable_creator_count": 1,
+    "search_exhausted": false,
+    "last_retry_at": null,
+    "changed_since_last_retry": null
+  }
+}

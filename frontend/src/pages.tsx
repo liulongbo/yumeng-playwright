@@ -348,9 +348,13 @@ export function TaskDetailPage() {
   if (task.isError || !task.data) return <div className="page-wrap"><ErrorState error={task.error} retry={() => task.refetch()} /></div>;
   const item = task.data;
   const taskKind = item.task_kind ?? "collection";
+  const remainingToTarget = Math.max(0, item.counts.target_count - item.counts.valid_count);
+  const backfillPending = Math.max(0, item.counts.valid_count - item.counts.profile_complete_count);
   const countCards = taskKind === "collection" ? [
-    ["已发现", item.counts.discovered_count, "候选达人"], ["有效入库", item.counts.valid_count, `目标 ${item.counts.target_count}`],
-    ["资料完整", item.counts.profile_complete_count, "F05 模块"], ["精选完整", item.counts.featured_complete_count, "F06 双集合"],
+    ["已发现", item.counts.discovered_count, "候选达人"],
+    ["有效入库", item.counts.valid_count, `目标 ${item.counts.target_count}${remainingToTarget > 0 ? ` · 还差 ${remainingToTarget} 位` : ""}`],
+    ["资料完整", item.counts.profile_complete_count, backfillPending > 0 ? `待补采 ${backfillPending} 位` : "全部完整"],
+    ["精选完整", item.counts.featured_complete_count, "F06 双集合"],
   ] : [
     ["目标达人", item.counts.target_count, taskKindLabel[taskKind]], ["已更新", item.counts.valid_count, `目标 ${item.counts.target_count}`],
     ["资料完整", item.counts.profile_complete_count, "F05 模块"], ["精选完整", item.counts.featured_complete_count, "F06 双集合"],
@@ -361,13 +365,16 @@ export function TaskDetailPage() {
     <section className="task-hero panel">
       <div className="hero-status"><StatusBadge status={item.status} pulse={!terminalStatuses.has(item.status)} /><h2>{item.stage}</h2><p>{taskMessage(item)}</p></div>
       <ProgressRail status={item.status} kind={taskKind} />
-      <div className="hero-meta"><div><span>创建人</span><strong>{item.created_by_name || "系统"}</strong></div><div><span>创建时间</span><strong>{formatDate(item.created_at)}</strong></div><div><span>最近更新</span><strong title="服务端最后一次改动这条任务记录的时间（状态推进、进度保存或人工操作），不代表任务完成时刻">{formatDate(item.updated_at)}</strong></div>{/* 只在任务真正进入终态后展示完成时间，进行中的任务不显示该字段，避免误读为已完成。 */}{item.completed_at && <div><span>完成时间</span><strong>{formatDate(item.completed_at)}</strong></div>}<div><span>能力版本</span><strong>{item.capability_version || (taskKind === "collection" ? "历史任务" : "更新任务不适用")}</strong></div></div>
+      <div className="hero-meta"><div><span>创建人</span><strong>{item.created_by_name || "系统"}</strong></div><div><span>创建时间</span><strong>{formatDate(item.created_at)}</strong></div><div><span>最近更新</span><strong title="服务端最后一次改动这条任务记录的时间（状态推进、进度保存或人工操作），不代表任务完成时刻">{formatDate(item.updated_at)}</strong></div>{/* 只在任务真正进入终态后展示完成时间，进行中的任务不显示该字段，避免误读为已完成。 */}{item.completed_at && <div><span>首次完成时间</span><strong title="任务第一次进入终态的时间；补采成功后不会改写，最近一次写入见「最近更新」">{formatDate(item.completed_at)}</strong></div>}<div><span>能力版本</span><strong>{item.capability_version || (taskKind === "collection" ? "历史任务" : "更新任务不适用")}</strong></div></div>
     </section>
     {item.challenge && <ChallengePanel task={item} />}
     {item.intake && <IntakePanel intake={item.intake} />}
     {item.failure_reason || item.field_errors.length > 0 || command.isError ? (
       <section className={attentionPanelClass(item, command.isError)}><AlertCircle size={20} /><div><strong>{attentionTitle(item)}</strong><p>{command.isError ? friendlyError(command.error) : attentionDetail(item)}</p>{item.field_errors.map((error) => <span key={`${error.path}-${error.code}`}>{error.path}：{error.message}</span>)}</div></section>
     ) : null}
+    {!command.isError && item.retry_plan?.last_retry_at && terminalStatuses.has(item.status) && (
+      <section className="attention-panel neutral"><Clock3 size={20} /><div><strong>上次重试</strong><p>{formatDate(item.retry_plan.last_retry_at)}{item.retry_plan.changed_since_last_retry !== null ? ` · 更新了 ${item.retry_plan.changed_since_last_retry} 位达人的资料` : ""}；当前有效 {item.counts.valid_count}/{item.counts.target_count}，资料完整 {item.counts.profile_complete_count}。</p></div></section>
+    )}
     <section className="count-grid">{countCards.map(([label, value, detail]) => <div className="count-card" key={String(label)}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>)}<div className={`count-card ${item.counts.failed_count ? "danger" : ""}`}><span>失败步骤</span><strong>{item.counts.failed_count}</strong><small>可重试项由服务端判定</small></div></section>
     <div className="detail-grid">
       <section className="panel creators-panel"><div className="panel-heading"><div><h2>任务内达人</h2><p>执行中只展示已持久草稿；终态展示任务关联快照。</p></div><span>{creators.data?.pages.flatMap((page) => page.items).length ?? 0} 位可查看</span></div>
@@ -408,10 +415,14 @@ function IntakePanel({ intake }: { intake: IntakeProgress }) {
 // A user-initiated cancellation is a completed command, not a failure: it must not appear as a red
 // "needs attention" panel, and no internal failure code may be shown as the reason.
 const CANCELLED_REASONS = new Set(["TASK_CANCELLED"]);
-// The only non-cancellation reason whose user-facing wording is a fixed promise about the offered
-// action; everything else keeps the server-provided reason verbatim.
-const RETRYABLE_REASONS = new Map([
-  ["PROFILE_SCOPE_INCOMPLETE", "有位达人的主页资料本次未能全部读到（已成功读取的部分和精选作品已经保存）。请点「重试失败步骤」补齐该达人；重试只补采缺失模块，不会重复创建任务。"],
+// Fixed wording for reasons whose plain code is not actionable to a media buyer. The scope-aware
+// retry explanation is produced separately from `task.retry_plan`; these remain the fallback for
+// tasks without a retryable step.
+const FAILURE_REASON_MESSAGES = new Map([
+  ["SEARCH_EXHAUSTED", "平台已没有更多符合条件的达人。可调整条件后新建任务；本次任务不会自动放宽条件。"],
+  ["SEARCH_CAPABILITY_LIMIT", "平台当前分页能力已到边界，任务仍有可用结果。需要更多达人时请新建任务。"],
+  ["FEATURED_NOT_ATTEMPTED", "数量已达标，但精选作品步骤尚未执行。"],
+  ["PROFILE_SCOPE_INCOMPLETE", "有位达人的主页资料本次未能全部读到（已成功读取的部分和精选作品已经保存）。可点「补采缺失字段」补齐，不会重复创建任务。"],
 ]);
 
 function isUserCancelled(task: TaskDetail) {
@@ -429,14 +440,33 @@ function attentionTitle(task: TaskDetail) {
   return "任务需要关注";
 }
 
+function retryScopeMessage(task: TaskDetail) {
+  if ((task.task_kind ?? "collection") !== "collection") return null;
+  const plan = task.retry_plan;
+  if (!plan || !task.allowed_actions.includes("retry")) return null;
+  if (plan.scope === "continue") {
+    const base = `已采到 ${task.counts.valid_count}/${task.counts.target_count} 位有效达人，还差 ${plan.remaining_to_target} 位。点击「继续采集」只补数量，不会重新采集已入库达人。`;
+    return plan.incomplete_valid_count > 0
+      ? `${base} 其中 ${plan.incomplete_valid_count} 位资料不完整，将在数量补足后单独补采。`
+      : base;
+  }
+  return `已采到 ${task.counts.valid_count}/${task.counts.target_count} 位有效达人，其中 ${plan.incomplete_valid_count} 位资料不完整（读取失败或未完成）。点击「补采缺失字段」只补这些达人的缺失部分，不会新增达人。`;
+}
+
 function attentionDetail(task: TaskDetail) {
   if (isUserCancelled(task)) return "任务已按你的操作取消，已持久的结果会保留。";
   // A transient platform response can leave one profile module incomplete while everything else —
   // including the persisted results — is fine. Say what happened and that the offered action is
   // real instead of showing a bare internal code (FIX-01 P0-A acceptance wording).
-  const retryable = task.failure_reason ? RETRYABLE_REASONS.get(task.failure_reason) : undefined;
-  if (retryable) return retryable;
-  return task.failure_reason || "请根据字段提示修改后重新提交。";
+  const scoped = retryScopeMessage(task);
+  if (scoped) return scoped;
+  const reason = task.failure_reason;
+  if (reason && reason.startsWith("SECURITY_CHALLENGE_")) {
+    return "任务因平台安全验证未完成而停止。请先完成验证；当前不提供重试。";
+  }
+  const message = reason ? FAILURE_REASON_MESSAGES.get(reason) : undefined;
+  if (message) return message;
+  return reason || "请根据字段提示修改后重新提交。";
 }
 
 function taskMessage(task: TaskDetail) {
@@ -493,11 +523,33 @@ function ChallengePanel({ task }: { task: TaskDetail }) {
   </section>;
 }
 
+function retryActionLabel(task: TaskDetail) {
+  const plan = task.retry_plan;
+  // Update tasks count creators with the same fields but have no "还差 N 位" goal; keep the
+  // neutral wording instead of borrowing the collection wording.
+  if (!plan || (task.task_kind ?? "collection") !== "collection") return "重试失败步骤";
+  if (plan.scope === "continue") {
+    return plan.remaining_to_target > 0 ? `继续采集（还差 ${plan.remaining_to_target} 位）` : "继续采集";
+  }
+  return plan.incomplete_valid_count > 0 ? `补采缺失字段（${plan.incomplete_valid_count} 位）` : "补采缺失字段";
+}
+
+function retryActionConfirm(task: TaskDetail) {
+  const plan = (task.task_kind ?? "collection") === "collection" ? task.retry_plan : null;
+  if (plan?.scope === "continue") {
+    return `本次只补足剩余 ${plan.remaining_to_target} 位有效达人，不会补采已入库达人的缺失资料。是否继续？`;
+  }
+  if (plan?.scope === "backfill") {
+    return `本次只为 ${plan.incomplete_valid_count} 位已入库达人补采缺失资料，不会搜索或新增达人。是否继续？`;
+  }
+  return "本次只处理未完成的步骤，已成功的内容不会重复采集。是否继续？";
+}
+
 function TaskActions({ task, busy, run }: { task: TaskDetail; busy: boolean; run: (action: "cancel" | "continue" | "retry") => void }) {
   return <div className="task-actions">
     {task.allowed_actions.includes("modify_resubmit") && <Link to={`/tasks/new?origin=${task.root_task_id}`} className="button secondary"><RotateCcw size={16} />修改重提</Link>}
     {task.allowed_actions.includes("continue") && <button className="button primary" disabled={busy} onClick={() => run("continue")}><Play size={16} />继续任务</button>}
-    {task.allowed_actions.includes("retry") && <button className="button primary" disabled={busy} onClick={() => run("retry")}><RefreshCcw size={16} />重试失败步骤</button>}
+    {task.allowed_actions.includes("retry") && <button className="button primary" disabled={busy} onClick={() => window.confirm(retryActionConfirm(task)) && run("retry")}><RefreshCcw size={16} />{retryActionLabel(task)}</button>}
     {task.allowed_actions.includes("cancel") && <button className="button danger-button" disabled={busy} onClick={() => window.confirm("确认取消这个任务？已持久的结果会保留。") && run("cancel")}><CircleStop size={16} />取消任务</button>}
   </div>;
 }

@@ -547,6 +547,25 @@ class UpdateTargetView(Model):
     failure_reason: str | None = None
 
 
+class RetryPlan(Model):
+    """What one retry click would do, derived from the task's own counts.
+
+    The scope is not stored: it follows ``valid_count`` vs ``target_count`` so the API, the CLI
+    command and the engine cannot disagree after the task is re-read.  ``last_retry_at`` and
+    ``changed_since_last_retry`` are read from the existing audit and snapshot rows; no new column
+    and no checkpoint field is involved.
+    """
+
+    scope: Literal["continue", "backfill"]
+    remaining_to_target: int = 0
+    incomplete_valid_count: int = 0
+    retryable_creator_count: int = 0
+    search_exhausted: bool = False
+    # Last user retry recorded in audit_logs, and how many creator snapshots it changed.
+    last_retry_at: datetime | None = None
+    changed_since_last_retry: int | None = None
+
+
 class TaskDetail(TaskSummary):
     requirement: RequirementForm | None = None
     capability_version: str | None = None
@@ -556,6 +575,7 @@ class TaskDetail(TaskSummary):
     challenge: ChallengeSummary | None = None
     intake: IntakeProgress | None = None
     update_targets: list[UpdateTargetView] = Field(default_factory=list)
+    retry_plan: RetryPlan | None = None
 
 
 class TaskPage(Model):

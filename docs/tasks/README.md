@@ -1,5 +1,35 @@
 # 开发任务索引
 
+# 2026-10-24 RETRY-01：「继续采集」与「补采缺失字段」双语义拆分（进行中：真实 E2E 与 MCP 验收发现 F1/F2/F5 待修）
+
+[RETRY-01](RETRY-01.md) 把单一「重试失败步骤」拆成两种业务行为：有效数未达目标时只补足数量、
+本次不重访已入库达人；已达目标时只补缺失资料、不搜索不新增达人。实现为单一派生策略
+（`retry_policy.py`，产品 API 与 CLI 共用），新增只读 `retry_plan`（还差数量、待补采数量、上次重试
+与更新人数，读 `audit_logs`/`creator_snapshots`，无迁移、无 payload 字段）；补采跳过已完成精选，
+终态收口只写内容变化的达人快照；安全验证终态在接口层同样拒绝重试。前端按目标输出「继续采集
+（还差 N 位）」/「补采缺失字段（M 位）」与二次确认，计数卡增加「还差/待补采」，完成时间改称
+「首次完成时间」。自动检查：单元 **327**、契约 **39**、集成 **103 passed / 1 skipped**、E2E **9**、前端
+**89**、mypy/ruff 通过（`scripts/acceptance` 11 个 UP031 为既有问题）。真实 Chrome 小样本 E2E
+已完成真实 Chrome E2E（2026-10-24）：13 通过 / 2 失败（另 F3 环境阻塞）——继续采集 0 次重访、补采 0 次搜索批次核心语义通过；发现 F1 无变化重试重发快照、F2 搜索耗尽后继续采集死循环、F3 封面存储不可达导致补采循环。报告：[真实 E2E](../evidence/RETRY-01-real-e2e-2026-10-24.md)、[Playwright MCP 验收](../evidence/RETRY-01-mcp-acceptance-2026-10-24.md)；[PRD](../prd/RETRY-01-retry-and-backfill.md)、[DEC-019](../decisions/DEC-019-retry-scope-split.md)。MCP 验收（0.0.77 + Chrome 156，23 工具）：5/5 文案、2/2 接口 409、继续采集 0 重访（快照 4→4）、补采 0 搜索（只重读 basic）；MCP-10 新建 `8b0f0393` 首次采集正常；补采中触发 F5 执行单元运行期隔离，重启 Worker 后自动续跑。未 commit。
+
+# 2026-10-24 DIAG-02：ExecutionUnit「old browser requires isolation」专项诊断与最小修复（待验收）
+
+[DIAG-02](DIAG-02.md) 先只读定位 `383474a1-40b6-4343-ac22-9a4efcdc6af7` 的
+`RESOURCE_UNAVAILABLE: old browser requires isolation`：**不是旧 Chrome 仍在运行**，而是 11:20
+重试启动的旧 BrowserHost 在 11:23 随 Worker 异常消失、未执行 `release()`，留下
+`owner/lease/browser_stopped=false`；11:36 新任务按 fail-closed 规则置 `QUARANTINED/EXPIRED_OWNER`
+后，系统没有自动回收路径，任务永久 `WAITING_FOR_RESOURCE`。OS 隔离证明 PASS，排除了
+macOS/Windows 锁误判；`acquire`/`release` 自初始导入未变，**非 F10 直接引入**。用户批准后已实施
+最小修复：Worker 启动时在严格隔离证明 + 无活跃租约/验证/接管条件下执行一次审计回收，复用
+`confirm_local_browser_stopped()` + `recover_stopped_unit()`，不删锁/不杀 Chrome/不新增 Schema。
+2026-10-24 12:17:39 新 Worker generation 5 自动回收（`audit_logs` 437），随后 `383474a1` 经
+Playwright MCP + 真实 Chrome 156 重试，`QUEUED→SEARCHING→COLLECTING→PARTIAL_COMPLETED`
+（12:28:05），`valid=2/2`、2 快照、4 精选集合/6 卡片；单元 `READY`、无残留租约/浏览器/接管。
+自动检查：unit 321、contract 39、mypy 35 files、ruff 通过；活跃租约/Profile 锁/重复 Worker/OPEN
+验证事件负向分支通过。残余：`completed_at` 仍为首次失败时间、封面 6/6 FAILED、`profile_complete=0`、
+Windows 实机与 F10 真实接管 NOT TESTED。本轮未创建新任务、未 commit/push/merge。报告：
+[诊断](../evidence/DIAG-02-browser-isolation-2026-10-24.md)、[修复与回归](../evidence/DIAG-02-fix-2026-10-24.md)。
+
 # 2026-10-23 F10：macOS/Windows 本机 ExecutionUnit 与人工接管（待验收）
 
 [F10](F10.md) 已完成最小跨平台适配：POSIX/Windows Profile 锁、Windows Chrome `lockfile`

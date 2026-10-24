@@ -1,0 +1,81 @@
+{
+  "root_task_id": "8b0f0393-283d-47b7-8fff-05563ea4ec9c",
+  "task_kind": "collection",
+  "status": "PARTIAL_COMPLETED",
+  "stage": "部分完成",
+  "version": 95,
+  "created_at": "2026-10-24T15:57:00.497304+08:00",
+  "updated_at": "2026-10-24T15:58:26.291425+08:00",
+  "completed_at": "2026-10-24T15:58:26.291425+08:00",
+  "created_by": "1d1221b5-bab8-4af1-b2f0-ea33da31d041",
+  "created_by_name": "媒介 A",
+  "source": "product",
+  "keyword": "宠物",
+  "counts": {
+    "target_count": 1,
+    "discovered_count": 20,
+    "valid_count": 1,
+    "profile_complete_count": 0,
+    "featured_complete_count": 0,
+    "failed_count": 0
+  },
+  "allowed_actions": [
+    "retry"
+  ],
+  "failure_reason": "PROFILE_SCOPE_INCOMPLETE",
+  "requirement": {
+    "schema_version": "requirement_form.v2",
+    "platform": "douyin_xingtu",
+    "keyword": "宠物",
+    "creator_types": [],
+    "followers": null,
+    "creator_gender": null,
+    "creator_regions": [],
+    "creator_education": null,
+    "yellow_v_certification": null,
+    "connection_users": null,
+    "viewer_profile": null,
+    "fan_profile": null,
+    "quote": null,
+    "sort_key": null,
+    "target_count": 1
+  },
+  "capability_version": "xingtu-ad-creator-square-v3",
+  "plan": {
+    "schema_version": "filter_plan.v2",
+    "platform": "douyin_xingtu",
+    "capability_version": "xingtu-ad-creator-square-v3",
+    "target_count": 1,
+    "filters": [
+      {
+        "field": "keyword",
+        "operator": "eq",
+        "value": "宠物",
+        "source_fields": [
+          "keyword"
+        ],
+        "unit": null,
+        "currency": null,
+        "cooperation_form": null
+      }
+    ],
+    "sort": {
+      "key": "score"
+    },
+    "validation_errors": []
+  },
+  "field_errors": [],
+  "origin_root_task_id": null,
+  "challenge": null,
+  "intake": null,
+  "update_targets": [],
+  "retry_plan": {
+    "scope": "backfill",
+    "remaining_to_target": 0,
+    "incomplete_valid_count": 1,
+    "retryable_creator_count": 1,
+    "search_exhausted": false,
+    "last_retry_at": null,
+    "changed_since_last_retry": null
+  }
+}
