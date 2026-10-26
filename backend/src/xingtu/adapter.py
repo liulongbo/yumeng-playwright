@@ -13,6 +13,7 @@ from urllib.parse import urlencode, urljoin, urlsplit, urlunsplit
 
 from playwright.async_api import BrowserContext, Locator, Page
 from playwright.async_api import Error as BrowserError
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from .contracts import (
     Action,
@@ -1546,8 +1547,31 @@ class BrowserAdapter:
                 await self.navigate(page, entry)
                 self.registry.validate_platform_url(page.url)
                 await self.check_session(page)
-            await self.actions(page, spec.actions)
-            await self.wait_ready(page, spec.ready, spec.ready_hidden)
+            try:
+                await self.actions(page, spec.actions)
+                await self.wait_ready(page, spec.ready, spec.ready_hidden)
+            except PlaywrightTimeoutError as exc:
+                # A registered module action that never becomes actionable is scoped to this
+                # module: the creator identity and basic threshold are already proven, so one
+                # optional tab must not abort the task before later candidates/pages run.
+                # Registered page states still win; session/identity errors stay fatal.
+                await self.check_page_errors(page)
+                if key == self.module_keys[0]:
+                    raise
+                raise CollectorError(
+                    "MODULE_COLLECTION_FAILED", f"MODULE_ACTION_TIMEOUT:{key}"
+                ) from exc
+            except CollectorError as exc:
+                if (
+                    key != self.module_keys[0]
+                    and exc.code == "PLATFORM_PAGE_CHANGED"
+                    and exc.reason == "PAGE_READY_TIMEOUT"
+                ):
+                    # Readiness belongs to the module's own registered surface; keep it local.
+                    raise CollectorError(
+                        "MODULE_COLLECTION_FAILED", f"MODULE_READY_TIMEOUT:{key}"
+                    ) from exc
+                raise
             await self.check_session(page)
             if spec.cover and spec.response_settle_seconds:
                 # A bounded grace window for the registered per-row cover signing requests that the

@@ -1,0 +1,25 @@
+[
+  {
+    "unit_id": "unit-local-mac-02",
+    "platform": "douyin_xingtu",
+    "account_label": "•••t-02",
+    "line_label": "•••acos",
+    "state": "READY",
+    "mode": null,
+    "allowed_task_kinds": [
+      "collection",
+      "manual_update",
+      "scheduled_update"
+    ],
+    "current_root_task_id": null,
+    "worker_status": "ONLINE",
+    "worker_instances": 1,
+    "worker_last_heartbeat_at": "2026-10-26T22:17:27.639282+08:00",
+    "browser_status": "STOPPED",
+    "verification_state": null,
+    "takeover_state": null,
+    "verification_deadline_at": null,
+    "last_heartbeat_at": "2026-10-26T22:17:20.232197+08:00",
+    "actionable_reason": "PROTECTED_PAGE_AND_ACCOUNT_VERIFIED"
+  }
+]

@@ -3,10 +3,11 @@
 import json
 from urllib.parse import parse_qs, urlsplit
 
+import pytest
 from playwright.async_api import async_playwright
 from xingtu.adapter import BrowserAdapter
 from xingtu.contracts import PlatformRegistry
-from xingtu.domain import Checkpoint, ExecutionContext
+from xingtu.domain import Checkpoint, CollectorError, CreatorRef, ExecutionContext
 
 
 def registry(capabilities):
@@ -426,5 +427,46 @@ async def test_verified_page_fetch_reuses_in_memory_headers_and_advances_checkpo
         third = await adapter.search(plan, third_cp, ctx)
         assert [row.platform_creator_id for row in third.candidates] == ["P3"]
         assert third.exhausted and third.next_checkpoint is None
+        await adapter.close()
+        await browser.close()
+
+
+async def test_module_action_timeout_is_scoped_to_the_module(capabilities, plan):
+    """One optional profile tab that never becomes clickable must not escape as a task failure."""
+
+    config = registry(capabilities)
+    data = config.model_dump(mode="json")
+    data["modules"].append(
+        {
+            "key": "broken",
+            "actions": [{"kind": "click", "locator": {"selector": "#missing-tab"}}],
+            "ready": {"selector": "#identity"},
+            "fields": [
+                {
+                    "key": "value",
+                    "name": "value",
+                    "kind": "text",
+                    "source": {"kind": "dom", "locator": {"selector": "#identity"}},
+                }
+            ],
+        }
+    )
+    config = PlatformRegistry.model_validate(data)
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        context = await browser.new_context()
+        await context.route("**/*", route)
+        adapter = BrowserAdapter(context, config, "account", guard, live=False)
+        ctx = context_of(plan)
+        creator = CreatorRef(
+            platform_creator_id="A",
+            verified_homepage="https://synthetic.invalid/creator/A",
+        )
+        async with adapter.profile(creator, ctx):
+            with pytest.raises(CollectorError) as error:
+                await adapter.collect_module("broken", creator, ctx)
+        assert error.value.code == "MODULE_COLLECTION_FAILED"
+        assert error.value.reason == "MODULE_ACTION_TIMEOUT:broken"
         await adapter.close()
         await browser.close()

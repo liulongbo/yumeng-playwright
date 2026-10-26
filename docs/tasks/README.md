@@ -1,5 +1,25 @@
 # 开发任务索引
 
+# 2026-10-26 DIAG-03：24 位任务在第 20 位失败与「继续采集」失败修复（已完成）
+
+[DIAG-03](DIAG-03.md) 定位任务 `8013a009-c058-441e-a99f-9976c7d48df0` 的真实失败位置：
+第 20 位达人 `7057631599210266654` 的 `fans` 模块注册动作
+`.el-tabs__item:has-text('连接用户')` 两次独立页面加载均 90s 超时；worker 将其归为
+`PLATFORM_PAGE_CHANGED:BROWSER_ACTION_FAILED`，engine 未做模块局部化，任务在第 2 页搜索前
+`FAILED`。续采时已计数 `collecting` 候选被重入，再次在同一动作失败。**不是分页/游标问题**：
+checkpoint 只有 20 个候选、1 个搜索操作，第 2 页请求从未发起；`024f879` 的浏览器错误分类变更是
+失败表现的近期促成变更，`61f76d2` 的续采缺口是续采失败的直接原因。最小修复：非 basic profile
+模块动作/就绪超时降级为 `MODULE_COLLECTION_FAILED`（挑战/登录/session/lease/identity 仍 fatal）；
+继续采集把已计数 `pending`/`collecting` 统一收敛为 `done`，不重访已入库达人。真实 E2E 通过
+Playwright MCP + Chrome 对原任务点击「继续采集（还差 4 位）」：22:06—22:17 从 20/24 到
+**24/24 `PARTIAL_COMPLETED`**，第 2 页真实入库 4 位（position 20—23），`task_creators=24`、
+无重复、Chrome History 仅 4 个新主页、前端 24 行且不再显示执行失败。离线：unit 327、contract 40、
+integration 108+1 skip、e2e 9、frontend 89+build、mypy 36 files、ruff 通过。未提交 Git。
+报告：[DIAG-03 修复报告](../evidence/DIAG-03-24-creator-page-boundary-fix-2026-10-26.md)；证据：
+[continue-evidence.json](../evidence/assets/diag03/continue-evidence.json) 与
+`docs/evidence/assets/diag03/` 截图。残余：资料完整 6/24、精选完整 0/24（既有 F05/F06 口径）；第
+20 位 `fans` DOM 级原因与模块超时真实首跑未重放；全新 24 首跑未重复执行。
+
 # 2026-10-24 RETRY-01：「继续采集」与「补采缺失字段」双语义拆分（进行中：F1/F2/F5 待修；已提交 `61f76d2`、合并 `fa28876`）
 
 [RETRY-01](RETRY-01.md) 把单一「重试失败步骤」拆成两种业务行为：有效数未达目标时只补足数量、
@@ -288,6 +308,12 @@ B3/C 最终证明自动选号在当前 Playwright 环境中不可靠：目标条
 | ID | 标题 | 状态 | 卡片 |
 |---|---|---|---|
 | UI-01 | 前端页面优化（登录密码可见性、导航菜单、任务内达人、完成时间、达人详情统一） | 待验收（真实采集链路完成时间写入未验证） | [UI-01.md](UI-01.md) |
+
+## 2026-10-26 采集任务第 20 位失败与续采修复
+
+| ID | 标题 | 状态 | 卡片 |
+|---|---|---|---|
+| DIAG-03 | 24 位任务在第 20 位失败与「继续采集」失败修复 | 已完成（24/24 有效；资料/精选完整度为既有缺口） | [DIAG-03.md](DIAG-03.md) |
 
 ## 2026-10-15 采集请求行为专项诊断
 

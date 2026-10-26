@@ -136,6 +136,7 @@ def test_continue_leaves_every_counted_creator_alone(plan):
     uncollected = candidate("5", state="pending", valid=False, complete=False)
     failed = candidate("6", state="failed", valid=False, complete=False)
     invalid = candidate("7", state="invalid", valid=False, complete=False)
+    collecting_uncounted = candidate("8", state="collecting", valid=False, complete=False)
     record = task(
         plan,
         valid_count=4,
@@ -147,6 +148,7 @@ def test_continue_leaves_every_counted_creator_alone(plan):
             uncollected,
             failed,
             invalid,
+            collecting_uncounted,
         ],
         target=10,
     )
@@ -155,13 +157,15 @@ def test_continue_leaves_every_counted_creator_alone(plan):
 
     assert done_complete.state == "done"
     assert done_incomplete.state == "done"
-    # The leftover of an earlier retry is settled instead of opening the homepage again.
+    # A counted creator is never re-opened by a quantity-only retry, even when its last attempt
+    # was interrupted while collecting; the missing modules wait for a later backfill.
     assert pending_incomplete.state == "done"
-    # A creator interrupted mid-flight is finished by the engine (existing resume behaviour).
-    assert collecting_incomplete.state == "collecting"
+    assert collecting_incomplete.state == "done"
     assert uncollected.state == "pending"
     assert failed.state == "pending"
     assert invalid.state == "invalid"
+    # An uncounted creator that was mid-collection is still the candidate to finish.
+    assert collecting_uncounted.state == "pending"
 
 
 def test_backfill_only_requeues_counted_incomplete_creators(plan):
