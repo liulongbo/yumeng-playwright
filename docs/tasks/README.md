@@ -20,6 +20,10 @@ integration 108+1 skip、e2e 9、frontend 89+build、mypy 36 files、ruff 通过
 `docs/evidence/assets/diag03/` 截图。残余：资料完整 6/24、精选完整 0/24（既有 F05/F06 口径）；第
 20 位 `fans` DOM 级原因与模块超时真实首跑未重放；全新 24 首跑未重复执行。
 
+# 2026-10-26 OPS-03：本机全栈服务重启（已完成，跳过自动更新）
+
+[OPS-03](OPS-03.md) 按用户要求重启 API、P1 intake-worker、P2 collection-worker 与前端 Vite，保留 PostgreSQL/Redis/Temporal 与业务数据不变，**未启动定时更新调度器**。最终 API `24614` / intake `24651` / collection `25026` / frontend `24698`，`GET /api/auth/me` 401、前端 200、两队列各 1 个新鲜消费者；`update-scheduler` 重启前后均未运行。只读核对 `root_tasks` 112 条全部终态、19:55 后无状态变更，`unit-local-mac-02` 为 `READY` 且无租约，确认重启未影响在途任务。`restart` 因旧 Worker 45 秒心跳窗口使 collection 首次以 `DUPLICATE_WORKER_FOR_UNIT` 退出，等待窗口后再次 `up` 恢复（`generation=8`）。未改代码/契约/迁移/单元配置，未发起真实采集；`media-a` 登录、业务读接口、封面与页面渲染本轮未复测。证据：[OPS-03 重启与可达性验证](../evidence/OPS-03-local-restart-2026-10-26.md)。
+
 # 2026-10-24 RETRY-01：「继续采集」与「补采缺失字段」双语义拆分（进行中：F1/F2/F5 待修；已提交 `61f76d2`、合并 `fa28876`）
 
 [RETRY-01](RETRY-01.md) 把单一「重试失败步骤」拆成两种业务行为：有效数未达目标时只补足数量、
