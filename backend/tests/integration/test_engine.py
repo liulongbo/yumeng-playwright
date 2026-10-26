@@ -773,3 +773,124 @@ async def test_security_challenge_partial_completion_rejects_a_direct_retry(repo
         repo.command(task.root_task_id, "retry", task.version, "test")
     assert error.value.code == "INVALID_FORM"
     assert error.value.reason == "ACTION_NOT_ALLOWED"
+
+
+class TimeoutOnTwentiethFans(CountingAdapter):
+    """The last creator of page one loses an optional module, like 8013a009's 20th creator."""
+
+    async def collect_module(self, key, creator, ctx, row_covers=None):
+        if creator.platform_creator_id == self.ids[19] and key == "fans":
+            raise CollectorError("MODULE_COLLECTION_FAILED", "MODULE_ACTION_TIMEOUT:fans")
+        return await super().collect_module(key, creator, ctx, row_covers)
+
+
+class AbortAfterValidOnThird(SyntheticAdapter):
+    """Leaves creator 3 counted but mid-collection, before page two is ever searched."""
+
+    async def collect_module(self, key, creator, ctx, row_covers=None):
+        if creator.platform_creator_id == "3" and key == "fans":
+            raise CollectorError("PLATFORM_PAGE_CHANGED", "SYNTHETIC_ABORT")
+        return await super().collect_module(key, creator, ctx, row_covers)
+
+
+async def test_target_at_page_capacity_stops_without_page_two(repo, plan):
+    ctx = start(repo, plan, 20)
+    adapter = CountingAdapter([str(i) for i in range(25)], page_size=20)
+    await Engine(repo, adapter, ctx).run()
+
+    task = repo.get(ctx.root_task_id)
+    assert task.valid_count == 20
+    assert len(adapter.visits) == 20
+    assert adapter.searches == 1
+    assert len(task.checkpoint.candidates) == 20
+
+
+async def test_target_24_crosses_page_boundary(repo, plan):
+    ctx = start(repo, plan, 24)
+    adapter = CountingAdapter([str(i) for i in range(30)], page_size=20)
+    await Engine(repo, adapter, ctx).run()
+
+    task = repo.get(ctx.root_task_id)
+    assert task.valid_count == 24
+    assert len(adapter.visits) == 24
+    assert adapter.searches == 2
+    assert len(task.checkpoint.candidates) == 30
+    identities = {candidate.ref.platform_creator_id for candidate in task.checkpoint.candidates}
+    assert len(identities) == 30
+    assert task.profile_complete_count == 24
+
+
+async def test_module_timeout_on_page_boundary_still_reaches_target(repo, plan):
+    ctx = start(repo, plan, 24)
+    adapter = TimeoutOnTwentiethFans([str(i) for i in range(30)], page_size=20)
+    assert await Engine(repo, adapter, ctx).run() == TaskStatus.PARTIAL_COMPLETED
+
+    task = repo.get(ctx.root_task_id)
+    assert task.valid_count == 24
+    assert len(adapter.visits) == 24
+    assert adapter.searches == 2
+    assert task.profile_complete_count == 23
+    twentieth = task.checkpoint.candidates[19]
+    assert twentieth.state == "done"
+    assert twentieth.valid is True
+    assert twentieth.failure_reason == "MODULE_COLLECTION_FAILED"
+    assert "fans" in twentieth.modules
+    assert twentieth.modules["fans"].complete is False
+
+
+async def test_continue_retry_skips_counted_collector_and_searches_page_two(repo, plan):
+    ctx = start(repo, plan, 5)
+    first = AbortAfterValidOnThird(["1", "2", "3", "4", "5"], page_size=3)
+    engine = Engine(repo, first, ctx)
+    with pytest.raises(CollectorError):
+        await engine.run()
+    engine.record_error(CollectorError("PLATFORM_PAGE_CHANGED", "SYNTHETIC_ABORT"))
+
+    old = repo.get(ctx.root_task_id)
+    assert old.state == TaskStatus.FAILED
+    assert old.valid_count == 3 and old.target_count == 5
+    assert len(old.checkpoint.candidates) == 3
+    assert old.checkpoint.candidates[2].valid is True
+    assert old.checkpoint.candidates[2].state == "collecting"
+    first_snapshots = snapshots(repo, ctx.root_task_id)
+    assert first_snapshots == 3
+
+    repo.release(
+        "unit",
+        ctx.attempt_id,
+        ctx.lease_generation,
+        stopped=True,
+        disposition=ReleaseDisposition.VERIFIED_READY,
+    )
+    repo.command(old.root_task_id, "retry", old.version, "test")
+    task = repo.get(old.root_task_id)
+    generation, _ = repo.acquire("unit", task.attempt_id)
+    retry_ctx = ctx.model_copy(
+        update={"attempt_id": task.attempt_id, "lease_generation": generation}
+    )
+
+    retry = CountingAdapter(["1", "2", "3", "4", "5"], page_size=3)
+    await Engine(repo, retry, retry_ctx).run()
+
+    current = repo.get(old.root_task_id)
+    assert retry.visits == ["4", "5"]
+    assert "3" not in retry.visits
+    assert retry.searches == 1
+    assert current.valid_count == 5
+    assert current.profile_complete_count == 4
+    assert current.state == TaskStatus.PARTIAL_COMPLETED
+    assert snapshots(repo, ctx.root_task_id) == first_snapshots + 2
+
+
+async def test_target_24_with_22_available_stops_as_exhausted(repo, plan):
+    ctx = start(repo, plan, 24)
+    adapter = CountingAdapter([str(i) for i in range(22)], page_size=20)
+    await Engine(repo, adapter, ctx).run()
+
+    task = repo.get(ctx.root_task_id)
+    assert task.valid_count == 22
+    assert task.checkpoint.exhausted is True
+    assert task.state == TaskStatus.PARTIAL_COMPLETED
+    assert task.failure_reason == "SEARCH_EXHAUSTED"
+    assert len(adapter.visits) == 22
+    assert adapter.searches == 2

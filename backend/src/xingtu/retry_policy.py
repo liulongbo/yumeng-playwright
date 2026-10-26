@@ -64,11 +64,11 @@ def retryable_creator_count(task: TaskRecord) -> int:
 def requeue_for_retry(task: TaskRecord, scope: RetryScope) -> None:
     """Repair the retry queue for one segment without touching what the user asked to keep.
 
-    ``continue`` only revives candidates that are not counted yet.  A counted creator that is
-    still ``pending`` is the leftover of an earlier retry (the defect this policy replaces), so it
-    is settled to ``done`` and left for a later backfill instead of opening its homepage again.
-    A counted creator that is ``collecting`` was interrupted mid-flight; the engine finishes it,
-    which is the existing resume behaviour.
+    ``continue`` only revives candidates that are not counted yet.  Every counted creator is
+    settled to ``done`` for this segment - including one interrupted while ``collecting`` - so the
+    user's quantity goal never re-opens an already-counted creator's homepage.  Its missing modules
+    wait for a later backfill; the engine still resumes a mid-flight creator inside the same
+    attempt, which is a different path.
 
     ``backfill`` only revives counted creators with an incomplete step.  Uncounted candidates are
     left exactly as they are: the target is already met, so re-queuing them would neither collect
@@ -78,7 +78,7 @@ def requeue_for_retry(task: TaskRecord, scope: RetryScope) -> None:
     for candidate in task.checkpoint.candidates:
         if scope is RetryScope.CONTINUE:
             if candidate.valid:
-                if candidate.state == "pending":
+                if candidate.state in {"pending", "collecting"}:
                     candidate.state = "done"
                 continue
             if candidate.state in {"pending", "collecting", "failed"}:

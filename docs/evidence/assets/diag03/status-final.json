@@ -1,0 +1,81 @@
+{
+  "root_task_id": "8013a009-c058-441e-a99f-9976c7d48df0",
+  "task_kind": "collection",
+  "status": "PARTIAL_COMPLETED",
+  "stage": "部分完成",
+  "version": 1901,
+  "created_at": "2026-10-26T20:55:34.440890+08:00",
+  "updated_at": "2026-10-26T22:17:21.364913+08:00",
+  "completed_at": "2026-10-26T21:30:50.021242+08:00",
+  "created_by": "1d1221b5-bab8-4af1-b2f0-ea33da31d041",
+  "created_by_name": "媒介 A",
+  "source": "product",
+  "keyword": "游戏解说",
+  "counts": {
+    "target_count": 24,
+    "discovered_count": 40,
+    "valid_count": 24,
+    "profile_complete_count": 6,
+    "featured_complete_count": 0,
+    "failed_count": 0
+  },
+  "allowed_actions": [
+    "retry"
+  ],
+  "failure_reason": "PROFILE_SCOPE_INCOMPLETE",
+  "requirement": {
+    "schema_version": "requirement_form.v2",
+    "platform": "douyin_xingtu",
+    "keyword": "游戏解说",
+    "creator_types": [],
+    "followers": null,
+    "creator_gender": null,
+    "creator_regions": [],
+    "creator_education": null,
+    "yellow_v_certification": null,
+    "connection_users": null,
+    "viewer_profile": null,
+    "fan_profile": null,
+    "quote": null,
+    "sort_key": null,
+    "target_count": 24
+  },
+  "capability_version": "xingtu-ad-creator-square-v3",
+  "plan": {
+    "schema_version": "filter_plan.v2",
+    "platform": "douyin_xingtu",
+    "capability_version": "xingtu-ad-creator-square-v3",
+    "target_count": 24,
+    "filters": [
+      {
+        "field": "keyword",
+        "operator": "eq",
+        "value": "游戏解说",
+        "source_fields": [
+          "keyword"
+        ],
+        "unit": null,
+        "currency": null,
+        "cooperation_form": null
+      }
+    ],
+    "sort": {
+      "key": "score"
+    },
+    "validation_errors": []
+  },
+  "field_errors": [],
+  "origin_root_task_id": null,
+  "challenge": null,
+  "intake": null,
+  "update_targets": [],
+  "retry_plan": {
+    "scope": "backfill",
+    "remaining_to_target": 0,
+    "incomplete_valid_count": 18,
+    "retryable_creator_count": 24,
+    "search_exhausted": false,
+    "last_retry_at": "2026-10-26T22:06:48.769733+08:00",
+    "changed_since_last_retry": 4
+  }
+}

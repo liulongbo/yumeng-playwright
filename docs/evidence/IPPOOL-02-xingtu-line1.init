@@ -1,0 +1,29 @@
+#!/bin/sh /etc/rc.common
+# IPPOOL-02 line 1 boot hook. Runs after network is up, then the line script
+# waits for the USB modem and creates ns-sim1/veth/dnsmasq/tinyproxy.
+
+START=99
+STOP=10
+
+boot() {
+    /root/xingtu-line1.sh >>/tmp/xingtu-line1.log 2>&1 &
+}
+
+start() {
+    boot
+}
+
+stop() {
+    for f in /tmp/xingtu-tinyproxy.pid /tmp/xingtu-dnsmasq.pid \
+             /tmp/tinyproxy-ns1.pid /tmp/dnsmasq-ns1.pid; do
+        if [ -f "$f" ]; then
+            p=$(cat "$f" 2>/dev/null || true)
+            if [ -n "$p" ]; then
+                kill "$p" 2>/dev/null
+            fi
+            rm -f "$f"
+        fi
+    done
+    ip netns delete ns-sim1 2>/dev/null
+    ip link delete veth-lan1 2>/dev/null
+}

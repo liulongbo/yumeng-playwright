@@ -1,5 +1,29 @@
 # 开发任务索引
 
+# 2026-10-26 DIAG-03：24 位任务在第 20 位失败与「继续采集」失败修复（已完成）
+
+[DIAG-03](DIAG-03.md) 定位任务 `8013a009-c058-441e-a99f-9976c7d48df0` 的真实失败位置：
+第 20 位达人 `7057631599210266654` 的 `fans` 模块注册动作
+`.el-tabs__item:has-text('连接用户')` 两次独立页面加载均 90s 超时；worker 将其归为
+`PLATFORM_PAGE_CHANGED:BROWSER_ACTION_FAILED`，engine 未做模块局部化，任务在第 2 页搜索前
+`FAILED`。续采时已计数 `collecting` 候选被重入，再次在同一动作失败。**不是分页/游标问题**：
+checkpoint 只有 20 个候选、1 个搜索操作，第 2 页请求从未发起；`024f879` 的浏览器错误分类变更是
+失败表现的近期促成变更，`61f76d2` 的续采缺口是续采失败的直接原因。最小修复：非 basic profile
+模块动作/就绪超时降级为 `MODULE_COLLECTION_FAILED`（挑战/登录/session/lease/identity 仍 fatal）；
+继续采集把已计数 `pending`/`collecting` 统一收敛为 `done`，不重访已入库达人。真实 E2E 通过
+Playwright MCP + Chrome 对原任务点击「继续采集（还差 4 位）」：22:06—22:17 从 20/24 到
+**24/24 `PARTIAL_COMPLETED`**，第 2 页真实入库 4 位（position 20—23），`task_creators=24`、
+无重复、Chrome History 仅 4 个新主页、前端 24 行且不再显示执行失败。离线：unit 327、contract 40、
+integration 108+1 skip、e2e 9、frontend 89+build、mypy 36 files、ruff 通过。未提交 Git。
+报告：[DIAG-03 修复报告](../evidence/DIAG-03-24-creator-page-boundary-fix-2026-10-26.md)；证据：
+[continue-evidence.json](../evidence/assets/diag03/continue-evidence.json) 与
+`docs/evidence/assets/diag03/` 截图。残余：资料完整 6/24、精选完整 0/24（既有 F05/F06 口径）；第
+20 位 `fans` DOM 级原因与模块超时真实首跑未重放；全新 24 首跑未重复执行。
+
+# 2026-10-26 OPS-03：本机全栈服务重启（已完成，跳过自动更新）
+
+[OPS-03](OPS-03.md) 按用户要求重启 API、P1 intake-worker、P2 collection-worker 与前端 Vite，保留 PostgreSQL/Redis/Temporal 与业务数据不变，**未启动定时更新调度器**。最终 API `24614` / intake `24651` / collection `25026` / frontend `24698`，`GET /api/auth/me` 401、前端 200、两队列各 1 个新鲜消费者；`update-scheduler` 重启前后均未运行。只读核对 `root_tasks` 112 条全部终态、19:55 后无状态变更，`unit-local-mac-02` 为 `READY` 且无租约，确认重启未影响在途任务。`restart` 因旧 Worker 45 秒心跳窗口使 collection 首次以 `DUPLICATE_WORKER_FOR_UNIT` 退出，等待窗口后再次 `up` 恢复（`generation=8`）。未改代码/契约/迁移/单元配置，未发起真实采集；`media-a` 登录、业务读接口、封面与页面渲染本轮未复测。证据：[OPS-03 重启与可达性验证](../evidence/OPS-03-local-restart-2026-10-26.md)。
+
 # 2026-10-24 RETRY-01：「继续采集」与「补采缺失字段」双语义拆分（进行中：F1/F2/F5 待修；已提交 `61f76d2`、合并 `fa28876`）
 
 [RETRY-01](RETRY-01.md) 把单一「重试失败步骤」拆成两种业务行为：有效数未达目标时只补足数量、
@@ -41,9 +65,9 @@ Contract 37、E2E 9、前端 84、F10 UI 34/34。Windows 实机 NOT TESTED，结
 [macOS/Windows 本机运行](../F10-local-macos-windows.md)。当前 `unit-local-mac-02` 因自然 Challenge
 保持 `NEEDS_VERIFICATION / browser STOPPED`，再次真实采集前需人工合法验证。
 
-# 2026-10-24 IPPOOL-02：OpenWrt 3 路蜂窝出口搭建（进行中：Phase 0 盘点待执行）
+# 2026-10-24 IPPOOL-02：OpenWrt 3 路蜂窝出口搭建（进行中：Phase 0 部分完成）
 
-[IPPOOL-02](IPPOOL-02.md) 按 IPPOOL-01 方案 C 开始施工：J1900 作为旁路主机（`192.168.3.2`，关闭 LAN DHCP），3 个 netns（`ns-sim1/2/3`）+ 官方 tinyproxy（HTTP BasicAuth）+ 每 netns dnsmasq + veth 固定 `192.168.3.201/202/203:6001`；netns 只保留蜂窝默认路由，断线失败关闭。施工手册：[OpenWrt 3 路蜂窝出口施工手册](../evidence/IPPOOL-02-openwrt-build-runbook-2026-10-24.md)。当前只完成手册，**未执行 J1900 命令、未改网络/执行单元/代码、未创建 Chrome profile**；等待用户执行 Phase 0 只读盘点（OpenWrt 版本、`ip -br addr`/`route`、`uci show network/dhcp`、`opkg`、`lsusb`/`dmesg`、单台 USB 接口名、主路由 DHCP 池）。先单条 PASS，再复制 3 条；P0 性能待真实采集授权。
+[IPPOOL-02](IPPOOL-02.md) 实机确认：OpenWrt **25.12.5 x86_64**，包管理器 **apk**；J1900 是**路由器**，WAN `eth2 192.168.0.178/24` → `192.168.0.1`，LAN `br-lan 192.168.1.1/24`；Mac `en6` 已设 `192.168.1.210/24`；**换到 LAN1 后 `ping 192.168.1.1` 0% 丢包、0.66–0.77 ms**，二层已通；LAN2 不通，后续固定 LAN1；ARP `.210` → MAC `00:e0:4c:68:03:dc`；已加 dnsmasq 上游 `223.5.5.5`，`nslookup openwrt.org` 成功；`ip route` 仍有默认路由（eth1 192.168.3.1 / eth2 192.168.0.1）；`ping 223.5.5.5` 0% 丢包（23.6–24.4 ms），WAN 正常；`udhcpc no lease` 不阻塞。计划修正：**不改 LAN/DHCP**，DHCP 池 `.100–.249`，代理用池外 `192.168.1.250/251/252:6001`；BusyBox `ip` 不支持 `-br`，需 `apk add ip-full`；`tinyproxy`/`ip-full`/`kmod-veth` 在 25.12.5 feed 可用。工具已装：`apk update` 11250 packages、`ip-full 6.18.0-r2`、`tinyproxy 1.11.1`；`ip -4 -br addr` 确认 `br-lan 192.168.1.1/24`、`eth1 192.168.3.66/24`、`eth2 192.168.0.178/24`；`ls /sys/class/net/br-lan/brif` → `eth0`，LAN1 在网桥；USB `19d2:1405`（MF823D/ECM）由 `cdc_ether` 绑定；`eth2` 已确认是 Modem（MAC `34:4b:50:00:00:00`、USB device `2-2.1:1.0`），但它同时持有 WAN 的 `192.168.0.178/24` + `default via 192.168.0.1`，属于抢名后继承静态配置；host 默认仍有 `via 192.168.3.1 dev eth1`。已把 `eth2` 移入 `ns-sim1`、改名 `wwan0`、flush；host `eth2` 消失，仍 `default via 192.168.3.1 dev eth1`，`ping 223.5.5.5` 0% 丢包（24.08–24.34 ms）；netns 内 `wwan0` UP、无 IP、route 空。`wwan0` DHCP 成功：`192.168.0.179/24`，server `192.168.0.1`，default via `192.168.0.1`；netns `ping 223.5.5.5` 0% 丢包（53–254 ms）；host DNS 已恢复。`ns-sim1` 存在；`veth-lan1` 在 host、`master br-lan`、`link-netns ns-sim1`；`veth-ns1` 在 netns 内；`addr add 192.168.1.250/24` 报 `Address already assigned`（地址已在），`link set up` 成功，`br-lan: port 2(veth-lan1) entered forwarding state`。`ip -n ns-sim1 route` 默认仍走 `wwan0`，`192.168.1.0/24 dev veth-ns1`；Mac `ping 192.168.1.250` 收到 `1.023 ms` 回复。netns dnsmasq 已用 `--server=223.5.5.5` 启动；`nslookup openwrt.org 127.0.0.1` 返回 `64.226.122.113`/IPv6，DNS 走 `wwan0`。tinyproxy 配置已改为 `PidFile "..."`/`LogFile "..."` 并启动成功，pid `13566`；`netstat-ltn` 少空格是命令错误，不是进程问题。Mac 代理 HTTP 已成功：`223.160.113.88`（中国湖南 chinabtn.com），veth/tinyproxy/dnsmasq/wwan0 全链路通。Mac 直连 `120.228.1.191`（chinamobile.com），HTTPS 代理 `223.160.112.88`，CONNECT/TLS 正常；代理与直连出口不同，第 1 个蜂窝出口网络层完成。无直连回退已通过：`kill 13566` 后 Mac `curl -x ...` 返回 `(7) Failed to connect ... 6001`，无 IP；重启 tinyproxy 后恢复；第 1 个蜂窝出口网络层完整（出网/DNS/代理/fail-closed）。line1 持久化脚本/init 已生成并通过 `sh -n`：`docs/evidence/IPPOOL-02-xingtu-line1.sh`、`.init`；Mac 临时 HTTP `http://192.168.1.210:8765/`。J1900 已用无选项 `wget` 成功下载 `/root/xingtu-line1.sh`（5318 B）与 `/etc/init.d/xingtu-line1`（704 B）；`chmod +x`、`sh -n` 通过。手工运行日志确认 `18:21:11 OK ns=ns-sim1 veth=192.168.1.250/24 proxy=192.168.1.250:6001`；`enable` 已执行并 `reboot`。硬关机再上电后 J1900 已启动到 `Please press Enter to activate this console.`，LAN1 绿灯+黄灯闪；启动日志见 `wwan0: renamed from eth2`、`br-lan: port 2(veth-lan1) forwarding`。Mac `en6` 已 `status: active`、`media: 1000baseT full-duplex`、`inet 192.168.1.210/24`。line1 持久化验证通过；2026-10-25 22:34 再次验证 `ping .1` 0.583–0.729 ms、`ping .250` 0.721–0.795 ms、代理 `223.160.114.4`。Mac 服务顺序已把 Wi-Fi 置顶：`route default` → `192.168.3.1`/`en0`，`route 192.168.1.250` → `en6`；en6 启用时普通上网/代理均正常。line2 定位完成：`ping 192.168.0.1` 0% 丢包，但 `ping 223.5.5.5` 100% 丢包、`nslookup 223.5.5.5` 超时；J1900 line2 netns/veth/DHCP 正常，新 SIM/随身 WiFi 无蜂窝数据（未激活/未注册/APN/信号），tinyproxy 未启动。**2026-10-25 23:50 今日暂停**，J1900 可 `poweroff`；line2 init 未安装，恢复时先验证 line1，再让第 2 台随身 WiFi 恢复数据后重跑 line2；line2/3 完成后再 Chrome profile；未创建。短命令清单：[实际环境版](../evidence/IPPOOL-02-short-commands-2026-10-24.md)；施工手册：[通用参考](../evidence/IPPOOL-02-openwrt-build-runbook-2026-10-24.md)。当前未改网络/代码/配置、未创建 Chrome profile。
 
 # 2026-10-22 IPPOOL-01：OpenWrt 多 IP 池建设与采集接入可行性评估（待验收）
 
@@ -288,6 +312,12 @@ B3/C 最终证明自动选号在当前 Playwright 环境中不可靠：目标条
 | ID | 标题 | 状态 | 卡片 |
 |---|---|---|---|
 | UI-01 | 前端页面优化（登录密码可见性、导航菜单、任务内达人、完成时间、达人详情统一） | 待验收（真实采集链路完成时间写入未验证） | [UI-01.md](UI-01.md) |
+
+## 2026-10-26 采集任务第 20 位失败与续采修复
+
+| ID | 标题 | 状态 | 卡片 |
+|---|---|---|---|
+| DIAG-03 | 24 位任务在第 20 位失败与「继续采集」失败修复 | 已完成（24/24 有效；资料/精选完整度为既有缺口） | [DIAG-03.md](DIAG-03.md) |
 
 ## 2026-10-15 采集请求行为专项诊断
 
