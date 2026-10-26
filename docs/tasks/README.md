@@ -14,7 +14,8 @@ checkpoint 只有 20 个候选、1 个搜索操作，第 2 页请求从未发起
 Playwright MCP + Chrome 对原任务点击「继续采集（还差 4 位）」：22:06—22:17 从 20/24 到
 **24/24 `PARTIAL_COMPLETED`**，第 2 页真实入库 4 位（position 20—23），`task_creators=24`、
 无重复、Chrome History 仅 4 个新主页、前端 24 行且不再显示执行失败。离线：unit 327、contract 40、
-integration 108+1 skip、e2e 9、frontend 89+build、mypy 36 files、ruff 通过。未提交 Git。
+integration 108+1 skip、e2e 9、frontend 89+build、mypy 36 files、ruff 通过。提交 `609c8db`，经 merge
+`bb29801` 合入 `main` 并推送。
 报告：[DIAG-03 修复报告](../evidence/DIAG-03-24-creator-page-boundary-fix-2026-10-26.md)；证据：
 [continue-evidence.json](../evidence/assets/diag03/continue-evidence.json) 与
 `docs/evidence/assets/diag03/` 截图。残余：资料完整 6/24、精选完整 0/24（既有 F05/F06 口径）；第

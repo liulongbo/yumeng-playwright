@@ -169,7 +169,8 @@ checkpoint 中 `processed_operations` 只有 1 个搜索操作、只有 20 个�
 ### 4.2 交付状态
 
 - 代码修复、测试、真实续采、任务卡与索引/总览/架构/DEC-019/RETRY-01 交叉引用已完成。
-- 未提交/推送 Git（未获明确提交授权）；改动文件：
+- 初版交付未提交/推送（当时未获提交授权）；2026-10-26 用户授权后提交 `609c8db`、
+  经 merge `bb29801` 合入 `main` 并推送。改动文件：
   `backend/src/xingtu/adapter.py`、`backend/src/xingtu/retry_policy.py`、
   `backend/tests/unit/test_retry_policy.py`、`backend/tests/contract/test_browser_flow.py`、
   `backend/tests/integration/test_engine.py`、`scripts/qa/diag03_e2e.py`，以及本报告与文档。
@@ -190,4 +191,6 @@ checkpoint 中 `processed_operations` 只有 1 个搜索操作、只有 20 个�
    仍为 0；属既有 F3/F06/封面缺口，非本轮范围。
 5. `completed_at` 仍为首次失败时间 `21:30:50`，而状态在 22:17:25 变为 `PARTIAL_COMPLETED`；
    页面「首次完成时间」按既有语义显示首次终态时间，未在本轮修改。
-6. 未提交/推送；如需提交，需用户明确授权。
+6. 初版未提交/推送；2026-10-26 已获授权并提交/合并（`609c8db` → merge `bb29801` → `main`）。
+   提交前复跑：unit 327、contract 40、integration 108+1 skip、e2e 9、frontend 89+build、
+   mypy 36 files、ruff 改动文件通过（契约/E2E 需 `PLAYWRIGHT_BROWSERS_PATH=.runtime/browsers`）。
