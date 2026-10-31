@@ -524,7 +524,14 @@ class ProductQueries:
 
     @staticmethod
     def _challenge_summary(task: TaskRecord | None) -> ChallengeSummary | None:
-        if not task or not task.checkpoint.challenge_count:
+        # Child-account selection is a custody event without a security-challenge counter: the
+        # worker records it only as a failure reason, so it must not be filtered out by the
+        # challenge_count gate (otherwise the operator never sees the hand-off panel).
+        account_selection = task is not None and task.failure_reason in {
+            "ACCOUNT_SELECTION_REQUIRED",
+            "ACCOUNT_SELECTION_TIMEOUT",
+        }
+        if not task or (not task.checkpoint.challenge_count and not account_selection):
             return None
         cp = task.checkpoint
         waiting_seconds = (
@@ -532,10 +539,6 @@ class ProductQueries:
             if cp.challenge_wait_started_at
             else 0
         )
-        account_selection = task.failure_reason in {
-            "ACCOUNT_SELECTION_REQUIRED",
-            "ACCOUNT_SELECTION_TIMEOUT",
-        }
         terminal_reason = (
             task.failure_reason
             if (task.failure_reason or "").startswith("SECURITY_CHALLENGE_") or account_selection
@@ -571,7 +574,9 @@ class ProductQueries:
             last_detected_at=cp.challenge_last_detected_at,
             wait_started_at=cp.challenge_wait_started_at,
             last_recovered_at=cp.challenge_last_recovered_at,
-            detected_count=cp.challenge_count,
+            # A recorded child-account requirement is itself one detected custody event even
+            # though it never increments the security-challenge counter.
+            detected_count=cp.challenge_count or (1 if account_selection else 0),
             recovery_count=cp.challenge_recovery_count,
             current_creator_id=cp.challenge_current_creator,
             completed_creator_count=completed,
