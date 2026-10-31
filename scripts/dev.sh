@@ -128,11 +128,13 @@ start_bg() {
 # 同一 profile 上打架。因此 up 采用接管而不是叠加：
 #   0 个 → 启动；1 个未记录 → 接管并记录 PID；被记录且存活 → 沿用；
 #   多个 → 只保留被记录（或最先存在的）一个，其余明确报告后结束。
+# 多栈并存时（例如聚星隔离栈 4192/4193），必须按单元配置区分，否则会把另一栈的
+# Worker 误判成本栈重复并结束它。
 worker_pattern() {
   case "$1" in
-    intake-worker) printf 'xingtu-product intake-worker' ;;
-    collection-worker) printf 'xingtu worker --config' ;;
-    update-scheduler) printf 'xingtu-product update-scheduler' ;;
+    intake-worker) printf 'xingtu-product intake-worker --unit-config %s' "$UNIT_CONFIG" ;;
+    collection-worker) printf 'xingtu worker --config %s' "$UNIT_CONFIG" ;;
+    update-scheduler) printf 'xingtu-product update-scheduler --unit-config %s' "$UNIT_CONFIG" ;;
   esac
 }
 

@@ -83,6 +83,10 @@
 |---|---|
 | `XINGTU_DATABASE_URL` | 业务库 DSN；未设置时 `xingtu` 命令返回 `STORAGE_UNAVAILABLE` |
 | `XINGTU_TEST_DATABASE_URL` | 集成/E2E 测试库 DSN；库名必须匹配 `xingtu_test*` |
+| `XINGTU_ENABLE_KUAISHOU_JUXING` | 磁力聚星入口 Feature Flag，默认 `0`；仅开关不足以绕过 verified 合同门禁 |
+| `XINGTU_JUXING_OBSERVED_CONTRACT_PATH` | 聚星阶段 A 能力证据元数据，默认 `contracts/kuaishou_juxing.observed.json`；不作为 live registry |
+| `XINGTU_JUXING_REGISTRY_PATH` | 聚星可执行能力合同，默认 `contracts/kuaishou_juxing.verified.json`；API、Intake Worker 与执行单元聚星绑定都读取它 |
+| `XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT` | 聚星单任务目标上限，默认 `3`（阶段 B 安全上限），取值 1–200；主站当前配置 `30`，超过返回 `KUAISHOU_JUXING_TARGET_ABOVE_LIMIT` |
 | `XINGTU_TEMPORAL_ADDRESS` | Temporal 地址，默认 `127.0.0.1:57233` |
 | `XINGTU_TEMPORAL_TEST_BINARY` | 固定本地测试服务器可执行文件，避免测试期下载 |
 | `PLAYWRIGHT_BROWSERS_PATH` | Chromium 安装目录，由 Makefile 固定为 `.runtime/browsers` |
@@ -233,6 +237,8 @@ make m3-up
 - **两个 Worker 都必须运行**：`make intake-worker`（P1 需求转换，队列 `xingtu-intake`）与 `make collection-worker`（P2 采集，队列 `xingtu-<unit>`）。缺 P1 会停在 `RECEIVED`，缺 P2 会停在 `QUEUED`。`make m3-up` 默认只启动 P1，采集需显式 `--with-collection`。
 - 未提供模型凭据时 `make m3-up` 会在前置自检阶段失败（`DEEPSEEK_API_KEY`），不会留下一个“看起来已启动但无人消费”的运行环境。
 - 未登录访问业务 API 与封面返回 401，跨任务读取封面返回 404，均为预期保护行为。
+- 统一达人库按 `platform` 读：`douyin_xingtu` 走既有 current/snapshot-index 表；`kuaishou_juxing` 从 `platform_creators.projection` + 最近一条 `creator_snapshots` 读取（无新增表）。聚星只接受省/市/粉丝区间/仅看完整与 `updated_at|followers` 排序；星图专属筛选会显式返回 `KUAISHOU_JUXING_LIBRARY_FILTER_UNSUPPORTED`，不会静默忽略。
+- 聚星手动更新、报价历史、精选集合与星图作品观测在 P0 不适用：对应达人库子资源返回 `KUAISHOU_JUXING_LIBRARY_<SCOPE>_NOT_APPLICABLE`，更新入口返回 `KUAISHOU_JUXING_UPDATE_NOT_SUPPORTED`；这些能力属于阶段 D。
 - **后端代码变更后必须重启 `xingtu-api`**（该入口无 `--reload`）。长期运行的旧进程持有旧 Pydantic 模型：新代码写入带新字段的检查点后（例如安全验证的 `challenge_*` 字段），旧进程读取该任务会因 `TaskRecord`/`checkpoint` 的 `extra_forbidden` 返回 500，而更早的任务仍正常。2026-10-10 本地联调中实际出现，重启为当前代码后同一任务恢复 200。
 - 同一端口只保留一个 API 进程：重复启动会以 `[Errno 48] address already in use` 退出（退出码 3）。先确认占用者（`lsof -nP -iTCP:8000 -sTCP:LISTEN`），不要并跑两个后端。`make m3-up` 会复用已在 8000 上通过 healthcheck 的 API 进程。
 - Worker 进程日志写入 `.runtime/logs/`（`api.log`、`intake-worker.log`、`collection-worker.log`、`update-scheduler.log`、`frontend.log`）；Intake Worker 启动与派发失败都会记录，消费者不再可能“静默消失”。`update-scheduler` 只读写数据库，不运行只影响定时更新。
@@ -289,8 +295,65 @@ npm --prefix frontend run dev        # http://127.0.0.1:5173
 - 实现为 [scripts/dev.sh](../scripts/dev.sh)，根目录 [dev.sh](../dev.sh) 只是转发；进程仍由既有入口启动，前置自检仍调用 `scripts/m3_up.py --check`，没有第二套真相，`Makefile` 未改动。
 - 默认启动四个进程：API（`xingtu-api`）、P1 Intake Worker、P2 采集 Worker（`xingtu worker --config`）、前端（`npm run dev`）。缺 P1 任务停在 `RECEIVED`，缺 P2 停在 `QUEUED`，缺前端没有页面。
 - **接管而非叠加**：已在监听的 API/前端与已在运行的 Worker 会被记录 PID 后复用；同一单元出现多个 Worker 时只保留一个并结束其余（重复 Intake 会重复派发，重复采集会在同一 profile 上互斥）。因此 `up` 可重复执行。
+- **多栈并存**（2026-10-31 OPS-05）：Worker 识别按 `UNIT_CONFIG` 限定；主站 `status/up/restart` 不会把聚星隔离栈（4192/4193）的同名 Worker 误判为重复或结束它。
 - Worker 通过 `pgrep -f` 与 `lsof -c Python -F p` 取交集识别；只看命令行字符串会把本脚本自身的 shell 误判成 worker。
 - `stop` 递归结束子进程（`npm run dev` 的 Vite 是子进程，只 kill npm 会留下占用 5173 的孤儿），只处理本脚本记录过的 PID；端口被外部进程占用时打印占用者 PID 而不擅自 kill。
 - 不启停 Docker 依赖服务；依赖未起时由前置自检的 `DATABASE_REACHABLE` / `TEMPORAL_REACHABLE` 报错。依赖停止仍用 `make stop`（或 `./.runtime/dev-up.sh stop`）。
 - 采集 Worker 会打开真实 Chrome 并调用真实星图；`up` 默认包含它。页面地址 `http://127.0.0.1:5173/`，登录账号见 `.runtime/qa-credentials.env`（不写入仓库）。
 - 验证记录（前置自检、完整停启、幂等接管、真实 Chrome 页面渲染）见 [DEV-01 证据](evidence/DEV-01-launcher-2026-10-14.md)与 [DEV-01 卡片](tasks/DEV-01.md)。
+
+## 2026-10-31 主站双平台启用（JUXING-MAIN-01）
+
+> 自 2026-10-31 起，**5173 主站本身已同时启用巨量星图与磁力聚星**，不再需要 4193 隔离栈才能使用聚星。下文 OPS-05 隔离栈说明仅保留为历史/回归入口。
+
+主站启动（本机当前使用跳过自动更新调度器的变体）：
+
+```bash
+./dev.sh up                    # 或 ./.runtime/dev-no-upd.sh up（不启动 update-scheduler）
+./dev.sh status
+./dev.sh stop
+```
+
+主站双平台的关键配置（均在本机私有 `.runtime/`，不入 Git）：
+
+| 项 | 值 |
+|---|---|
+| `.runtime/m3-app.env` | `XINGTU_ENABLE_KUAISHOU_JUXING=1`；`XINGTU_JUXING_REGISTRY_PATH=<repo>/contracts/kuaishou_juxing.verified.json`；`XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT=30` |
+| `.runtime/units/local-dev-mac-02.json` | 顶层星图绑定不变；`platform_bindings` 增加 `kuaishou_juxing`（账号 `60821564`、Profile `.runtime/profiles/unit-local-mac-02-juxing`、聚星 registry） |
+| 主库 `execution_unit_platform_bindings` | Collection Worker 启动时幂等注册；同单元双绑定 |
+| 数据库 | `xingtu_development`（PG 55432）；迁移 20；无新迁移 |
+| Temporal/Redis | `127.0.0.1:57233` / Redis 56379 DB0 |
+| 自动更新调度器 | 本机仍保持关闭（`update-scheduler` 不启动） |
+
+验证双平台：
+
+```bash
+# 登录后（media-a，口令见 .runtime/qa-credentials.env）：
+curl -s -b <cookies> http://127.0.0.1:8000/api/platforms
+curl -s -b <cookies> http://127.0.0.1:8000/api/platforms/kuaishou_juxing/capabilities
+curl -s -b <cookies> http://127.0.0.1:8000/api/execution-units
+curl -s -b <cookies> 'http://127.0.0.1:8000/api/tasks?platform=kuaishou_juxing&limit=5'
+```
+
+- 期望：两平台 `enabled=true`；聚星能力 `target_count_max=30`；`unit-local-mac-02` platforms 含两平台；任务中心「全部/巨量星图/磁力聚星」筛选可用。
+- 关闭聚星：`XINGTU_ENABLE_KUAISHOU_JUXING=0` → 重启 API；**不会停止已入队/执行中的任务，也不会删除数据**；要停止在途任务需任务取消或停 Worker。
+- 撤销单元聚星绑定：单元配置 `enabled=false`（或移除该项）→ 重启 collection；不删除星图绑定行。
+- 4193 隔离栈已停止但保留：数据/配置/Profile/证据仍在，需要时 `./.runtime/kjx-full/stack.sh up`。
+- 主站验收证据：[JUXING-MAIN-01 验收](evidence/JUXING-MAIN-01-acceptance.md)；独立 QA 回归：[post-integration regression](evidence/JUXING-MAIN-01-post-integration-regression.md)；任务卡：[JUXING-MAIN-01](tasks/JUXING-MAIN-01.md)。
+
+## 2026-10-31 磁力聚星隔离体验栈（OPS-05，历史入口）
+
+> 主站已于同日启用双平台；本节仅保留隔离回归栈的启动方式，不再作为使用聚星的唯一入口。隔离栈使用独立测试库 `xingtu_test_kjx_regression`，用于回归/对照，不向 `xingtu_development` 写入测试数据。
+
+```bash
+./.runtime/kjx-full/stack.sh up       # Temporal 57235 / API 4192 / Vite 4193 / 两个 Worker
+./.runtime/kjx-full/stack.sh status
+./.runtime/kjx-full/stack.sh stop
+```
+
+- 页面：`http://127.0.0.1:4193/`；API：`http://127.0.0.1:4192`
+- 测试库：`xingtu_test_kjx_regression`（PostgreSQL `55439`）；执行单元：`unit-local-mac-02-kjx-full`
+- 登录：`kjx-regression-media`，口令见 `.runtime/kjx-full/regression/credentials`
+- 不启动定时更新调度器；不读写主站 `8000/5173` 的业务数据
+- 启停脚本位于 `.runtime`（gitignored），长期入口需另立任务纳入版本控制
+- 详细记录：[OPS-05 证据](evidence/OPS-05-juxing-stack-2026-10-31.md)、[OPS-05 卡片](tasks/OPS-05.md)

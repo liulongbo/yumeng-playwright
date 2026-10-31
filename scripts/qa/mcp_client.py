@@ -46,6 +46,8 @@ class PlaywrightMCP:
         | None = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         override_home: bool = True,
         log_path: Path | None = None,
+        user_data_dir: Path | None = None,
+        storage_state: Path | None = None,
     ):
         output_dir.mkdir(parents=True, exist_ok=True)
         args = [
@@ -53,12 +55,18 @@ class PlaywrightMCP:
             str(MCP_CLI),
             "--browser",
             "chrome",
-            "--isolated",
             "--output-dir",
             str(output_dir),
             "--viewport-size",
             "1440x1000",
         ]
+        if user_data_dir is not None:
+            # Persistent, already authenticated profile.  Never combine with --isolated.
+            args.extend(["--user-data-dir", str(user_data_dir)])
+        else:
+            args.append("--isolated")
+            if storage_state is not None:
+                args.extend(["--storage-state", str(storage_state)])
         if executable_path:
             args.extend(["--executable-path", executable_path])
         if headless:
