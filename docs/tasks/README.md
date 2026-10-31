@@ -1,5 +1,27 @@
 # 开发任务索引
 
+# 2026-10-31 JUXING-MAIN-01：5173 主站双平台整合（已完成，GO）
+
+[JUXING-MAIN-01](JUXING-MAIN-01.md) 审计确认 5173 与 4193 使用同一份代码，主库迁移 020 已由 OPS-04 应用，主站缺的只是聚星启用配置、`unit-local-mac-02` 聚星绑定、Profile/会话核对，外加任务中心平台筛选这一处最小产品代码。P1–P3 已完成：后端 `/api/tasks?platform=` + cursor scope、前端任务中心平台下拉及测试；`scripts/juxing_main_switch.py`（baseline/preflight/compare/session-check）；主站只读预检 **48 项 0 失败**；主库内容基线（117 星图任务/138 达人/293 关联/355 快照/90 更新资格）与 count+md5 哈希；新备份（35.5 MB）+ 隔离恢复演练内容一致；后端单元+合同 **409 passed**、隔离集成 **121 passed / 1 skipped**、E2E **14 passed**、前端 **105 passed**+lint+build、Mypy 通过。4193 测试库实测修正为 **8 条任务**（5 聚星/3 星图）/39 位聚星达人，不导入主库；`test_migrations_020.py` 的 schema 限定缺陷独立记录。P4–P6 已完成：停止 4193、主站切换、真实聚星/星图各 1 位均 `COMPLETED 1/1/1`，同单元真实串行，历史数据一致（仅授权星图任务正常更新 1 位既有达人），Flag=0 回退与正常重启后双平台复现通过；**GO**；2026-10-31 独立 QA 回归 69 用例 68 PASS/1 N/A/0 FAIL、MCP 37/37、自动回归通过。验收：[JUXING-MAIN-01 验收](../evidence/JUXING-MAIN-01-acceptance.md)；方案：[整合方案](../design/JUXING-MAIN-01-integration-plan.md)；用例：[测试用例](../evidence/JUXING-MAIN-01-test-cases.md)；QA 报告：[post-integration regression](../evidence/JUXING-MAIN-01-post-integration-regression.md)。
+
+# 2026-10-31 OPS-06：聚星体验站登录限流解除与重启（已完成）
+
+[OPS-06](OPS-06.md) 聚星体验站登录提示「尝试次数过多，请稍后再试」。根因是 Redis 登录限流器（5 次失败 / 900 秒，IP 与账号 HMAC 双桶）的 **IP 桶已达 5**，`check()` 在密码校验前执行，因此正确密码也会被 429 拒绝；仅重启进程无效。处置：`./.runtime/kjx-full/stack.sh restart` 重启隔离栈（Temporal `79006`、API `79033`、Intake `79050`、Collection `79059`、Vite `79084`），清除 Redis DB15 的 3 个 `xingtu:login:*` 键；API 登录 200、真实 Chromium 登录进入 `/tasks` 且不再显示限流提示。重启前聚星任务均为终态，主站 8000/5173 与定时更新状态未变。证据：[OPS-06 聚星登录限流处置](../evidence/OPS-06-juxing-login-rate-limit-2026-10-31.md)。
+
+# 2026-10-31 OPS-05：启动磁力聚星隔离全栈（已完成）
+
+[OPS-05](OPS-05.md) 主站 `5173` 的聚星 Flag 关闭、主库无聚星执行单元绑定；为不向主业务库写入聚星数据，复用项目既有隔离栈启动 **Temporal 57235 / API 4192 / 前端 4193 / Intake 75916 / Collection 75925**（执行单元 `unit-local-mac-02-kjx-full`，测试库 `xingtu_test_kjx_regression`）。新增 `.runtime/kjx-full/stack.sh`（`up|stop|restart|status`，gitignored），修复 `no_proxy` 方括号 IPv6 导致 Intake 以 `Invalid port: ':1]'` 退出的问题。验证：`/api/platforms` 聚星 `enabled=true`、能力 `juxing-video-square-stage-c-v2`（7 项条件）、达人库 200 且页面「20 位已加载」（库内 37 位）、任务中心显示 4 条聚星任务；真实 Chromium 登录后聚星选项可选、表单与达人库渲染正常；两队列各 1 个新鲜消费者，collection `generation=6`；会话最近观测 `VALID`。主站 8000/5173 与定时更新状态未变；未代替用户提交真实任务。同时修复 `scripts/dev.sh` 的 Worker 识别（按 `UNIT_CONFIG` 限定，`.runtime/dev-no-upd.sh` 已同步），双栈并存时主站 `status/up/restart` 不再误判或误杀聚星 Worker。体验入口 `http://127.0.0.1:4193/`，账号 `kjx-regression-media`（口令见 `.runtime/kjx-full/regression/credentials`）。证据：[OPS-05 聚星隔离栈验证](../evidence/OPS-05-juxing-stack-2026-10-31.md)。
+
+# 2026-10-31 OPS-04：本机前后端服务启动（已完成，跳过自动更新）
+
+[OPS-04](OPS-04.md) 按用户要求启动 API `69676`、P1 intake-worker `69701`、P2 collection-worker `71225`（generation 12）与前端 Vite `69749`，**未启动定时更新调度器**。启动前先 `pg_dump` 备份 `xingtu_development`，再应用迁移 020（schema 20，116 条历史任务回填平台），解决采集 Worker 持续 `UndefinedTable` 的问题；停掉上一轮遗留的聚星隔离回归栈（4192/4193/57235）。前置自检 13 项 `ok`；`GET /api/auth/me` 401、前端 200、`xingtu-intake` 与 `xingtu-unit-local-mac-02` 各 1 个新鲜消费者。`media-a` 真实登录 200，任务中心/任务详情/任务内达人/达人库/执行单元读接口均 200；真实 Chromium 从登录页进入 `/tasks` 与 `/creators` 渲染正常。运行态修复：单元封面由不可达的远端 S3 恢复为本地 `.runtime/covers`（备份 `local-dev-mac-02.s3-pre-ops04.json`），使新采集封面不会被连接超时拖住。磁力聚星 Flag 仍关闭；未发起真实采集、未运行测试套件、未改业务代码。证据：[OPS-04 启动与可达性验证](../evidence/OPS-04-local-start-2026-10-31.md)。
+
+# 2026-10-28 KJX-01：磁力聚星 P0 多平台接入（macOS 阶段 C 已通过；Windows 移交 DEPLOY-WIN-01）
+
+[KJX-01](KJX-01.md) **macOS 阶段 C 已通过**：隔离 DB/API/Vite/Temporal/Worker + 真实 DeepSeek + 真实 Chrome/双平台 Profile 上，C2 聚星「母婴 / 母婴亲子 / 目标 1」`COMPLETED`（有效/资料完整 1/1），C3「母婴 / 母婴亲子 / 目标 10」`COMPLETED`（有效/资料完整/快照 10/10/10，仅第一页），C4 星图「宠物 / 目标 1」首次 `PARTIAL_COMPLETED`、同授权样本重试 `COMPLETED`（资料完整 1、F06 双集合完整 1）；同单元跨平台串行、账号/Profile/数据隔离成立。新增聚星导航回退与作品波动/统计接口口径区分。最终回归：后端单元+合同 388、integration 118+1 skip、E2E 14、前端 99+build；迁移 020 专项 2、导航回退专项 6。生产 Flag/业务库未变更；Windows 移交 [DEPLOY-WIN-01](DEPLOY-WIN-01.md)。证据：[阶段 C](../evidence/KJX-01-stage-c-acceptance.md)。
+
+阶段 B 历史记录（服务端 1 位真实样本 + 隔离产品业务闭环）：共享任务/ExecutionUnit/数据体系与独立聚星 Profile 保持不变；双子账号场景精确绑定 `60821564`，独立快照冷启动恢复成功；真实只读目标数 1 通过 `BrowserHost → Adapter → Engine → Repository` 达到 `COMPLETED`。随后补齐统一达人库聚星读模型、任务中心/详情/任务内达人平台化，并在隔离 PostgreSQL + Temporal 测试服务器 + 合成 Adapter + 假 BrowserHost 下验证 API→Intake→Temporal→Worker→DB→达人库全链路，另以真实 Uvicorn + 随机测试 Schema + 真实登录 + Chromium 验证聚星页面读取真实数据库。回归：后端单元+合同 384、integration 113+1 skip、全量 E2E 14、前端 98+build。修复 requirements v3 约束与 Intake 星图字段清单误套两个阻塞缺陷，仅改动未应用的迁移 020。该阶段当时生产开关保持关闭；后续阶段 C 已完成，Windows 已移交 DEPLOY-WIN-01。证据：[阶段 B 真实小样本](../evidence/KJX-01-stage-b-live-sample-2026-10-27.md)、[阶段 B 产品闭环](../evidence/KJX-01-stage-b-product-integration-2026-10-28.md)。
+
 # 2026-10-26 DIAG-03：24 位任务在第 20 位失败与「继续采集」失败修复（已完成）
 
 [DIAG-03](DIAG-03.md) 定位任务 `8013a009-c058-441e-a99f-9976c7d48df0` 的真实失败位置：

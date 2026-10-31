@@ -1,7 +1,7 @@
 # IPPOOL-02：OpenWrt 3 路蜂窝出口搭建与单出口验证
 
 状态：进行中  
-更新时间：2026-10-25T23:55:00+08:00  
+更新时间：2026-10-31T13:32:00+08:00
 是否验收：否；Phase 0/1 完成、Phase 2 line1 单出口通过、Phase 4 line1 持久化通过（重启自恢复）；line2 因 SIM/随身 WiFi 无蜂窝数据暂停、line3 未开始；尚未创建 Chrome profile/ExecutionUnit。
 
 ## 目标与范围
@@ -112,6 +112,7 @@
 
 ### Phase 5：项目接入与 Chrome profile
 
+- [ ] 双执行单元可行性（2026-10-31 核对）：**现有 `unit-local-mac-02` 是 `local_development`，已在跑真实采集任务**（worker `xingtu-unit-local-mac-02`，日志 `COLLECTING`/`PARTIAL_COMPLETED`），是本机 IP 的正当本地单元。新增 cellular B 因使用代理，必须是 `production_line` + `proxy_server` + `NetworkProof`/probe。**用户已验证平台允许同一星图账号从多个 IP 使用**；但当前项目 schema 是 `execution_units.account_ref` UNIQUE、平台绑定 `(platform, account_ref)` UNIQUE，所以“同账号两个执行单元”需要显式产品决策 + migration/代码变更，不是只加配置；且平台多 IP 已验证不等于两个并发浏览器会话稳定，需先做同账号 A/B 同时在线、只读、无采集的并发验证。`IntakeWorker` 固定 `execution_unit_id`，B 还需独立 collection worker + intake 任务路由；proxy 在 unit JSON；local 直连与 line1 同为移动湖南，IP 多样性弱；未创建 Chrome/profile、未改代码。
 - [ ] `.runtime/cellular.env` 0600（3 组 user/pass）；
 - [ ] `NetworkProof` + `network_probe_command`（显式代理、禁用环境代理、输出四字段 JSON）；
 - [ ] `unit-cellular-01` 配置 + `register-unit` + `production-preflight`；
@@ -122,7 +123,9 @@
 
 ## 实现记录
 
-- line1（ns-sim1/`192.168.1.250:6001`）已完成并持久化：[xingtu-line1.sh](../evidence/IPPOOL-02-xingtu-line1.sh) 与 [init](../evidence/IPPOOL-02-xingtu-line1.init) 已在 J1900 安装、`enable`，硬关机再上电后自动恢复（`wwan0: renamed from eth2`、`br-lan: port 2(veth-lan1) forwarding`），Mac `en6` 启用时不重跑脚本即可代理出网。
+- line1（ns-sim1/`192.168.1.250:6001`）已完成并持久化：[xingtu-line1.sh](../evidence/IPPOOL-02-xingtu-line1.sh) 与 [init](../evidence/IPPOOL-02-xingtu-line1.init) 已在 J1900 安装、`enable`，硬关机再上电后自动恢复（`wwan0: renamed from eth2`、`br-lan: port 2(veth-lan1) forwarding`），Mac `en6` 启用时不重跑脚本即可代理出网。2026-10-31 复测：`ping .1/.250` 0% 丢包，代理 `223.160.113.73`（中国移动湖南）。
+- 现有本地单元（2026-10-31 核对）：`.runtime/local-main/units/unit-local-mac-02.json` 为 `network_mode=local_development`、`account_ref=xingtu-account-02`、`line_id=local-dev-macos`、profile `.runtime/profiles/unit-local-mac-02`；worker 日志 `collection worker polling xingtu-unit-local-mac-02`，任务到 `COLLECTING`/`PARTIAL_COMPLETED`。**这是可用执行单元，不需要改成 production_line。**
+- 双单元结论（2026-10-31）：A 保持 `unit-local-mac-02`/`local_development`；B 必须是**另一个平台账号**（不能复用 A 的 account_ref），并用 `unit-cellular-01`/`production_line` + `proxy_server` + `NetworkProof`/probe + 独立账号/profile。网络层已有两条出口；项目层还需 B 的 unit JSON/注册、B collection worker，以及 intake 任务路由（当前 intake worker 固定 A，直接起两个会争抢同一 intake 队列，需独立队列/调度/显式 unit 分配）。本机与 line1 同为移动湖南，IP 多样性弱。
 - line2（ns-sim2/`.251`）脚本/init 已生成并通过 `sh -n`：[xingtu-line2.sh](../evidence/IPPOOL-02-xingtu-line2.sh)、[init](../evidence/IPPOOL-02-xingtu-line2.init)；netns/veth/DHCP 正常，但新 SIM/随身 WiFi 无蜂窝数据（`ping 223.5.5.5` 100% 丢包），tinyproxy 未启动、init 未安装。
 - 脚本默认 `PROXY_USER/PROXY_PASS=xingtu`（临时，可用环境变量覆盖），`MODEM_PATH=2-2.1:1.0`、`MODEM_MAC=34:4b:50:00:00:00`；Modem 需插回同一 USB 口，否则按 MAC 兜底。line2/3 复制时需改 NS/veth/LANIP/Modem 标识/端口。
 - 已编写施工手册：[IPPOOL-02 施工手册](../evidence/IPPOOL-02-openwrt-build-runbook-2026-10-24.md)。
@@ -149,6 +152,7 @@
 | 安装/接口 | `apk update` 成功（11250 packages）；`ip-full 6.18.0-r2`；`tinyproxy 1.11.1`；`br-lan` 端口 `eth0`；ZTE `19d2:1405` `Driver=cdc_ether`；`eth2` MAC `34:4b:50:00:00:00`、USB `2-2.1:1.0`，曾误持 WAN `192.168.0.178`；已移入 `ns-sim1` 改名 `wwan0`；`wwan0` DHCP `192.168.0.179/24`、default via `192.168.0.1`；netns `ping 223.5.5.5` 0% 丢包（53–254 ms）；`veth-ns1 192.168.1.250/24`、`veth-lan1` master `br-lan`、port 2 forwarding；`ip -n ns-sim1 route` 默认仍走 `wwan0`；Mac `ping 192.168.1.250` 1.023 ms；netns dnsmasq `--server=223.5.5.5` 启动，`nslookup openwrt.org 127.0.0.1` 返回 `64.226.122.113`/IPv6；tinyproxy 配置修正 `PidFile "..."`/`LogFile "..."` 后启动成功，pid `13566`；Mac 代理 HTTP `223.160.113.88`（chinabtn.com）、HTTPS `223.160.112.88`；直连 `120.228.1.191`（chinamobile.com）；代理与直连不同，TLS/443 正常；`kill 13566` 后 Mac `curl -x ...` 返回 `(7) Failed to connect ... 6001`，无 IP；重启 tinyproxy 后恢复 |
 | 持久化安装 | 下载/`chmod`/`sh -n` 通过；手工日志 `18:21:11 OK`；`enable` 后 `reboot`；硬关机再上电后 J1900 启动，LAN1 灯正常；启动日志见 `wwan0: renamed from eth2`、`br-lan: port 2(veth-lan1) forwarding`；Mac `en6`=`status: active`、`192.168.1.210/24`；`ping 192.168.1.1` 0% 丢包（0.42–0.97 ms）、`ping 192.168.1.250` 0% 丢包（0.44–1.13 ms）；代理 `223.160.112.88`；line1 持久化通过。2026-10-25 22:34 再次验证 `ping .1` 0.583–0.729 ms、`ping .250` 0.721–0.795 ms、代理 `223.160.114.4`；Mac Wi-Fi 服务顺序置顶后 `route default` en0/192.168.3.1、`route .250` en6，普通上网/代理均正常 |
 | line2 发现 | `lsusb` 两个 ZTE `19d2:1405`；新接口 **`usb0`** path `1-2.3.2:1.0`、MAC `ba:7b:bb:ec:28:c0`；line2 脚本/init 已生成并通过 `sh -n`。首次运行：`usb0` 移入 `ns-sim2` 改名 `wwan0`，DHCP 成功 `192.168.0.106`；`ping 192.168.0.1` 0% 丢包，但 `ping 223.5.5.5` 100% 丢包、`nslookup 223.5.5.5` 超时；结论新 SIM/随身 WiFi 无蜂窝数据，tinyproxy 未启动 |
+| 双单元评估 | 2026-10-31 line1 复测：`ping .1` 0% 丢包（3.567–7.266 ms）、`ping .250` 0% 丢包（0.609–0.903 ms）、代理 `223.160.113.73`（中国移动湖南）。现有 A：`unit-local-mac-02`/`local_development`/`xingtu-account-02`/profile，worker 日志 `COLLECTING`/`PARTIAL_COMPLETED`；A 是有效本地单元。用户已验证平台允许同账号多 IP；但当前 schema `execution_units.account_ref` UNIQUE、`(platform, account_ref)` UNIQUE，同账号两单元需产品决策 + migration/代码变更；并发会话稳定性/任务路由未验证。B 需 production_line + proxy + proof/probe + profile + collection worker；本机与 line1 同为移动湖南，IP 多样性弱；未创建 Chrome/profile |
 
 尚无出口代理实机证据。当前只有文档与上述实机照片记录：
 
@@ -250,3 +254,7 @@
 - 2026-10-25T23:50:00+08:00：用户今日暂停；J1900 可 `poweroff`。line1 已持久化；line2 配置/脚本就绪但 SIM 无数据，line2 init 未安装；line3/Chrome/采集未开始。恢复时先开机验证 line1，再让第 2 台随身 WiFi 恢复数据后手工跑 line2。
 - 2026-10-25T23:55:00+08:00：硬件选型建议：line2/3 优先同款 ZTE MF79U（`19d2:1405`/`cdc_ether`）；换型号先单台验证再批量；IP 多样性由 SIM/运营商决定，不由型号决定；多台用带供电 HUB，按 USB path/MAC 标签区分。
 - 2026-10-26T22:40:00+08:00：文档随本轮审查提交 `2b0275e`，经 merge `bb29801` 合入 `main` 并推送；网络/设备状态未变化（line1 已持久化、line2 待 SIM 恢复数据），保持进行中。
+- 2026-10-31T12:15:00+08:00：line1 复测：`ping .1` 0% 丢包（3.567–7.266 ms）、`ping .250` 0% 丢包（0.609–0.903 ms）、代理 `223.160.113.73`（中国移动湖南），正常。双单元评估：网络层两条独立出口可用；代码 `UnitConfig` 支持 `production_line` proxy/NetworkProof/Playwright 代理认证，但 `local_development` 仅本地验证，`IntakeWorker` 固定 unit，`register_unit` 不存 proxy，双单元需双 worker/调度；本机与 line1 同为移动湖南，IP 多样性弱。未改代码/配置，未创建 Chrome。
+- 2026-10-31T12:35:00+08:00：按用户说明核对现有部署：`unit-local-mac-02` 配置为 `network_mode=local_development`、`account_ref=xingtu-account-02`、`line_id=local-dev-macos`；worker `xingtu-unit-local-mac-02` 日志有 `COLLECTING`/`PARTIAL_COMPLETED`。确认本机 IP 的 local_development 是当前有效执行单元，不是临时占位；之前“仅本地验证、不能作为执行单元”的表述不准确。A 保持不动；B 用 production_line + 代理 + 独立 worker，intake 需任务路由。
+- 2026-10-31T13:29:00+08:00：用户目标确认：B = line1 蜂窝 IP + Chrome B + 账号 a（与 A 相同）。核对 schema：`execution_units.account_ref` UNIQUE、`execution_unit_platform_bindings(platform, account_ref)` UNIQUE；当前代码不能直接建同账号 B，需显式改模型。
+- 2026-10-31T13:32:00+08:00：用户补充已实测“同一星图账号可被多个 IP 使用”。更正判断：平台侧不禁止多 IP；项目侧仍是 account_ref 唯一约束，同账号两单元必须走产品决策 + migration/代码变更。平台多 IP ≠ 两个并发浏览器会话稳定；需先做同账号 A/B 同时在线、只读、无采集的并发验证，再决定是否解除唯一约束；当前未改代码/未创建 Chrome。

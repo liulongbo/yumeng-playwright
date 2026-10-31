@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,7 +12,7 @@ from playwright.async_api import BrowserContext, Page
 
 from .adapter import BrowserAdapter
 from .challenge import ChallengeHandler
-from .contracts import PlatformRegistry
+from .contracts import PlatformRegistry, account_id_from_url
 from .domain import (
     CollectorError,
     ReleaseDisposition,
@@ -20,6 +22,8 @@ from .domain import (
 )
 from .repository import Repository
 from .runtime import BrowserRuntime, UnitConfig, ensure_line
+
+logger = logging.getLogger(__name__)
 
 
 async def wait_for_manual_clearance(
@@ -40,7 +44,11 @@ async def wait_for_manual_clearance(
         blocked = False
         for code, loc in spec.error_selectors.items():
             if await locator(loc).is_visible():
-                if code in {"PLATFORM_SECURITY_CHALLENGE", "ACCOUNT_LOGIN_REQUIRED"}:
+                if code in {
+                    "PLATFORM_SECURITY_CHALLENGE",
+                    "ACCOUNT_LOGIN_REQUIRED",
+                    "ACCOUNT_SELECTION_REQUIRED",
+                }:
                     blocked = True
                 else:
                     raise CollectorError(code, "REGISTERED_PAGE_STATE")
@@ -48,13 +56,19 @@ async def wait_for_manual_clearance(
         account = ""
         if protected:
             try:
-                account = (
+                raw = (
                     await locator(spec.account).get_attribute(spec.account.attribute)
                     if spec.account.attribute
                     else await locator(spec.account).inner_text()
                 ) or ""
+                account = raw.strip()
+                if account and spec.account.capture_regex:
+                    match = re.search(spec.account.capture_regex, account)
+                    account = match.group(1) if match else ""
             except Exception:
                 account = ""
+            if not account:
+                account = account_id_from_url(page.url, spec.account_url_parameter) or ""
         if protected and account.strip():
             return account.strip()
         if protected and manually_attested_account_id:
@@ -154,12 +168,37 @@ class BrowserHost:
         finally:
             host.browser = None
             host.browser_instance_id = None
+            if host.session_health is not None:
+                try:
+                    repo.observe_unit_platform_session(
+                        config.unit_id,
+                        config.active_platform.value,
+                        host.session_health.status,
+                        host.session_health.evidence_reason,
+                    )
+                except Exception:  # noqa: BLE001 - bookkeeping must never skip the release
+                    # The binding row is advisory evidence for operators.  Losing it must not
+                    # leave the shared unit leased (which would end in quarantine) after the
+                    # browser is already gone.
+                    logger.warning(
+                        "platform session observation failed unit=%s platform=%s",
+                        config.unit_id,
+                        config.active_platform.value,
+                    )
+            # A platform-specific login problem must not make the shared logical unit unavailable
+            # to another platform. Browser/lease/Profile-lock failures are still unit-wide because
+            # `stopped=false` is handled by Repository.release independently of this disposition.
+            unit_disposition = (
+                host.release_disposition
+                if config.active_platform.value == "douyin_xingtu"
+                else ReleaseDisposition.VERIFIED_READY
+            )
             repo.release(
                 config.unit_id,
                 owner,
                 generation,
                 stopped=host.runtime.stopped,
-                disposition=host.release_disposition,
+                disposition=unit_disposition,
                 reason=(
                     host.session_health.evidence_reason
                     if host.session_health

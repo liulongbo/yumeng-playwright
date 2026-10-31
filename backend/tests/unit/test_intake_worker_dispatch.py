@@ -194,6 +194,112 @@ async def test_promotion_success_still_reports_queued(monkeypatch, expected):
     assert await processor.process("root") == expected
 
 
+class CapturingPromoteRepository(FailingPromoteRepository):
+    """Records which platform requirement a promotion was asked to enforce."""
+
+    def __init__(self) -> None:
+        super().__init__(CollectorError("INVALID_FORM", "unused"))
+        self.promotions: list[tuple[str, object]] = []
+
+    def promote_intake(self, *args: Any, **kwargs: Any) -> str:
+        self.promotions.append((args[1].platform, kwargs.get("profile_requirement")))
+        return "p2"
+
+
+def _juxing_state() -> P1WorkflowState:
+    return P1WorkflowState(
+        root_task_id="root-juxing",
+        requirement_id="req-juxing",
+        p1_task_id="p1-juxing",
+        requirement_form=RequirementForm.model_validate(
+            {
+                "schema_version": "requirement_form.v3",
+                "platform": "kuaishou_juxing",
+                "keyword": "母婴",
+                "content_types": ["maternal_child"],
+                "target_count": 1,
+            }
+        ),
+        capability_version="cap-juxing",
+        capability_snapshot_ref="registry:cap-juxing",
+        prompt_version="v1",
+        model_config_id="deepseek-flash",
+    )
+
+
+class JuxingGraph(FakeGraph):
+    async def run(self, state: P1WorkflowState) -> P1WorkflowState:
+        del state
+        from xingtu.domain import Filter, FilterPlan
+
+        plan = FilterPlan(
+            schema_version="filter_plan.v3",
+            platform="kuaishou_juxing",
+            capability_version="cap-juxing",
+            target_count=1,
+            filters=[
+                Filter(field="keyword", operator="eq", value="母婴", source_fields=["keyword"])
+            ],
+        )
+        return self.state.model_copy(update={"outcome": "succeeded", "final_plan": plan})
+
+
+async def test_xingtu_promotion_keeps_the_xingtu_profile_inventory(monkeypatch):
+    """The Xingtu full-homepage inventory must stay attached to Xingtu, unchanged."""
+    repository = CapturingPromoteRepository()
+    state = P1WorkflowState(
+        root_task_id="root",
+        requirement_id="req",
+        p1_task_id="p1",
+        requirement_form=RequirementForm(keyword="宠物", target_count=1),
+        capability_version="cap-v1",
+        capability_snapshot_ref="registry:cap-v1",
+        prompt_version="v1",
+        model_config_id="deepseek-flash",
+    )
+    inventory = object()
+    registry = SimpleNamespace(capabilities=SimpleNamespace(version="cap-v1"))
+    processor = IntakeProcessor(
+        repository,  # type: ignore[arg-type]
+        registry,  # type: ignore[arg-type]
+        SimpleNamespace(),  # type: ignore[arg-type]
+        execution_unit_id="unit",
+        profile_requirement=inventory,  # type: ignore[arg-type]
+    )
+    monkeypatch.setattr(processor.repository, "load_intake", lambda root: state, raising=False)
+    monkeypatch.setattr(processor.repository, "save_intake", lambda *a, **k: None, raising=False)
+    monkeypatch.setattr("xingtu.intake_worker.IntakeGraph", lambda *a, **k: FakeGraph(state))
+
+    assert await processor.process("root") == TaskStatus.QUEUED
+    assert repository.promotions == [("douyin_xingtu", inventory)]
+
+
+async def test_juxing_promotion_never_inherits_the_xingtu_profile_inventory(monkeypatch):
+    """Regression: the Xingtu inventory made every juxing task permanently incomplete.
+
+    Juxing P0 completeness is defined by its own verified registry modules.  Attaching the Xingtu
+    requirement would demand `commercial/fans/creation...` fields the juxing contract never
+    collects, leaving a successful run in ``PARTIAL_COMPLETED`` with ``PROFILE_SCOPE_INCOMPLETE``.
+    """
+    repository = CapturingPromoteRepository()
+    state = _juxing_state()
+    juxing_registry = SimpleNamespace(capabilities=SimpleNamespace(version="cap-juxing"))
+    processor = IntakeProcessor(
+        repository,  # type: ignore[arg-type]
+        SimpleNamespace(capabilities=SimpleNamespace(version="cap-v1")),  # type: ignore[arg-type]
+        SimpleNamespace(),  # type: ignore[arg-type]
+        execution_unit_id="unit",
+        profile_requirement=object(),  # type: ignore[arg-type]
+        platform_registries={"kuaishou_juxing": juxing_registry},  # type: ignore[dict-item]
+    )
+    monkeypatch.setattr(processor.repository, "load_intake", lambda root: state, raising=False)
+    monkeypatch.setattr(processor.repository, "save_intake", lambda *a, **k: None, raising=False)
+    monkeypatch.setattr("xingtu.intake_worker.IntakeGraph", lambda *a, **k: JuxingGraph(state))
+
+    assert await processor.process("root-juxing") == TaskStatus.QUEUED
+    assert repository.promotions == [("kuaishou_juxing", None)]
+
+
 async def test_intake_tick_survives_an_unexpected_listing_failure(monkeypatch):
     """FIX-01 P1-C parity guard.
 

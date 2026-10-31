@@ -41,6 +41,7 @@ export interface CapabilityField {
 }
 
 export interface RangeValue { min: number | null; max: number | null; unit: "ten_thousand_count" }
+export interface CountRangeValue { min: number | null; max: number | null; unit: "count" }
 export interface RangeConstraint { min: number; max: number; unit: string }
 export interface CapabilityOption {
   value: string;
@@ -58,7 +59,7 @@ export interface CapabilityDimension {
 export interface RegionNode { value: string; label: string; children: RegionNode[] }
 
 export interface Capabilities {
-  platform: "douyin_xingtu";
+  platform: "douyin_xingtu" | "kuaishou_juxing";
   capability_version: string;
   fields: CapabilityField[];
   combinations: string[][];
@@ -68,6 +69,15 @@ export interface Capabilities {
   target_count_max: number;
   fixed_sort_key: string;
   fixed_sort_label: string;
+}
+
+export interface PlatformOption {
+  platform: "douyin_xingtu" | "kuaishou_juxing";
+  label: string;
+  enabled: boolean;
+  capability_status: "verified" | "observed" | "documented" | "unavailable";
+  contract_version: string | null;
+  disabled_reason?: string | null;
 }
 
 export interface RequirementFormV1 {
@@ -111,7 +121,37 @@ export interface RequirementFormV2 {
   target_count: number;
 }
 
-export type RequirementForm = RequirementFormV1 | RequirementFormV2;
+export interface JuxingRange {
+  min: number | null;
+  max: number | null;
+  unit: "yuan";
+}
+
+export interface RequirementFormV3 {
+  schema_version: "requirement_form.v3";
+  platform: "kuaishou_juxing";
+  keyword: string | null;
+  content_types: string[];
+  creator_types: [];
+  followers: CountRangeValue | null;
+  creator_gender: null;
+  creator_regions: Array<{ province_code: string; city?: string | null }>;
+  creator_education: null;
+  yellow_v_certification: null;
+  connection_users: null;
+  viewer_profile: null;
+  fan_profile: null;
+  quote: null;
+  juxing_video_quotes: {
+    seconds_1_20: JuxingRange | null;
+    seconds_21_60: JuxingRange | null;
+    seconds_60_plus: JuxingRange | null;
+  } | null;
+  sort_key: string | null;
+  target_count: number;
+}
+
+export type RequirementForm = RequirementFormV1 | RequirementFormV2 | RequirementFormV3;
 
 export interface TaskCounts {
   target_count: number;
@@ -124,6 +164,8 @@ export interface TaskCounts {
 
 export interface TaskSummary {
   root_task_id: string;
+  /** Optional only for compatibility with pre-migration fixtures; API responses always include it. */
+  platform?: "douyin_xingtu" | "kuaishou_juxing";
   task_kind: TaskKind;
   status: TaskStatus;
   stage: string;
@@ -185,6 +227,7 @@ export interface VerificationEvent {
 export interface ExecutionUnit {
   unit_id: string;
   platform: "douyin_xingtu";
+  platforms?: Array<"douyin_xingtu" | "kuaishou_juxing">;
   account_label: string;
   line_label: string;
   state: string;
@@ -265,6 +308,8 @@ export interface RetryPlan {
 
 export interface CreatorSummary {
   creator_id: string;
+  /** Optional for compatibility with pre-KJX fixtures; API responses always include it. */
+  platform?: "douyin_xingtu" | "kuaishou_juxing";
   platform_creator_id: string;
   first_position: number;
   view_kind: "draft" | "published";
@@ -286,7 +331,7 @@ export interface LibraryMetric {
 
 export interface CreatorLibrarySummary {
   creator_id: string;
-  platform: "douyin_xingtu";
+  platform: "douyin_xingtu" | "kuaishou_juxing";
   platform_creator_id: string;
   display_name: string | null;
   avatar_uri: string | null;
@@ -294,12 +339,19 @@ export interface CreatorLibrarySummary {
   province: string | null;
   city: string | null;
   industry_labels: string[];
+  /** The platform's own content-type labels; not the same dimension as `creator_type_label`. */
+  content_theme_labels: string[];
   followers: LibraryMetric;
   monthly_deep_users: LibraryMetric;
   monthly_connected_users: LibraryMetric;
   monthly_follower_growth_rate: LibraryMetric;
   interaction_rate: LibraryMetric;
   completion_rate: LibraryMetric;
+  play_median: LibraryMetric;
+  average_duration: LibraryMetric;
+  average_likes: LibraryMetric;
+  average_comments: LibraryMetric;
+  average_shares: LibraryMetric;
   expected_cpm_21_60: LibraryMetric;
   expected_cpm_60_plus: LibraryMetric;
   expected_cpe_21_60: LibraryMetric;
@@ -317,7 +369,6 @@ export interface CreatorLibraryDetail extends CreatorLibrarySummary {
   introduction: string | null;
   /** `basic.gender` as the platform's own code; the display layer owns the label mapping. */
   gender: string | null;
-  content_theme_labels: string[];
   collected_field_count: number;
   failed_field_count: number;
   field_sources: Record<string, unknown>;
@@ -450,7 +501,7 @@ export interface ProfileModuleCatalog {
 }
 
 export interface ProfileFieldCatalog {
-  platform: "douyin_xingtu";
+  platform: "douyin_xingtu" | "kuaishou_juxing";
   contract_version: string;
   modules: ProfileModuleCatalog[];
 }

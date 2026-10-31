@@ -242,14 +242,15 @@ class ProductRepository:
             }
             conn.execute(
                 """INSERT INTO root_tasks(root_task_id,state,version,unit_id,payload,
-                requirement_id,created_by,origin_root_task_id,task_type)
-                VALUES(%s,'RECEIVED',0,NULL,%s,%s,%s,%s,'product_intake')""",
+                requirement_id,created_by,origin_root_task_id,task_type,platform)
+                VALUES(%s,'RECEIVED',0,NULL,%s,%s,%s,%s,'product_intake',%s)""",
                 (
                     root_task_id,
                     Jsonb(root_payload),
                     requirement_id,
                     user_id,
                     origin_root_task_id,
+                    form.platform,
                 ),
             )
             conn.execute(
@@ -497,8 +498,11 @@ class ProductRepository:
             if root["state"] not in {TaskStatus.PARSING, TaskStatus.RECEIVED}:
                 raise CollectorError("INVALID_FORM", "INTAKE_STATE_CONFLICT")
             unit = conn.execute(
-                "SELECT unit_id,allowed_task_kinds FROM execution_units WHERE unit_id=%s",
-                (unit_id,),
+                """SELECT u.unit_id,u.allowed_task_kinds,b.enabled AS platform_enabled
+                FROM execution_units u LEFT JOIN execution_unit_platform_bindings b
+                  ON b.unit_id=u.unit_id AND b.platform=%s
+                WHERE u.unit_id=%s""",
+                (plan.platform, unit_id),
             ).fetchone()
             if not unit:
                 raise CollectorError("RESOURCE_UNAVAILABLE", "EXECUTION_UNIT_NOT_FOUND")
@@ -507,12 +511,17 @@ class ProductRepository:
             # unit this is behavior-identical; the fallback only matters for future multi-unit
             # configurations.
             assigned_unit_id = unit_id
-            if TaskKind.COLLECTION.value not in (unit["allowed_task_kinds"] or []):
+            if (
+                TaskKind.COLLECTION.value not in (unit["allowed_task_kinds"] or [])
+                or not unit["platform_enabled"]
+            ):
                 capable = conn.execute(
-                    """SELECT unit_id FROM execution_units
-                    WHERE %s = ANY(allowed_task_kinds) AND state <> 'QUARANTINED'
-                    ORDER BY unit_id LIMIT 1""",
-                    (TaskKind.COLLECTION.value,),
+                    """SELECT u.unit_id FROM execution_units u
+                    JOIN execution_unit_platform_bindings b ON b.unit_id=u.unit_id
+                    WHERE %s = ANY(u.allowed_task_kinds) AND u.state <> 'QUARANTINED'
+                      AND b.platform=%s AND b.enabled=true
+                    ORDER BY u.unit_id LIMIT 1""",
+                    (TaskKind.COLLECTION.value, plan.platform),
                 ).fetchone()
                 if not capable:
                     raise CollectorError("RESOURCE_UNAVAILABLE", "NO_COLLECTION_UNIT")
@@ -542,6 +551,10 @@ class ProductRepository:
                     featured_collection_types=featured_types,
                     featured_checkpoint_versions=featured_versions,
                 ),
+            )
+            conn.execute(
+                "UPDATE root_tasks SET platform=%s WHERE root_task_id=%s",
+                (plan.platform, state.root_task_id),
             )
             conn.execute(
                 "INSERT INTO filter_plans(root_task_id,payload,source) VALUES(%s,%s,'model')",

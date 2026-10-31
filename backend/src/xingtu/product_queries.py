@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, cast
 from uuid import UUID
 
@@ -16,6 +17,7 @@ from .creator_update import reconcile_update_task
 from .domain import (
     CollectorError,
     FilterPlan,
+    PlatformId,
     TaskKind,
     TaskRecord,
     TaskStatus,
@@ -199,6 +201,7 @@ class ProductQueries:
             )
         return ExecutionUnitView(
             unit_id=row["unit_id"],
+            platforms=list(row.get("platforms") or ["douyin_xingtu"]),
             account_label=self._mask_reference(row.get("account_ref")),
             line_label=self._mask_reference(row.get("line_ref")),
             state=row["state"],
@@ -223,7 +226,9 @@ class ProductQueries:
             rows = conn.execute(
                 """SELECT u.*,e.state AS event_state,e.reason AS event_reason,
                 e.deadline_at AS event_deadline_at,t.state AS takeover_state,
-                wh.fresh_worker_count,wh.worker_history_count,wh.worker_last_heartbeat_at
+                wh.fresh_worker_count,wh.worker_history_count,wh.worker_last_heartbeat_at,
+                ARRAY(SELECT b.platform FROM execution_unit_platform_bindings b
+                      WHERE b.unit_id=u.unit_id AND b.enabled=true ORDER BY b.platform) AS platforms
                 FROM execution_units u
                 LEFT JOIN LATERAL (
                   SELECT * FROM verification_events WHERE unit_id=u.unit_id
@@ -313,6 +318,7 @@ class ProductQueries:
         created_from: datetime | None,
         created_to: datetime | None,
         task_kind: TaskKind | None = None,
+        platform: PlatformId | None = None,
     ) -> str:
         value = "|".join(
             [
@@ -322,6 +328,10 @@ class ProductQueries:
                 created_to.isoformat() if created_to else "",
             ]
         )
+        # Appended only when a platform filter is active, so cursors issued before the filter
+        # existed stay valid while a filtered cursor can never be replayed against another scope.
+        if platform is not None:
+            value += "|" + platform.value
         return hashlib.sha256(value.encode()).hexdigest()[:16]
 
     def list_tasks(
@@ -329,6 +339,7 @@ class ProductQueries:
         *,
         status: TaskStatus | None = None,
         task_kind: TaskKind | None = None,
+        platform: PlatformId | None = None,
         created_from: datetime | None = None,
         created_to: datetime | None = None,
         cursor: str | None = None,
@@ -336,7 +347,7 @@ class ProductQueries:
     ) -> TaskPage:
         if not 1 <= limit <= 100:
             raise CollectorError("INVALID_FORM", "INVALID_PAGE_SIZE")
-        scope = self._scope(status, created_from, created_to, task_kind)
+        scope = self._scope(status, created_from, created_to, task_kind, platform)
         clauses = [sql.SQL("true")]
         params: list[Any] = []
         if status:
@@ -345,6 +356,9 @@ class ProductQueries:
         if task_kind:
             clauses.append(sql.SQL("r.task_kind=%s"))
             params.append(task_kind.value)
+        if platform:
+            clauses.append(sql.SQL("r.platform=%s"))
+            params.append(platform.value)
         if created_from:
             clauses.append(sql.SQL("r.created_at>=%s"))
             params.append(created_from)
@@ -518,9 +532,13 @@ class ProductQueries:
             if cp.challenge_wait_started_at
             else 0
         )
+        account_selection = task.failure_reason in {
+            "ACCOUNT_SELECTION_REQUIRED",
+            "ACCOUNT_SELECTION_TIMEOUT",
+        }
         terminal_reason = (
             task.failure_reason
-            if (task.failure_reason or "").startswith("SECURITY_CHALLENGE_")
+            if (task.failure_reason or "").startswith("SECURITY_CHALLENGE_") or account_selection
             else None
         )
         terminal_messages = {
@@ -533,11 +551,22 @@ class ProductQueries:
                 "验证后的星图账号与任务绑定账号不一致，系统未继续采集。"
             ),
             "SECURITY_CHALLENGE_UNKNOWN": "页面安全状态无法确认，系统已停止继续请求。",
+            "ACCOUNT_SELECTION_REQUIRED": ("磁力聚星要求选择子账号；请选择 cpg果汁（60821564）。"),
+            "ACCOUNT_SELECTION_TIMEOUT": (
+                "等待选择子账号超过保护窗口，系统未继续采集；请重新发起任务并选择 cpg果汁"
+                "（60821564）。"
+            ),
         }
         completed = sum(candidate.state == "done" for candidate in cp.candidates)
         return ChallengeSummary(
             state=cp.challenge_state.value if cp.challenge_state else "DETECTED",
-            challenge_type=cp.challenge_type.value if cp.challenge_type else None,
+            challenge_type=(
+                "ACCOUNT_SELECTION"
+                if account_selection
+                else cp.challenge_type.value
+                if cp.challenge_type
+                else None
+            ),
             first_detected_at=cp.challenge_first_detected_at,
             last_detected_at=cp.challenge_last_detected_at,
             wait_started_at=cp.challenge_wait_started_at,
@@ -555,8 +584,12 @@ class ProductQueries:
                 if cp.challenge_state == "VERIFIED"
                 else None
             ),
-            requires_user_action=task.state == TaskStatus.WAITING_FOR_VERIFICATION,
-            monitoring=task.state == TaskStatus.WAITING_FOR_VERIFICATION,
+            requires_user_action=task.state
+            in {TaskStatus.WAITING_FOR_VERIFICATION, TaskStatus.WAITING_FOR_ACCOUNT}
+            and (task.state != TaskStatus.WAITING_FOR_ACCOUNT or account_selection),
+            monitoring=task.state
+            in {TaskStatus.WAITING_FOR_VERIFICATION, TaskStatus.WAITING_FOR_ACCOUNT}
+            and (task.state != TaskStatus.WAITING_FOR_ACCOUNT or account_selection),
             terminal_reason=terminal_reason,
             terminal_message=terminal_messages.get(terminal_reason or ""),
             delivered_result=f"已保留 {task.valid_count} 位达人及其已持久数据",
@@ -608,6 +641,7 @@ class ProductQueries:
             failure = row["payload"].get("failure_reason")
         return TaskSummary(
             root_task_id=str(row["root_task_id"]),
+            platform=row.get("platform") or "douyin_xingtu",
             task_kind=TaskKind(row.get("task_kind") or "collection"),
             status=status,
             stage=task_stage(status),
@@ -910,7 +944,7 @@ class ProductQueries:
             if not root:
                 raise CollectorError("INVALID_FORM", "TASK_NOT_FOUND")
             rows = conn.execute(
-                """SELECT tc.creator_id,tc.first_position,pc.platform_creator_id,
+                """SELECT tc.creator_id,tc.first_position,pc.platform,pc.platform_creator_id,
                 s.snapshot_id,s.payload,s.created_at
                 FROM task_creators tc JOIN platform_creators pc USING(creator_id)
                 LEFT JOIN creator_snapshots s ON s.snapshot_id=tc.latest_snapshot_id
@@ -943,6 +977,7 @@ class ProductQueries:
             items.append(
                 CreatorSummary(
                     creator_id=str(row["creator_id"]),
+                    platform=row["platform"],
                     platform_creator_id=str(row["platform_creator_id"]),
                     first_position=int(row["first_position"]),
                     view_kind=view_kind,
@@ -980,7 +1015,7 @@ class ProductQueries:
         creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
         with self.repository.connect() as conn:
             row = conn.execute(
-                """SELECT tc.creator_id,tc.first_position,pc.platform_creator_id,
+                """SELECT tc.creator_id,tc.first_position,pc.platform,pc.platform_creator_id,
                 s.snapshot_id,s.payload,s.created_at,
                 cp.payload AS collection_checkpoint
                 FROM root_tasks r
@@ -1013,6 +1048,7 @@ class ProductQueries:
             observed_at = None
         return CreatorSummary(
             creator_id=str(row["creator_id"]),
+            platform=row["platform"],
             platform_creator_id=str(row["platform_creator_id"]),
             first_position=int(row["first_position"]),
             view_kind=view_kind,
@@ -1096,6 +1132,7 @@ class ProductQueries:
             province=row.get("province"),
             city=row.get("city"),
             industry_labels=row.get("industry_labels") or [],
+            content_theme_labels=row.get("content_theme_labels") or [],
             followers=metric(
                 row,
                 column="followers_count",
@@ -1161,6 +1198,7 @@ class ProductQueries:
     def list_creator_library(
         self,
         *,
+        platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu",
         industry: str | None = None,
         creator_type: str | None = None,
         province: str | None = None,
@@ -1186,6 +1224,31 @@ class ProductQueries:
     ) -> CreatorLibraryPage:
         if not 1 <= limit <= 100:
             raise CollectorError("INVALID_FORM", "INVALID_PAGE_SIZE")
+        if platform == "kuaishou_juxing":
+            return self._list_juxing_creator_library(
+                industry=industry,
+                creator_type=creator_type,
+                province=province,
+                city=city,
+                followers_min=followers_min,
+                followers_max=followers_max,
+                monthly_growth_min=monthly_growth_min,
+                monthly_growth_max=monthly_growth_max,
+                interaction_min=interaction_min,
+                interaction_max=interaction_max,
+                completion_min=completion_min,
+                completion_max=completion_max,
+                expected_cpm_min=expected_cpm_min,
+                expected_cpm_max=expected_cpm_max,
+                expected_cpe_min=expected_cpe_min,
+                expected_cpe_max=expected_cpe_max,
+                cooperation_form=cooperation_form,
+                complete_only=complete_only,
+                sort=sort,
+                direction=direction,
+                cursor=cursor,
+                limit=limit,
+            )
         sort_columns = {
             "updated_at": "data_updated_at",
             "followers": "followers_count",
@@ -1198,6 +1261,7 @@ class ProductQueries:
         if sort not in sort_columns:
             raise CollectorError("INVALID_FORM", "INVALID_CREATOR_LIBRARY_SORT")
         filters = {
+            "platform": platform,
             "industry": industry,
             "creator_type": creator_type,
             "province": province,
@@ -1286,6 +1350,13 @@ class ProductQueries:
     def get_creator_library(self, creator_id: str) -> CreatorLibraryDetail:
         creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
         with self.repository.connect() as conn:
+            identity = conn.execute(
+                "SELECT platform FROM platform_creators WHERE creator_id=%s", (creator_id,)
+            ).fetchone()
+            if not identity:
+                raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+            if identity["platform"] == "kuaishou_juxing":
+                return self._get_juxing_creator_library(conn, creator_id)
             row = conn.execute(
                 """SELECT c.*,si.module_statuses,pc.projection,s.payload AS latest_payload
                 FROM douyin_xingtu_creator_current c
@@ -1306,7 +1377,6 @@ class ProductQueries:
             mcn_name=row.get("mcn_name"),
             introduction=row.get("introduction"),
             gender=self._gender_value(row.get("projection") or {}),
-            content_theme_labels=row.get("content_theme_labels") or [],
             collected_field_count=int(row["collected_field_count"]),
             failed_field_count=int(row["failed_field_count"]),
             field_sources=row.get("field_sources") or {},
@@ -1314,6 +1384,327 @@ class ProductQueries:
             profile_payload=self._current_profile_payload(
                 row.get("latest_payload") or {}, row.get("projection") or {}
             ),
+        )
+
+    @staticmethod
+    def _empty_metric(status: str = "NOT_AVAILABLE") -> LibraryMetric:
+        """A metric this platform/read model does not have; never a fabricated zero."""
+
+        return LibraryMetric(status=status)
+
+    def _require_xingtu_library_creator(self, creator_id: str, scope: str) -> None:
+        """Xingtu-only library sub-resources must say "not applicable", not "creator not found".
+
+        Juxing publishes projection JSONB and immutable snapshots only; it has no Xingtu library
+        index/quote/video/featured-collection projection, and the product does not pretend it does.
+        """
+
+        with self.repository.connect() as conn:
+            row = conn.execute(
+                "SELECT platform FROM platform_creators WHERE creator_id=%s", (creator_id,)
+            ).fetchone()
+        if not row:
+            raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+        if row["platform"] != "douyin_xingtu":
+            raise CollectorError(
+                "UNSUPPORTED_FILTER", f"KUAISHOU_JUXING_LIBRARY_{scope}_NOT_APPLICABLE"
+            )
+
+    @staticmethod
+    def _decimal_or_none(value: Any) -> Decimal | None:
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            parsed = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return None
+        return parsed if parsed.is_finite() else None
+
+    @classmethod
+    def _projection_metric(cls, projection: dict[str, Any], key: str) -> LibraryMetric:
+        """Read one `module.field` observation envelope from the current projection JSONB.
+
+        Juxing has no dedicated current-projection table, so the envelope is the source: it already
+        carries the platform's own status, unit, raw text and observation time.  Nothing is inferred
+        for a field the platform did not return.
+        """
+
+        field = projection.get(key)
+        if not isinstance(field, dict):
+            return cls._empty_metric()
+        status = str(field.get("status") or "NOT_AVAILABLE")
+        value = field.get("value")
+        amount: Any = None
+        approximate = False
+        if isinstance(value, dict):
+            if value.get("kind") == "number":
+                amount = value.get("amount")
+                approximate = value.get("bound") == "approximate"
+            elif "data" in value:
+                amount = value.get("data")
+        else:
+            amount = value
+        observed_at = field.get("observed_at")
+        parsed_at: datetime | None = None
+        if isinstance(observed_at, str) and observed_at:
+            try:
+                parsed_at = datetime.fromisoformat(observed_at)
+            except ValueError:
+                parsed_at = None
+        if status != "COLLECTED" or amount is None:
+            return cls._empty_metric(status)
+        return LibraryMetric(
+            value=cls._decimal_or_none(amount),
+            raw_value=field.get("raw_value") if isinstance(field.get("raw_value"), str) else None,
+            unit=field.get("unit") if isinstance(field.get("unit"), str) else None,
+            is_approximate=approximate,
+            status=status,
+            observed_at=parsed_at,
+        )
+
+    @staticmethod
+    def _projection_text(projection: dict[str, Any], key: str) -> str | None:
+        field = projection.get(key)
+        if not isinstance(field, dict) or field.get("status") != "COLLECTED":
+            return None
+        value = field.get("value")
+        return value.strip() if isinstance(value, str) and value.strip() else None
+
+    @staticmethod
+    def _projection_list(projection: dict[str, Any], key: str) -> list[str]:
+        field = projection.get(key)
+        value = field.get("value") if isinstance(field, dict) else None
+        return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+    @staticmethod
+    def _juxing_payload_fields(payload: dict[str, Any]) -> list[dict[str, Any]]:
+        modules = payload.get("modules")
+        if not isinstance(modules, dict):
+            return []
+        fields: list[dict[str, Any]] = []
+        for module in modules.values():
+            entries = module.get("fields") if isinstance(module, dict) else None
+            if isinstance(entries, list):
+                fields.extend(item for item in entries if isinstance(item, dict))
+        return fields
+
+    @classmethod
+    def _juxing_library_summary(cls, row: dict[str, Any]) -> CreatorLibrarySummary:
+        projection = row.get("projection") or {}
+        payload = row.get("latest_payload") or {}
+        return CreatorLibrarySummary(
+            creator_id=str(row["creator_id"]),
+            platform="kuaishou_juxing",
+            platform_creator_id=str(row["platform_creator_id"]),
+            display_name=cls._projection_text(projection, "basic.nickname"),
+            avatar_uri=cls._projection_text(projection, "basic.avatar_uri"),
+            # Juxing has no Xingtu-style creator type/industry taxonomy, and its CPM/CPE slots are
+            # two-tier Xingtu semantics; only the neutral, platform-native metrics are projected.
+            creator_type_label=None,
+            province=cls._projection_text(projection, "basic.province"),
+            city=cls._projection_text(projection, "basic.city"),
+            industry_labels=[],
+            content_theme_labels=cls._projection_list(projection, "basic.content_type_labels"),
+            followers=cls._projection_metric(projection, "basic.followers"),
+            monthly_deep_users=cls._empty_metric(),
+            monthly_connected_users=cls._empty_metric(),
+            monthly_follower_growth_rate=cls._projection_metric(
+                projection, "basic.monthly_follower_growth_rate"
+            ),
+            interaction_rate=cls._projection_metric(projection, "spread.interaction_rate"),
+            completion_rate=cls._projection_metric(projection, "spread.completion_rate"),
+            play_median=cls._projection_metric(projection, "spread.play_median"),
+            average_duration=cls._projection_metric(projection, "spread.average_duration_seconds"),
+            average_likes=cls._projection_metric(projection, "spread.average_like"),
+            average_comments=cls._projection_metric(projection, "spread.average_comment"),
+            average_shares=cls._projection_metric(projection, "spread.average_share"),
+            expected_cpm_21_60=cls._empty_metric(),
+            expected_cpm_60_plus=cls._empty_metric(),
+            expected_cpe_21_60=cls._empty_metric(),
+            expected_cpe_60_plus=cls._empty_metric(),
+            profile_complete=bool(payload.get("profile_complete")),
+            pipeline_complete=bool(payload.get("pipeline_complete")),
+            data_updated_at=row.get("data_updated_at"),
+        )
+
+    @staticmethod
+    def _juxing_field_sources(projection: dict[str, Any]) -> dict[str, Any]:
+        attributes = (
+            "observed_at",
+            "status",
+            "source_kind",
+            "source_contract",
+            "path_ref",
+            "unit",
+            "period_label",
+        )
+        return {
+            key: {name: field.get(name) for name in attributes if field.get(name) is not None}
+            for key, field in projection.items()
+            if isinstance(field, dict)
+        }
+
+    def _get_juxing_creator_library(self, conn: Any, creator_id: str) -> CreatorLibraryDetail:
+        row = conn.execute(
+            """SELECT pc.creator_id,pc.platform_creator_id,pc.projection,
+            s.snapshot_id AS latest_snapshot_id,s.payload AS latest_payload,
+            s.created_at AS data_updated_at
+            FROM platform_creators pc
+            JOIN LATERAL (
+              SELECT cs.snapshot_id,cs.payload,cs.created_at
+              FROM creator_snapshots cs WHERE cs.creator_id=pc.creator_id
+              ORDER BY cs.created_at DESC,cs.snapshot_id DESC LIMIT 1
+            ) s ON true
+            WHERE pc.creator_id=%s AND pc.platform='kuaishou_juxing'""",
+            (creator_id,),
+        ).fetchone()
+        if not row:
+            # A juxing identity without a published snapshot has no library entry yet.
+            raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+        projection = row.get("projection") or {}
+        payload = row.get("latest_payload") or {}
+        fields = self._juxing_payload_fields(payload)
+        modules = payload.get("modules") if isinstance(payload, dict) else None
+        module_statuses = {
+            str(key): (module.get("status") if isinstance(module, dict) else None)
+            for key, module in (modules.items() if isinstance(modules, dict) else [])
+        }
+        return CreatorLibraryDetail(
+            **self._juxing_library_summary(row).model_dump(),
+            latest_snapshot_id=str(row["latest_snapshot_id"])
+            if row["latest_snapshot_id"]
+            else None,
+            mcn_name=self._projection_text(projection, "basic.mcn_name"),
+            introduction=self._projection_text(projection, "basic.introduction"),
+            # The verified juxing contract has no gender dimension; absent stays absent.
+            gender=None,
+            collected_field_count=sum(item.get("status") == "COLLECTED" for item in fields),
+            failed_field_count=sum(item.get("status") == "FAILED" for item in fields),
+            field_sources=self._juxing_field_sources(projection),
+            module_statuses=module_statuses,
+            profile_payload=payload,
+        )
+
+    def _list_juxing_creator_library(
+        self,
+        *,
+        industry: str | None,
+        creator_type: str | None,
+        province: str | None,
+        city: str | None,
+        followers_min: float | None,
+        followers_max: float | None,
+        monthly_growth_min: float | None,
+        monthly_growth_max: float | None,
+        interaction_min: float | None,
+        interaction_max: float | None,
+        completion_min: float | None,
+        completion_max: float | None,
+        expected_cpm_min: float | None,
+        expected_cpm_max: float | None,
+        expected_cpe_min: float | None,
+        expected_cpe_max: float | None,
+        cooperation_form: str | None,
+        complete_only: bool,
+        sort: str,
+        direction: Literal["asc", "desc"],
+        cursor: str | None,
+        limit: int,
+    ) -> CreatorLibraryPage:
+        """Juxing library list read from the shared projection + immutable snapshots.
+
+        Only filters whose juxing meaning is verified are accepted.  A Xingtu-only filter is an
+        explicit error instead of a silently ignored condition that would return wrong rows.
+        """
+
+        unsupported = (
+            industry,
+            creator_type,
+            monthly_growth_min,
+            monthly_growth_max,
+            interaction_min,
+            interaction_max,
+            completion_min,
+            completion_max,
+            expected_cpm_min,
+            expected_cpm_max,
+            expected_cpe_min,
+            expected_cpe_max,
+            cooperation_form,
+        )
+        if any(value is not None for value in unsupported):
+            raise CollectorError("INVALID_FORM", "KUAISHOU_JUXING_LIBRARY_FILTER_UNSUPPORTED")
+        if sort not in {"updated_at", "followers"}:
+            raise CollectorError("INVALID_FORM", "KUAISHOU_JUXING_LIBRARY_SORT_UNSUPPORTED")
+        filters = {
+            "platform": "kuaishou_juxing",
+            "province": province,
+            "city": city,
+            "followers_min": followers_min,
+            "followers_max": followers_max,
+            "complete_only": complete_only,
+            "sort": sort,
+            "direction": direction,
+        }
+        scope = self._creator_library_scope(filters)
+        offset = self._library_cursor(cursor, scope) if cursor else 0
+        followers_expr = "(pc.projection->'basic.followers'->'value'->>'amount')::numeric"
+        clauses = [sql.SQL("pc.platform='kuaishou_juxing'")]
+        params: list[Any] = []
+        if province:
+            clauses.append(sql.SQL("pc.projection->'basic.province'->>'value'=%s"))
+            params.append(province)
+        if city:
+            clauses.append(sql.SQL("pc.projection->'basic.city'->>'value'=%s"))
+            params.append(city)
+        if followers_min is not None:
+            clauses.append(sql.SQL(followers_expr + ">=%s"))
+            params.append(followers_min)
+        if followers_max is not None:
+            clauses.append(sql.SQL(followers_expr + "<=%s"))
+            params.append(followers_max)
+        if complete_only:
+            clauses.append(
+                sql.SQL(
+                    "COALESCE((s.payload->>'profile_complete')::boolean,false) "
+                    "AND COALESCE((s.payload->>'pipeline_complete')::boolean,false)"
+                )
+            )
+        order_by = sql.SQL("s.created_at") if sort == "updated_at" else sql.SQL(followers_expr)
+        order_direction = sql.SQL("ASC") if direction == "asc" else sql.SQL("DESC")
+        query = (
+            sql.SQL(
+                """SELECT pc.creator_id,pc.platform_creator_id,pc.projection,
+                s.snapshot_id AS latest_snapshot_id,s.payload AS latest_payload,
+                s.created_at AS data_updated_at
+                FROM platform_creators pc
+                JOIN LATERAL (
+                  SELECT cs.snapshot_id,cs.payload,cs.created_at
+                  FROM creator_snapshots cs WHERE cs.creator_id=pc.creator_id
+                  ORDER BY cs.created_at DESC,cs.snapshot_id DESC LIMIT 1
+                ) s ON true
+                WHERE """
+            )
+            + sql.SQL(" AND ").join(clauses)
+            + sql.SQL(" ORDER BY ")
+            + order_by
+            + sql.SQL(" ")
+            + order_direction
+            + sql.SQL(" NULLS LAST,pc.creator_id ASC LIMIT %s OFFSET %s")
+        )
+        params.extend([limit + 1, offset])
+        with self.repository.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        visible = rows[:limit]
+        next_cursor = None
+        if len(rows) > limit:
+            raw = json.dumps(
+                {"scope": scope, "offset": offset + limit}, separators=(",", ":")
+            ).encode()
+            next_cursor = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+        return CreatorLibraryPage(
+            items=[self._juxing_library_summary(row) for row in visible],
+            next_cursor=next_cursor,
         )
 
     @staticmethod
@@ -1381,6 +1772,7 @@ class ProductQueries:
         if not 1 <= limit <= 100:
             raise CollectorError("INVALID_FORM", "INVALID_PAGE_SIZE")
         creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
+        self._require_xingtu_library_creator(creator_id, "CONTENTS")
         after = -1
         if cursor:
             try:
@@ -1564,6 +1956,7 @@ class ProductQueries:
     ) -> CreatorVideoPage:
         """The work observations of the creator's current snapshot, or of an explicit one."""
         creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
+        self._require_xingtu_library_creator(creator_id, "VIDEOS")
         with self.repository.connect() as conn:
             if snapshot_id:
                 snapshot_id = _validated_uuid(snapshot_id, "SNAPSHOT_NOT_FOUND")
@@ -1616,6 +2009,7 @@ class ProductQueries:
 
     def creator_library_history(self, creator_id: str) -> CreatorLibraryHistory:
         creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
+        self._require_xingtu_library_creator(creator_id, "HISTORY")
         with self.repository.connect() as conn:
             rows = conn.execute(
                 """SELECT * FROM douyin_xingtu_creator_snapshot_index WHERE creator_id=%s
@@ -1664,6 +2058,7 @@ class ProductQueries:
         self, creator_id: str, cooperation_form: str | None = None
     ) -> list[CreatorLibraryQuote]:
         creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
+        self._require_xingtu_library_creator(creator_id, "QUOTES")
         query = "SELECT * FROM douyin_xingtu_creator_quote_observations WHERE creator_id=%s"
         params: list[Any] = [creator_id]
         if cooperation_form:

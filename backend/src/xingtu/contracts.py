@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import re
 from typing import Literal
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import Field, model_validator
 
@@ -14,6 +15,11 @@ class LocatorSpec(Model):
     attribute: str | None = None
     # Form controls expose their content as a DOM property; the attribute is often absent.
     property: Literal["value"] | None = None
+    # Extract one stable value from rendered text/attributes without storing the surrounding URL
+    # or presentation label.  This is required by Juxing, whose account is exposed as `aid` in a
+    # protected iframe URL and whose creator identity is rendered as `ID 123`.  The expression is
+    # contract data and must contain exactly one capturing group.
+    capture_regex: str | None = None
     value_map: dict[str, str] = Field(default_factory=dict)
     # Read every matching text node as one ordered, de-duplicated string list.  This is opt-in so
     # existing single-value locators keep their strict exactly-one-node contract.
@@ -26,6 +32,15 @@ class LocatorSpec(Model):
     def multiple_empty_evidence_is_scoped(self) -> LocatorSpec:
         if self.empty_container_selector and not self.multiple:
             raise ValueError("empty_container_selector requires multiple=true")
+        if self.capture_regex:
+            try:
+                compiled = re.compile(self.capture_regex)
+            except re.error as exc:
+                raise ValueError("invalid capture_regex") from exc
+            if compiled.groups != 1:
+                raise ValueError("capture_regex requires exactly one group")
+            if self.multiple:
+                raise ValueError("capture_regex is not supported for multiple locators")
         return self
 
 
@@ -323,6 +338,10 @@ class SearchSpec(Model):
 class SessionSpec(Model):
     entry_url: str
     account: LocatorSpec
+    # Some multi-account platforms render the selected child-account id only in the protected
+    # page URL. This fallback is executable only when the contract names the exact parameter;
+    # readable DOM identity remains authoritative and conflicting URL values are rejected.
+    account_url_parameter: str | None = None
     protected_ready: LocatorSpec
     error_selectors: dict[str, LocatorSpec]
     identity: LocatorSpec
@@ -341,6 +360,52 @@ class SessionSpec(Model):
             if not url.startswith("https://"):
                 raise ValueError("business_urls must be absolute https URLs")
         return self
+
+
+def account_id_from_url(url: str, parameter: str | None) -> str | None:
+    """Return one unambiguous contract-declared account id from query or hash query."""
+
+    if not parameter:
+        return None
+    parsed = urlsplit(url)
+    values = parse_qs(parsed.query, keep_blank_values=False).get(parameter, [])
+    fragment_query = urlsplit(parsed.fragment).query
+    values.extend(parse_qs(fragment_query, keep_blank_values=False).get(parameter, []))
+    unique = {value.strip() for value in values if value.strip()}
+    return next(iter(unique)) if len(unique) == 1 else None
+
+
+def bind_account_to_url(url: str, parameter: str | None, account_id: str) -> str:
+    """Bind a declared child account in both outer and SPA-fragment query strings."""
+
+    if not parameter:
+        return url
+
+    def bound_query(query: str) -> str:
+        pairs = [(key, value) for key, value in parse_qsl(query) if key != parameter]
+        pairs.append((parameter, account_id))
+        return urlencode(pairs)
+
+    parsed = urlsplit(url)
+    fragment = urlsplit(parsed.fragment)
+    bound_fragment = urlunsplit(
+        (
+            fragment.scheme,
+            fragment.netloc,
+            fragment.path,
+            bound_query(fragment.query),
+            fragment.fragment,
+        )
+    )
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            bound_query(parsed.query),
+            bound_fragment,
+        )
+    )
 
 
 class PlatformRegistry(Model):

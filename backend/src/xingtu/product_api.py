@@ -3,7 +3,7 @@ import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -15,9 +15,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from redis import Redis
 from starlette.middleware.base import RequestResponseEndpoint
 
+from .adapter_factory import platform_adapter_available
 from .contracts import PlatformRegistry
 from .creator_update import CreatorUpdateService
-from .domain import CollectorError, ProfileRequirement, TaskKind, TaskStatus
+from .domain import CollectorError, PlatformId, ProfileRequirement, TaskKind, TaskStatus
 from .product_auth import AuthService, RedisLoginLimiter
 from .product_covers import ProductCoverConfig, ProductCoverReader
 from .product_models import (
@@ -55,6 +56,21 @@ SESSION_COOKIE = "xingtu_product_session"
 CSRF_HEADER = "X-CSRF-Token"
 
 
+def _juxing_max_target_count() -> int:
+    """Configured juxing target ceiling; the default keeps the stage-B safety limit."""
+
+    raw = os.environ.get("XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT", "3")
+    try:
+        value = int(raw)
+    except ValueError:
+        raise CollectorError(
+            "STORAGE_UNAVAILABLE", "KUAISHOU_JUXING_MAX_TARGET_COUNT_INVALID"
+        ) from None
+    if not 1 <= value <= 200:
+        raise CollectorError("STORAGE_UNAVAILABLE", "KUAISHOU_JUXING_MAX_TARGET_COUNT_INVALID")
+    return value
+
+
 @dataclass(frozen=True)
 class ProductSettings:
     database_url: str
@@ -70,6 +86,12 @@ class ProductSettings:
     remote_viewer_base_url: str | None = None
     remote_vnc_targets: dict[str, str] | None = None
     profile_requirement_path: Path = Path("contracts/profile_requirements.json")
+    enable_kuaishou_juxing: bool = False
+    juxing_observed_contract_path: Path = Path("contracts/kuaishou_juxing.observed.json")
+    juxing_registry_path: Path = Path("contracts/kuaishou_juxing.verified.json")
+    # Stage-B safety limit, explicitly overridable for a separately authorized acceptance run.
+    # The default stays 3 so production behaviour is not widened by a test environment variable.
+    kuaishou_juxing_max_target_count: int = 3
 
     @classmethod
     def from_environment(cls) -> "ProductSettings":
@@ -145,6 +167,21 @@ class ProductSettings:
                     "contracts/profile_requirements.json",
                 )
             ),
+            enable_kuaishou_juxing=os.environ.get("XINGTU_ENABLE_KUAISHOU_JUXING", "0").lower()
+            in {"1", "true", "yes"},
+            juxing_observed_contract_path=Path(
+                os.environ.get(
+                    "XINGTU_JUXING_OBSERVED_CONTRACT_PATH",
+                    "contracts/kuaishou_juxing.observed.json",
+                )
+            ),
+            juxing_registry_path=Path(
+                os.environ.get(
+                    "XINGTU_JUXING_REGISTRY_PATH",
+                    "contracts/kuaishou_juxing.verified.json",
+                )
+            ),
+            kuaishou_juxing_max_target_count=_juxing_max_target_count(),
         )
 
 
@@ -157,6 +194,15 @@ class ProductServices:
     covers: ProductCoverReader
     settings: ProductSettings
     updates: CreatorUpdateService | None = None
+    platform_registries: dict[str, PlatformRegistry] = field(default_factory=dict)
+
+    def registry_for(self, platform: str) -> PlatformRegistry:
+        if platform == "douyin_xingtu":
+            return self.registry
+        registry = self.platform_registries.get(platform)
+        if registry is None:
+            raise CollectorError("UNSUPPORTED_FILTER", "PLATFORM_CONTRACT_NOT_AVAILABLE")
+        return registry
 
 
 def build_services(
@@ -170,6 +216,22 @@ def build_services(
     auth = AuthService(products, limiter)
     registry = PlatformRegistry.model_validate_json(settings.registry_path.read_text())
     registry.require_enabled(live=True)
+    platform_registries: dict[str, PlatformRegistry] = {}
+    if settings.juxing_registry_path.is_file():
+        try:
+            juxing_registry = PlatformRegistry.model_validate_json(
+                settings.juxing_registry_path.read_text()
+            )
+            juxing_registry.require_enabled(live=True)
+        except (OSError, ValueError) as exc:
+            if settings.enable_kuaishou_juxing:
+                raise CollectorError(
+                    "STORAGE_UNAVAILABLE", "KUAISHOU_JUXING_REGISTRY_INVALID"
+                ) from exc
+        else:
+            platform_registries["kuaishou_juxing"] = juxing_registry
+    elif settings.enable_kuaishou_juxing:
+        raise CollectorError("STORAGE_UNAVAILABLE", "KUAISHOU_JUXING_REGISTRY_INVALID")
     requirement = (
         ProfileRequirement.model_validate_json(settings.profile_requirement_path.read_text())
         if settings.profile_requirement_path.is_file()
@@ -183,6 +245,7 @@ def build_services(
         covers=ProductCoverReader(settings.cover_config or ProductCoverConfig()),
         settings=settings,
         updates=CreatorUpdateService(repository, registry, requirement),
+        platform_registries=platform_registries,
     )
 
 
@@ -353,30 +416,102 @@ def create_app(
             csrf_token=user.csrf_token,
         )
 
-    @app.get("/api/platforms/douyin_xingtu/capabilities")
-    def capabilities(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> dict[str, Any]:
+    @app.get("/api/platforms/{platform}/capabilities")
+    def capabilities(
+        platform: Literal["douyin_xingtu", "kuaishou_juxing"],
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+    ) -> dict[str, Any]:
         del user
         from .product_models import CapabilityDTO
 
-        return CapabilityDTO.from_capabilities(services.registry.capabilities).model_dump(
-            mode="json"
+        if platform == "kuaishou_juxing" and not services.settings.enable_kuaishou_juxing:
+            raise CollectorError("UNSUPPORTED_FILTER", "KUAISHOU_JUXING_FEATURE_DISABLED")
+        registry = services.registry_for(platform)
+        return CapabilityDTO.from_capabilities(
+            registry.capabilities,
+            platform=platform,
+            target_count_max=(
+                services.settings.kuaishou_juxing_max_target_count
+                if platform == "kuaishou_juxing"
+                else None
+            ),
+        ).model_dump(mode="json")
+
+    @app.get("/api/platforms")
+    def platforms(
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+    ) -> list[dict[str, Any]]:
+        del user
+        observed_status = "unavailable"
+        observed_version = None
+        path = services.settings.juxing_observed_contract_path
+        if path.is_file():
+            try:
+                metadata = json.loads(path.read_text())
+            except (OSError, json.JSONDecodeError):
+                metadata = {}
+            candidate_status = str(metadata.get("status") or "unavailable")
+            if candidate_status in {"verified", "observed", "documented", "unavailable"}:
+                observed_status = candidate_status
+            observed_version = (
+                metadata.get("contract_version")
+                if isinstance(metadata.get("contract_version"), str)
+                else None
+            )
+        executable_registry = services.platform_registries.get("kuaishou_juxing")
+        executable_verified = executable_registry is not None
+        # A feature flag alone cannot upgrade observed evidence or enable live collection.
+        juxing_enabled = (
+            services.settings.enable_kuaishou_juxing
+            and executable_verified
+            and platform_adapter_available("kuaishou_juxing")
         )
+        if not services.settings.enable_kuaishou_juxing:
+            juxing_disabled_reason = "磁力聚星功能开关当前关闭"
+        elif not executable_verified:
+            juxing_disabled_reason = "磁力聚星可执行能力合同不可用"
+        elif not platform_adapter_available("kuaishou_juxing"):
+            juxing_disabled_reason = "当前构建尚未包含可执行的磁力聚星 Adapter"
+        else:
+            juxing_disabled_reason = None
+        return [
+            {
+                "platform": "douyin_xingtu",
+                "label": "巨量星图",
+                "enabled": True,
+                "capability_status": "verified",
+                "contract_version": services.registry.contract_version,
+            },
+            {
+                "platform": "kuaishou_juxing",
+                "label": "磁力聚星",
+                "enabled": juxing_enabled,
+                "capability_status": "verified" if executable_verified else observed_status,
+                "contract_version": (
+                    executable_registry.contract_version
+                    if executable_registry is not None
+                    else observed_version
+                ),
+                "disabled_reason": juxing_disabled_reason,
+            },
+        ]
 
     @app.get(
-        "/api/platforms/douyin_xingtu/profile-field-catalog",
+        "/api/platforms/{platform}/profile-field-catalog",
         response_model=ProfileFieldCatalog,
     )
     def profile_field_catalog(
+        platform: Literal["douyin_xingtu", "kuaishou_juxing"],
         user: Annotated[AuthenticatedUser, Depends(current_user)],
     ) -> ProfileFieldCatalog:
-        """Display names, kinds and registered units for the 81 profile fields.
+        """Display names, kinds and registered units for one platform's profile fields.
 
         Read-only projection of the already-loaded verified registry: no database access, no
         business values.  Evidence-corrected display names are marked with `name_source`.
         """
 
         del user
-        return build_profile_field_catalog(services.registry)
+        return build_profile_field_catalog(services.registry_for(platform), platform)
 
     @app.post("/api/tasks", response_model=CreateTaskResponse, status_code=202)
     def create_task(
@@ -385,9 +520,15 @@ def create_app(
         idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
         origin_root_task_id: Annotated[UUID | None, Header(alias="X-Origin-Root-Task-Id")] = None,
     ) -> CreateTaskResponse:
+        if form.platform == "kuaishou_juxing":
+            if not services.settings.enable_kuaishou_juxing:
+                raise CollectorError("UNSUPPORTED_FILTER", "KUAISHOU_JUXING_FEATURE_DISABLED")
+            if form.target_count > services.settings.kuaishou_juxing_max_target_count:
+                raise CollectorError("UNSUPPORTED_FILTER", "KUAISHOU_JUXING_TARGET_ABOVE_LIMIT")
+        registry = services.registry_for(form.platform)
         return services.products.create_product_task(
             form,
-            capability_version=services.registry.capabilities.version,
+            capability_version=registry.capabilities.version,
             user_id=user.user_id,
             idempotency_key=idempotency_key,
             model_config_id=services.settings.model_config_id,
@@ -400,6 +541,7 @@ def create_app(
         user: Annotated[AuthenticatedUser, Depends(current_user)],
         status: TaskStatus | None = None,
         task_kind: TaskKind | None = None,
+        platform: Literal["douyin_xingtu", "kuaishou_juxing"] | None = None,
         created_from: datetime | None = None,
         created_to: datetime | None = None,
         cursor: str | None = None,
@@ -409,6 +551,7 @@ def create_app(
         return services.queries.list_tasks(
             status=status,
             task_kind=task_kind,
+            platform=PlatformId(platform) if platform else None,
             created_from=created_from,
             created_to=created_to,
             cursor=cursor,
@@ -713,7 +856,7 @@ def create_app(
     @app.get("/api/creator-library", response_model=CreatorLibraryPage)
     def creator_library(
         user: Annotated[AuthenticatedUser, Depends(current_user)],
-        platform: Literal["douyin_xingtu"] = "douyin_xingtu",
+        platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu",
         industry: str | None = None,
         creator_type: str | None = None,
         province: str | None = None,
@@ -745,7 +888,7 @@ def create_app(
         cursor: str | None = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 20,
     ) -> CreatorLibraryPage:
-        del user, platform
+        del user
         ranges = (
             (followers_min, followers_max),
             (monthly_growth_min, monthly_growth_max),
@@ -757,6 +900,7 @@ def create_app(
         if any(low is not None and high is not None and low > high for low, high in ranges):
             raise CollectorError("INVALID_FORM", "INVALID_CREATOR_LIBRARY_RANGE")
         return services.queries.list_creator_library(
+            platform=platform,
             industry=industry,
             creator_type=creator_type,
             province=province,

@@ -266,9 +266,9 @@ def test_network_mode_is_persisted_and_immutable(repo):
     # task completion moment, 013 the requirement form v2, 014 the F10 browser takeover, 015 the
     # creator video/metric fields, 016 their backfilled provenance and 017 the correction that
     # drops provenance entries describing a NULL column (DATA-02), 018 the creator update task
-    # kinds and scheduling state (UPD), and 019 the independent Collection Worker liveness
-    # generation/heartbeat records: the set is asserted exhaustively so a migration that silently
-    # stops being applied is caught here.
+    # kinds and scheduling state (UPD), 019 the independent Collection Worker liveness
+    # generation/heartbeat records, and 020 the additive task-platform/unit-platform binding:
+    # the set is asserted exhaustively so a migration that silently stops being applied is caught.
     assert [row["version"] for row in versions] == [
         1,
         2,
@@ -289,7 +289,52 @@ def test_network_mode_is_persisted_and_immutable(repo):
         17,
         18,
         19,
+        20,
     ]
+    with repo.connect() as conn:
+        binding = conn.execute(
+            """SELECT platform,account_ref,profile_ref,enabled
+            FROM execution_unit_platform_bindings WHERE unit_id='unit'"""
+        ).fetchone()
+    assert binding == {
+        "platform": "douyin_xingtu",
+        "account_ref": "synthetic-account",
+        "profile_ref": "synthetic-profile",
+        "enabled": True,
+    }
+
+
+def test_unit_selection_requires_both_task_kind_and_platform_binding(repo):
+    from xingtu.domain import TaskKind
+
+    assert repo.select_execution_unit(TaskKind.COLLECTION, "douyin_xingtu") == "unit"
+    assert repo.select_execution_unit(TaskKind.COLLECTION, "kuaishou_juxing") is None
+    repo.register_unit_platform_binding(
+        "unit", "kuaishou_juxing", "ks-account", "ks-id", "ks-profile", "ks-registry"
+    )
+    assert repo.select_execution_unit(TaskKind.COLLECTION, "kuaishou_juxing") == "unit"
+    repo.register_unit_platform_binding(
+        "unit",
+        "kuaishou_juxing",
+        "ks-account",
+        "ks-id",
+        "ks-profile",
+        "ks-registry",
+        enabled=False,
+    )
+    assert repo.select_execution_unit(TaskKind.COLLECTION, "kuaishou_juxing") is None
+    repo.register_unit_platform_binding(
+        "unit", "kuaishou_juxing", "ks-account", "ks-id", "ks-profile", "ks-registry"
+    )
+    with pytest.raises(CollectorError, match="immutable"):
+        repo.register_unit_platform_binding(
+            "unit", "kuaishou_juxing", "changed", "ks-id", "ks-profile", "ks-registry"
+        )
+    repo.set_unit_task_kinds(
+        "unit", [TaskKind.SCHEDULED_UPDATE], "test", "only scheduled for qualification test"
+    )
+    assert repo.select_execution_unit(TaskKind.COLLECTION, "kuaishou_juxing") is None
+    assert repo.select_execution_unit(TaskKind.SCHEDULED_UPDATE, "kuaishou_juxing") == "unit"
 
 
 def test_account_rebinding_is_explicit_audited_and_requires_released_browser(repo, started):
@@ -327,6 +372,15 @@ def test_account_rebinding_is_explicit_audited_and_requires_released_browser(rep
     assert row["verified_account_id"] is None
     assert row["state"] == "SESSION_UNVERIFIED"
     assert row["failure_reason"] == "ACCOUNT_BINDING_CHANGED"
+    with repo.connect() as conn:
+        binding = conn.execute(
+            """SELECT expected_account_id,last_observed_status,last_observed_reason
+            FROM execution_unit_platform_bindings
+            WHERE unit_id='unit' AND platform='douyin_xingtu'"""
+        ).fetchone()
+    assert binding["expected_account_id"] == "ID: 9000000000000001"
+    assert binding["last_observed_status"] == "INDETERMINATE"
+    assert binding["last_observed_reason"] == "ACCOUNT_BINDING_CHANGED"
     with repo.connect() as conn:
         rebinding = conn.execute("SELECT * FROM unit_account_rebindings").fetchone()
         audit = conn.execute(

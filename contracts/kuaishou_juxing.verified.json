@@ -1,0 +1,3661 @@
+{
+  "schema_version": "platform_registry.v1",
+  "contract_version": "juxing-video-creator-stage-c-v3",
+  "adapter_version": "juxing-browser-v3",
+  "status": "VERIFIED",
+  "sample_kind": "live",
+  "verified_at": "2026-10-30T14:26:00Z",
+  "account_permission_type": "已登录磁力聚星商业账号；账号角色名称未在当前页面暴露，权限范围限短视频找达人及可见详情模块",
+  "evidence_refs": [
+    "docs/design/KJX-01-platform-gap-analysis.md",
+    "docs/evidence/KJX-01-full-regression.md",
+    ".runtime/kjx-full/t2-diagnosis/probe/account-page.png",
+    ".runtime/kjx-full/t2-diagnosis/probe/dom.json"
+  ],
+  "capabilities": {
+    "version": "juxing-video-square-stage-c-v2",
+    "status": "VERIFIED",
+    "sample_kind": "live",
+    "evidence_refs": [
+      "docs/design/KJX-01-platform-gap-analysis.md",
+      "docs/evidence/KJX-01-full-regression.md"
+    ],
+    "fields": [
+      {
+        "field": "keyword",
+        "label": "内容关键词",
+        "operators": [
+          "eq"
+        ],
+        "keyword_mode": "content",
+        "control": "text"
+      },
+      {
+        "field": "content_type",
+        "label": "内容类型",
+        "group": "内容属性",
+        "control": "single-select",
+        "operators": [
+          "in"
+        ],
+        "enum": [
+          "670",
+          "671",
+          "672",
+          "673",
+          "674",
+          "675",
+          "maternal_child",
+          "677",
+          "678",
+          "679",
+          "680",
+          "681",
+          "682",
+          "683",
+          "684",
+          "685",
+          "686",
+          "687",
+          "688",
+          "689",
+          "704",
+          "690",
+          "691",
+          "692",
+          "693",
+          "694",
+          "695",
+          "696",
+          "697",
+          "698",
+          "699",
+          "700",
+          "701",
+          "702",
+          "703",
+          "706",
+          "705",
+          "920"
+        ],
+        "options": [
+          {
+            "value": "670",
+            "label": "美妆",
+            "request_value": "670"
+          },
+          {
+            "value": "671",
+            "label": "游戏",
+            "request_value": "671"
+          },
+          {
+            "value": "672",
+            "label": "颜值达人",
+            "request_value": "672"
+          },
+          {
+            "value": "673",
+            "label": "美食",
+            "request_value": "673"
+          },
+          {
+            "value": "674",
+            "label": "短剧",
+            "request_value": "674"
+          },
+          {
+            "value": "675",
+            "label": "时尚",
+            "request_value": "675"
+          },
+          {
+            "value": "maternal_child",
+            "label": "母婴亲子",
+            "request_value": "676"
+          },
+          {
+            "value": "677",
+            "label": "生活",
+            "request_value": "677"
+          },
+          {
+            "value": "678",
+            "label": "汽车",
+            "request_value": "678"
+          },
+          {
+            "value": "679",
+            "label": "旅游",
+            "request_value": "679"
+          },
+          {
+            "value": "680",
+            "label": "体育运动",
+            "request_value": "680"
+          },
+          {
+            "value": "681",
+            "label": "二次元",
+            "request_value": "681"
+          },
+          {
+            "value": "682",
+            "label": "艺术文化",
+            "request_value": "682"
+          },
+          {
+            "value": "683",
+            "label": "房产家居",
+            "request_value": "683"
+          },
+          {
+            "value": "684",
+            "label": "健康医疗",
+            "request_value": "684"
+          },
+          {
+            "value": "685",
+            "label": "教育培训",
+            "request_value": "685"
+          },
+          {
+            "value": "686",
+            "label": "高新数码",
+            "request_value": "686"
+          },
+          {
+            "value": "687",
+            "label": "音乐",
+            "request_value": "687"
+          },
+          {
+            "value": "688",
+            "label": "舞蹈",
+            "request_value": "688"
+          },
+          {
+            "value": "689",
+            "label": "读书",
+            "request_value": "689"
+          },
+          {
+            "value": "704",
+            "label": "摄影",
+            "request_value": "704"
+          },
+          {
+            "value": "690",
+            "label": "财经投资",
+            "request_value": "690"
+          },
+          {
+            "value": "691",
+            "label": "萌宠",
+            "request_value": "691"
+          },
+          {
+            "value": "692",
+            "label": "时政资讯",
+            "request_value": "692"
+          },
+          {
+            "value": "693",
+            "label": "科学与法律",
+            "request_value": "693"
+          },
+          {
+            "value": "694",
+            "label": "三农",
+            "request_value": "694"
+          },
+          {
+            "value": "695",
+            "label": "搞笑",
+            "request_value": "695"
+          },
+          {
+            "value": "696",
+            "label": "情感",
+            "request_value": "696"
+          },
+          {
+            "value": "697",
+            "label": "人文",
+            "request_value": "697"
+          },
+          {
+            "value": "698",
+            "label": "明星娱乐",
+            "request_value": "698"
+          },
+          {
+            "value": "699",
+            "label": "星座命理",
+            "request_value": "699"
+          },
+          {
+            "value": "700",
+            "label": "奇人异象",
+            "request_value": "700"
+          },
+          {
+            "value": "701",
+            "label": "军事",
+            "request_value": "701"
+          },
+          {
+            "value": "702",
+            "label": "影视娱乐",
+            "request_value": "702"
+          },
+          {
+            "value": "703",
+            "label": "民生资讯",
+            "request_value": "703"
+          },
+          {
+            "value": "706",
+            "label": "健身达人",
+            "request_value": "706"
+          },
+          {
+            "value": "705",
+            "label": "纪实类",
+            "request_value": "705"
+          },
+          {
+            "value": "920",
+            "label": "自拍",
+            "request_value": "920"
+          }
+        ],
+        "request_mapping": {
+          "670": {
+            "id": "670",
+            "sub_ids": [
+              "707",
+              "708",
+              "709",
+              "710",
+              "711",
+              "712"
+            ],
+            "select_first_level_id": true
+          },
+          "671": {
+            "id": "671",
+            "sub_ids": [
+              "871",
+              "872",
+              "873",
+              "874",
+              "875",
+              "876",
+              "877",
+              "878",
+              "879",
+              "880",
+              "881",
+              "882",
+              "884",
+              "885",
+              "886",
+              "887",
+              "888",
+              "889",
+              "890",
+              "891",
+              "892",
+              "893",
+              "895"
+            ],
+            "select_first_level_id": true
+          },
+          "672": {
+            "id": "672",
+            "sub_ids": [
+              "713",
+              "714",
+              "715",
+              "716",
+              "717"
+            ],
+            "select_first_level_id": true
+          },
+          "673": {
+            "id": "673",
+            "sub_ids": [
+              "718",
+              "719",
+              "720",
+              "721",
+              "722",
+              "723",
+              "724"
+            ],
+            "select_first_level_id": true
+          },
+          "674": {
+            "id": "674",
+            "sub_ids": [
+              "725",
+              "726",
+              "727",
+              "728",
+              "729",
+              "730",
+              "731",
+              "733",
+              "732",
+              "734"
+            ],
+            "select_first_level_id": true
+          },
+          "675": {
+            "id": "675",
+            "sub_ids": [
+              "735",
+              "736",
+              "737",
+              "738",
+              "739"
+            ],
+            "select_first_level_id": true
+          },
+          "maternal_child": {
+            "id": "676",
+            "sub_ids": [
+              "740",
+              "741",
+              "742",
+              "743"
+            ],
+            "select_first_level_id": true
+          },
+          "677": {
+            "id": "677",
+            "sub_ids": [
+              "744",
+              "745",
+              "746",
+              "747",
+              "748",
+              "749"
+            ],
+            "select_first_level_id": true
+          },
+          "678": {
+            "id": "678",
+            "sub_ids": [
+              "750",
+              "751",
+              "752",
+              "753",
+              "754",
+              "755"
+            ],
+            "select_first_level_id": true
+          },
+          "679": {
+            "id": "679",
+            "sub_ids": [
+              "756",
+              "757",
+              "758",
+              "759"
+            ],
+            "select_first_level_id": true
+          },
+          "680": {
+            "id": "680",
+            "sub_ids": [
+              "760",
+              "761",
+              "762",
+              "763",
+              "764",
+              "765",
+              "766",
+              "767",
+              "768",
+              "769"
+            ],
+            "select_first_level_id": true
+          },
+          "681": {
+            "id": "681",
+            "sub_ids": [
+              "770",
+              "771",
+              "772",
+              "773",
+              "774",
+              "775"
+            ],
+            "select_first_level_id": true
+          },
+          "682": {
+            "id": "682",
+            "sub_ids": [
+              "776",
+              "777",
+              "778",
+              "779",
+              "780",
+              "781",
+              "782",
+              "783"
+            ],
+            "select_first_level_id": true
+          },
+          "683": {
+            "id": "683",
+            "sub_ids": [
+              "784",
+              "785",
+              "786",
+              "787",
+              "788",
+              "789"
+            ],
+            "select_first_level_id": true
+          },
+          "684": {
+            "id": "684",
+            "sub_ids": [
+              "790",
+              "791",
+              "792",
+              "793",
+              "794",
+              "795"
+            ],
+            "select_first_level_id": true
+          },
+          "685": {
+            "id": "685",
+            "sub_ids": [
+              "796",
+              "797",
+              "798",
+              "799",
+              "800",
+              "801",
+              "802"
+            ],
+            "select_first_level_id": true
+          },
+          "686": {
+            "id": "686",
+            "sub_ids": [
+              "803",
+              "804",
+              "805",
+              "806"
+            ],
+            "select_first_level_id": true
+          },
+          "687": {
+            "id": "687",
+            "sub_ids": [
+              "807",
+              "808",
+              "810",
+              "811"
+            ],
+            "select_first_level_id": true
+          },
+          "688": {
+            "id": "688",
+            "sub_ids": [
+              "812",
+              "813",
+              "814",
+              "815",
+              "816",
+              "817",
+              "818"
+            ],
+            "select_first_level_id": true
+          },
+          "689": {
+            "id": "689",
+            "sub_ids": [
+              "906",
+              "907",
+              "908",
+              "909"
+            ],
+            "select_first_level_id": true
+          },
+          "704": {
+            "id": "704",
+            "sub_ids": [
+              "851",
+              "852",
+              "853"
+            ],
+            "select_first_level_id": true
+          },
+          "690": {
+            "id": "690",
+            "sub_ids": [
+              "914",
+              "915",
+              "916",
+              "917",
+              "918",
+              "919"
+            ],
+            "select_first_level_id": true
+          },
+          "691": {
+            "id": "691",
+            "sub_ids": [
+              "910",
+              "911",
+              "912",
+              "913"
+            ],
+            "select_first_level_id": true
+          },
+          "692": {
+            "id": "692",
+            "sub_ids": [
+              "897",
+              "898",
+              "899"
+            ],
+            "select_first_level_id": true
+          },
+          "693": {
+            "id": "693",
+            "sub_ids": [
+              "854",
+              "855",
+              "856"
+            ],
+            "select_first_level_id": true
+          },
+          "694": {
+            "id": "694",
+            "sub_ids": [
+              "866",
+              "867",
+              "868",
+              "869",
+              "870"
+            ],
+            "select_first_level_id": true
+          },
+          "695": {
+            "id": "695",
+            "sub_ids": [
+              "857",
+              "858",
+              "859",
+              "860",
+              "861",
+              "862",
+              "863",
+              "864",
+              "865"
+            ],
+            "select_first_level_id": true
+          },
+          "696": {
+            "id": "696",
+            "sub_ids": [
+              "903",
+              "904",
+              "905"
+            ],
+            "select_first_level_id": true
+          },
+          "697": {
+            "id": "697",
+            "sub_ids": [
+              "900",
+              "902"
+            ],
+            "select_first_level_id": true
+          },
+          "698": {
+            "id": "698",
+            "sub_ids": [
+              "848",
+              "849",
+              "850"
+            ],
+            "select_first_level_id": true
+          },
+          "699": {
+            "id": "699",
+            "sub_ids": [
+              "845",
+              "846",
+              "847"
+            ],
+            "select_first_level_id": true
+          },
+          "700": {
+            "id": "700",
+            "sub_ids": [
+              "839",
+              "840",
+              "841",
+              "842",
+              "843",
+              "844"
+            ],
+            "select_first_level_id": true
+          },
+          "701": {
+            "id": "701",
+            "sub_ids": [
+              "834",
+              "836",
+              "837",
+              "838"
+            ],
+            "select_first_level_id": true
+          },
+          "702": {
+            "id": "702",
+            "sub_ids": [
+              "830",
+              "831",
+              "832",
+              "833"
+            ],
+            "select_first_level_id": true
+          },
+          "703": {
+            "id": "703",
+            "sub_ids": [
+              "826",
+              "827",
+              "829"
+            ],
+            "select_first_level_id": true
+          },
+          "706": {
+            "id": "706",
+            "sub_ids": [
+              "819",
+              "820",
+              "821",
+              "822"
+            ],
+            "select_first_level_id": true
+          },
+          "705": {
+            "id": "705",
+            "sub_ids": [
+              "823",
+              "824",
+              "825"
+            ],
+            "select_first_level_id": true
+          },
+          "920": {
+            "id": "920",
+            "sub_ids": [],
+            "select_first_level_id": true
+          }
+        }
+      },
+      {
+        "field": "followers",
+        "label": "粉丝数量",
+        "group": "受众人群",
+        "control": "range",
+        "operators": [
+          "range"
+        ],
+        "unit": "count",
+        "options": [
+          {
+            "value": "over_1000w",
+            "label": "1000万以上",
+            "range": {
+              "min": 10000000,
+              "max": null
+            }
+          },
+          {
+            "value": "500w_1000w",
+            "label": "500万-1000万",
+            "range": {
+              "min": 5000000,
+              "max": 10000000
+            }
+          },
+          {
+            "value": "300w_500w",
+            "label": "300万-500万",
+            "range": {
+              "min": 3000000,
+              "max": 5000000
+            }
+          },
+          {
+            "value": "100w_300w",
+            "label": "100万-300万",
+            "range": {
+              "min": 1000000,
+              "max": 3000000
+            }
+          },
+          {
+            "value": "10w_100w",
+            "label": "10万-100万",
+            "range": {
+              "min": 100000,
+              "max": 1000000
+            }
+          },
+          {
+            "value": "under_10w",
+            "label": "10万以下",
+            "range": {
+              "min": 0,
+              "max": 100000
+            }
+          }
+        ],
+        "range_constraints": {
+          "min": 0,
+          "max": 100000000,
+          "unit": "count"
+        }
+      },
+      {
+        "field": "region",
+        "label": "达人地域",
+        "group": "达人信息",
+        "control": "cascader",
+        "operators": [
+          "compound"
+        ],
+        "region_tree": [
+          {
+            "value": "11",
+            "label": "北京",
+            "children": [
+              {
+                "value": "1101",
+                "label": "北京",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "12",
+            "label": "天津",
+            "children": [
+              {
+                "value": "1201",
+                "label": "天津",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "13",
+            "label": "河北",
+            "children": [
+              {
+                "value": "1390",
+                "label": "省直辖县级行政区划",
+                "children": []
+              },
+              {
+                "value": "1311",
+                "label": "衡水",
+                "children": []
+              },
+              {
+                "value": "1310",
+                "label": "廊坊",
+                "children": []
+              },
+              {
+                "value": "1309",
+                "label": "沧州",
+                "children": []
+              },
+              {
+                "value": "1308",
+                "label": "承德",
+                "children": []
+              },
+              {
+                "value": "1307",
+                "label": "张家口",
+                "children": []
+              },
+              {
+                "value": "1306",
+                "label": "保定",
+                "children": []
+              },
+              {
+                "value": "1305",
+                "label": "邢台",
+                "children": []
+              },
+              {
+                "value": "1304",
+                "label": "邯郸",
+                "children": []
+              },
+              {
+                "value": "1303",
+                "label": "秦皇岛",
+                "children": []
+              },
+              {
+                "value": "1302",
+                "label": "唐山",
+                "children": []
+              },
+              {
+                "value": "1301",
+                "label": "石家庄",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "14",
+            "label": "山西",
+            "children": [
+              {
+                "value": "1411",
+                "label": "吕梁",
+                "children": []
+              },
+              {
+                "value": "1410",
+                "label": "临汾",
+                "children": []
+              },
+              {
+                "value": "1409",
+                "label": "忻州",
+                "children": []
+              },
+              {
+                "value": "1408",
+                "label": "运城",
+                "children": []
+              },
+              {
+                "value": "1407",
+                "label": "晋中",
+                "children": []
+              },
+              {
+                "value": "1406",
+                "label": "朔州",
+                "children": []
+              },
+              {
+                "value": "1405",
+                "label": "晋城",
+                "children": []
+              },
+              {
+                "value": "1404",
+                "label": "长治",
+                "children": []
+              },
+              {
+                "value": "1403",
+                "label": "阳泉",
+                "children": []
+              },
+              {
+                "value": "1402",
+                "label": "大同",
+                "children": []
+              },
+              {
+                "value": "1401",
+                "label": "太原",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "15",
+            "label": "内蒙古",
+            "children": [
+              {
+                "value": "1529",
+                "label": "阿拉善盟",
+                "children": []
+              },
+              {
+                "value": "1525",
+                "label": "锡林郭勒盟",
+                "children": []
+              },
+              {
+                "value": "1522",
+                "label": "兴安盟",
+                "children": []
+              },
+              {
+                "value": "1509",
+                "label": "乌兰察布",
+                "children": []
+              },
+              {
+                "value": "1508",
+                "label": "巴彦淖尔",
+                "children": []
+              },
+              {
+                "value": "1507",
+                "label": "呼伦贝尔",
+                "children": []
+              },
+              {
+                "value": "1506",
+                "label": "鄂尔多斯",
+                "children": []
+              },
+              {
+                "value": "1505",
+                "label": "通辽",
+                "children": []
+              },
+              {
+                "value": "1504",
+                "label": "赤峰",
+                "children": []
+              },
+              {
+                "value": "1503",
+                "label": "乌海",
+                "children": []
+              },
+              {
+                "value": "1502",
+                "label": "包头",
+                "children": []
+              },
+              {
+                "value": "1501",
+                "label": "呼和浩特",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "21",
+            "label": "辽宁",
+            "children": [
+              {
+                "value": "2114",
+                "label": "葫芦岛",
+                "children": []
+              },
+              {
+                "value": "2113",
+                "label": "朝阳",
+                "children": []
+              },
+              {
+                "value": "2112",
+                "label": "铁岭",
+                "children": []
+              },
+              {
+                "value": "2111",
+                "label": "盘锦",
+                "children": []
+              },
+              {
+                "value": "2110",
+                "label": "辽阳",
+                "children": []
+              },
+              {
+                "value": "2109",
+                "label": "阜新",
+                "children": []
+              },
+              {
+                "value": "2108",
+                "label": "营口",
+                "children": []
+              },
+              {
+                "value": "2107",
+                "label": "锦州",
+                "children": []
+              },
+              {
+                "value": "2106",
+                "label": "丹东",
+                "children": []
+              },
+              {
+                "value": "2105",
+                "label": "本溪",
+                "children": []
+              },
+              {
+                "value": "2104",
+                "label": "抚顺",
+                "children": []
+              },
+              {
+                "value": "2103",
+                "label": "鞍山",
+                "children": []
+              },
+              {
+                "value": "2102",
+                "label": "大连",
+                "children": []
+              },
+              {
+                "value": "2101",
+                "label": "沈阳",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "22",
+            "label": "吉林",
+            "children": [
+              {
+                "value": "2224",
+                "label": "延边朝鲜族自治州",
+                "children": []
+              },
+              {
+                "value": "2208",
+                "label": "白城",
+                "children": []
+              },
+              {
+                "value": "2207",
+                "label": "松原",
+                "children": []
+              },
+              {
+                "value": "2206",
+                "label": "白山",
+                "children": []
+              },
+              {
+                "value": "2205",
+                "label": "通化",
+                "children": []
+              },
+              {
+                "value": "2204",
+                "label": "辽源",
+                "children": []
+              },
+              {
+                "value": "2203",
+                "label": "四平",
+                "children": []
+              },
+              {
+                "value": "2202",
+                "label": "吉林",
+                "children": []
+              },
+              {
+                "value": "2201",
+                "label": "长春",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "23",
+            "label": "黑龙江",
+            "children": [
+              {
+                "value": "2327",
+                "label": "大兴安岭地区",
+                "children": []
+              },
+              {
+                "value": "2312",
+                "label": "绥化",
+                "children": []
+              },
+              {
+                "value": "2311",
+                "label": "黑河",
+                "children": []
+              },
+              {
+                "value": "2310",
+                "label": "牡丹江",
+                "children": []
+              },
+              {
+                "value": "2309",
+                "label": "七台河",
+                "children": []
+              },
+              {
+                "value": "2308",
+                "label": "佳木斯",
+                "children": []
+              },
+              {
+                "value": "2307",
+                "label": "伊春",
+                "children": []
+              },
+              {
+                "value": "2306",
+                "label": "大庆",
+                "children": []
+              },
+              {
+                "value": "2305",
+                "label": "双鸭山",
+                "children": []
+              },
+              {
+                "value": "2304",
+                "label": "鹤岗",
+                "children": []
+              },
+              {
+                "value": "2303",
+                "label": "鸡西",
+                "children": []
+              },
+              {
+                "value": "2302",
+                "label": "齐齐哈尔",
+                "children": []
+              },
+              {
+                "value": "2301",
+                "label": "哈尔滨",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "31",
+            "label": "上海",
+            "children": [
+              {
+                "value": "3101",
+                "label": "上海",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "32",
+            "label": "江苏",
+            "children": [
+              {
+                "value": "3213",
+                "label": "宿迁",
+                "children": []
+              },
+              {
+                "value": "3212",
+                "label": "泰州",
+                "children": []
+              },
+              {
+                "value": "3211",
+                "label": "镇江",
+                "children": []
+              },
+              {
+                "value": "3210",
+                "label": "扬州",
+                "children": []
+              },
+              {
+                "value": "3209",
+                "label": "盐城",
+                "children": []
+              },
+              {
+                "value": "3208",
+                "label": "淮安",
+                "children": []
+              },
+              {
+                "value": "3207",
+                "label": "连云港",
+                "children": []
+              },
+              {
+                "value": "3206",
+                "label": "南通",
+                "children": []
+              },
+              {
+                "value": "3205",
+                "label": "苏州",
+                "children": []
+              },
+              {
+                "value": "3204",
+                "label": "常州",
+                "children": []
+              },
+              {
+                "value": "3203",
+                "label": "徐州",
+                "children": []
+              },
+              {
+                "value": "3202",
+                "label": "无锡",
+                "children": []
+              },
+              {
+                "value": "3201",
+                "label": "南京",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "33",
+            "label": "浙江",
+            "children": [
+              {
+                "value": "3311",
+                "label": "丽水",
+                "children": []
+              },
+              {
+                "value": "3310",
+                "label": "台州",
+                "children": []
+              },
+              {
+                "value": "3309",
+                "label": "舟山",
+                "children": []
+              },
+              {
+                "value": "3308",
+                "label": "衢州",
+                "children": []
+              },
+              {
+                "value": "3307",
+                "label": "金华",
+                "children": []
+              },
+              {
+                "value": "3306",
+                "label": "绍兴",
+                "children": []
+              },
+              {
+                "value": "3305",
+                "label": "湖州",
+                "children": []
+              },
+              {
+                "value": "3304",
+                "label": "嘉兴",
+                "children": []
+              },
+              {
+                "value": "3303",
+                "label": "温州",
+                "children": []
+              },
+              {
+                "value": "3302",
+                "label": "宁波",
+                "children": []
+              },
+              {
+                "value": "3301",
+                "label": "杭州",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "34",
+            "label": "安徽",
+            "children": [
+              {
+                "value": "3418",
+                "label": "宣城",
+                "children": []
+              },
+              {
+                "value": "3417",
+                "label": "池州",
+                "children": []
+              },
+              {
+                "value": "3416",
+                "label": "亳州",
+                "children": []
+              },
+              {
+                "value": "3415",
+                "label": "六安",
+                "children": []
+              },
+              {
+                "value": "3413",
+                "label": "宿州",
+                "children": []
+              },
+              {
+                "value": "3412",
+                "label": "阜阳",
+                "children": []
+              },
+              {
+                "value": "3411",
+                "label": "滁州",
+                "children": []
+              },
+              {
+                "value": "3410",
+                "label": "黄山",
+                "children": []
+              },
+              {
+                "value": "3408",
+                "label": "安庆",
+                "children": []
+              },
+              {
+                "value": "3407",
+                "label": "铜陵",
+                "children": []
+              },
+              {
+                "value": "3406",
+                "label": "淮北",
+                "children": []
+              },
+              {
+                "value": "3405",
+                "label": "马鞍山",
+                "children": []
+              },
+              {
+                "value": "3404",
+                "label": "淮南",
+                "children": []
+              },
+              {
+                "value": "3403",
+                "label": "蚌埠",
+                "children": []
+              },
+              {
+                "value": "3402",
+                "label": "芜湖",
+                "children": []
+              },
+              {
+                "value": "3401",
+                "label": "合肥",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "35",
+            "label": "福建",
+            "children": [
+              {
+                "value": "3509",
+                "label": "宁德",
+                "children": []
+              },
+              {
+                "value": "3508",
+                "label": "龙岩",
+                "children": []
+              },
+              {
+                "value": "3507",
+                "label": "南平",
+                "children": []
+              },
+              {
+                "value": "3506",
+                "label": "漳州",
+                "children": []
+              },
+              {
+                "value": "3505",
+                "label": "泉州",
+                "children": []
+              },
+              {
+                "value": "3504",
+                "label": "三明",
+                "children": []
+              },
+              {
+                "value": "3503",
+                "label": "莆田",
+                "children": []
+              },
+              {
+                "value": "3502",
+                "label": "厦门",
+                "children": []
+              },
+              {
+                "value": "3501",
+                "label": "福州",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "36",
+            "label": "江西",
+            "children": [
+              {
+                "value": "3611",
+                "label": "上饶",
+                "children": []
+              },
+              {
+                "value": "3610",
+                "label": "抚州",
+                "children": []
+              },
+              {
+                "value": "3609",
+                "label": "宜春",
+                "children": []
+              },
+              {
+                "value": "3608",
+                "label": "吉安",
+                "children": []
+              },
+              {
+                "value": "3607",
+                "label": "赣州",
+                "children": []
+              },
+              {
+                "value": "3606",
+                "label": "鹰潭",
+                "children": []
+              },
+              {
+                "value": "3605",
+                "label": "新余",
+                "children": []
+              },
+              {
+                "value": "3604",
+                "label": "九江",
+                "children": []
+              },
+              {
+                "value": "3603",
+                "label": "萍乡",
+                "children": []
+              },
+              {
+                "value": "3602",
+                "label": "景德镇",
+                "children": []
+              },
+              {
+                "value": "3601",
+                "label": "南昌",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "37",
+            "label": "山东",
+            "children": [
+              {
+                "value": "3717",
+                "label": "菏泽",
+                "children": []
+              },
+              {
+                "value": "3716",
+                "label": "滨州",
+                "children": []
+              },
+              {
+                "value": "3715",
+                "label": "聊城",
+                "children": []
+              },
+              {
+                "value": "3714",
+                "label": "德州",
+                "children": []
+              },
+              {
+                "value": "3713",
+                "label": "临沂",
+                "children": []
+              },
+              {
+                "value": "3712",
+                "label": "莱芜",
+                "children": []
+              },
+              {
+                "value": "3711",
+                "label": "日照",
+                "children": []
+              },
+              {
+                "value": "3710",
+                "label": "威海",
+                "children": []
+              },
+              {
+                "value": "3709",
+                "label": "泰安",
+                "children": []
+              },
+              {
+                "value": "3708",
+                "label": "济宁",
+                "children": []
+              },
+              {
+                "value": "3707",
+                "label": "潍坊",
+                "children": []
+              },
+              {
+                "value": "3706",
+                "label": "烟台",
+                "children": []
+              },
+              {
+                "value": "3705",
+                "label": "东营",
+                "children": []
+              },
+              {
+                "value": "3704",
+                "label": "枣庄",
+                "children": []
+              },
+              {
+                "value": "3703",
+                "label": "淄博",
+                "children": []
+              },
+              {
+                "value": "3702",
+                "label": "青岛",
+                "children": []
+              },
+              {
+                "value": "3701",
+                "label": "济南",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "41",
+            "label": "河南",
+            "children": [
+              {
+                "value": "4190",
+                "label": "省直辖县级行政区划",
+                "children": []
+              },
+              {
+                "value": "4117",
+                "label": "驻马店",
+                "children": []
+              },
+              {
+                "value": "4116",
+                "label": "周口",
+                "children": []
+              },
+              {
+                "value": "4115",
+                "label": "信阳",
+                "children": []
+              },
+              {
+                "value": "4114",
+                "label": "商丘",
+                "children": []
+              },
+              {
+                "value": "4113",
+                "label": "南阳",
+                "children": []
+              },
+              {
+                "value": "4112",
+                "label": "三门峡",
+                "children": []
+              },
+              {
+                "value": "4111",
+                "label": "漯河",
+                "children": []
+              },
+              {
+                "value": "4110",
+                "label": "许昌",
+                "children": []
+              },
+              {
+                "value": "4109",
+                "label": "濮阳",
+                "children": []
+              },
+              {
+                "value": "4108",
+                "label": "焦作",
+                "children": []
+              },
+              {
+                "value": "4107",
+                "label": "新乡",
+                "children": []
+              },
+              {
+                "value": "4106",
+                "label": "鹤壁",
+                "children": []
+              },
+              {
+                "value": "4105",
+                "label": "安阳",
+                "children": []
+              },
+              {
+                "value": "4104",
+                "label": "平顶山",
+                "children": []
+              },
+              {
+                "value": "4103",
+                "label": "洛阳",
+                "children": []
+              },
+              {
+                "value": "4102",
+                "label": "开封",
+                "children": []
+              },
+              {
+                "value": "4101",
+                "label": "郑州",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "42",
+            "label": "湖北",
+            "children": [
+              {
+                "value": "4290",
+                "label": "省直辖县级行政区划",
+                "children": []
+              },
+              {
+                "value": "4228",
+                "label": "恩施土家族苗族自治州",
+                "children": []
+              },
+              {
+                "value": "4213",
+                "label": "随州",
+                "children": []
+              },
+              {
+                "value": "4212",
+                "label": "咸宁",
+                "children": []
+              },
+              {
+                "value": "4211",
+                "label": "黄冈",
+                "children": []
+              },
+              {
+                "value": "4210",
+                "label": "荆州",
+                "children": []
+              },
+              {
+                "value": "4209",
+                "label": "孝感",
+                "children": []
+              },
+              {
+                "value": "4208",
+                "label": "荆门",
+                "children": []
+              },
+              {
+                "value": "4207",
+                "label": "鄂州",
+                "children": []
+              },
+              {
+                "value": "4206",
+                "label": "襄阳",
+                "children": []
+              },
+              {
+                "value": "4205",
+                "label": "宜昌",
+                "children": []
+              },
+              {
+                "value": "4203",
+                "label": "十堰",
+                "children": []
+              },
+              {
+                "value": "4202",
+                "label": "黄石",
+                "children": []
+              },
+              {
+                "value": "4201",
+                "label": "武汉",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "43",
+            "label": "湖南",
+            "children": [
+              {
+                "value": "4331",
+                "label": "湘西土家族苗族自治州",
+                "children": []
+              },
+              {
+                "value": "4313",
+                "label": "娄底",
+                "children": []
+              },
+              {
+                "value": "4312",
+                "label": "怀化",
+                "children": []
+              },
+              {
+                "value": "4311",
+                "label": "永州",
+                "children": []
+              },
+              {
+                "value": "4310",
+                "label": "郴州",
+                "children": []
+              },
+              {
+                "value": "4309",
+                "label": "益阳",
+                "children": []
+              },
+              {
+                "value": "4308",
+                "label": "张家界",
+                "children": []
+              },
+              {
+                "value": "4307",
+                "label": "常德",
+                "children": []
+              },
+              {
+                "value": "4306",
+                "label": "岳阳",
+                "children": []
+              },
+              {
+                "value": "4305",
+                "label": "邵阳",
+                "children": []
+              },
+              {
+                "value": "4304",
+                "label": "衡阳",
+                "children": []
+              },
+              {
+                "value": "4303",
+                "label": "湘潭",
+                "children": []
+              },
+              {
+                "value": "4302",
+                "label": "株洲",
+                "children": []
+              },
+              {
+                "value": "4301",
+                "label": "长沙",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "44",
+            "label": "广东",
+            "children": [
+              {
+                "value": "4453",
+                "label": "云浮",
+                "children": []
+              },
+              {
+                "value": "4452",
+                "label": "揭阳",
+                "children": []
+              },
+              {
+                "value": "4451",
+                "label": "潮州",
+                "children": []
+              },
+              {
+                "value": "4420",
+                "label": "中山",
+                "children": []
+              },
+              {
+                "value": "4419",
+                "label": "东莞",
+                "children": []
+              },
+              {
+                "value": "4418",
+                "label": "清远",
+                "children": []
+              },
+              {
+                "value": "4417",
+                "label": "阳江",
+                "children": []
+              },
+              {
+                "value": "4416",
+                "label": "河源",
+                "children": []
+              },
+              {
+                "value": "4415",
+                "label": "汕尾",
+                "children": []
+              },
+              {
+                "value": "4414",
+                "label": "梅州",
+                "children": []
+              },
+              {
+                "value": "4413",
+                "label": "惠州",
+                "children": []
+              },
+              {
+                "value": "4412",
+                "label": "肇庆",
+                "children": []
+              },
+              {
+                "value": "4409",
+                "label": "茂名",
+                "children": []
+              },
+              {
+                "value": "4408",
+                "label": "湛江",
+                "children": []
+              },
+              {
+                "value": "4407",
+                "label": "江门",
+                "children": []
+              },
+              {
+                "value": "4406",
+                "label": "佛山",
+                "children": []
+              },
+              {
+                "value": "4405",
+                "label": "汕头",
+                "children": []
+              },
+              {
+                "value": "4404",
+                "label": "珠海",
+                "children": []
+              },
+              {
+                "value": "4403",
+                "label": "深圳",
+                "children": []
+              },
+              {
+                "value": "4402",
+                "label": "韶关",
+                "children": []
+              },
+              {
+                "value": "4401",
+                "label": "广州",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "45",
+            "label": "广西",
+            "children": [
+              {
+                "value": "4514",
+                "label": "崇左",
+                "children": []
+              },
+              {
+                "value": "4513",
+                "label": "来宾",
+                "children": []
+              },
+              {
+                "value": "4512",
+                "label": "河池",
+                "children": []
+              },
+              {
+                "value": "4511",
+                "label": "贺州",
+                "children": []
+              },
+              {
+                "value": "4510",
+                "label": "百色",
+                "children": []
+              },
+              {
+                "value": "4509",
+                "label": "玉林",
+                "children": []
+              },
+              {
+                "value": "4508",
+                "label": "贵港",
+                "children": []
+              },
+              {
+                "value": "4507",
+                "label": "钦州",
+                "children": []
+              },
+              {
+                "value": "4506",
+                "label": "防城港",
+                "children": []
+              },
+              {
+                "value": "4505",
+                "label": "北海",
+                "children": []
+              },
+              {
+                "value": "4504",
+                "label": "梧州",
+                "children": []
+              },
+              {
+                "value": "4503",
+                "label": "桂林",
+                "children": []
+              },
+              {
+                "value": "4502",
+                "label": "柳州",
+                "children": []
+              },
+              {
+                "value": "4501",
+                "label": "南宁",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "46",
+            "label": "海南",
+            "children": [
+              {
+                "value": "4690",
+                "label": "省直辖县级行政区划",
+                "children": []
+              },
+              {
+                "value": "4604",
+                "label": "儋州",
+                "children": []
+              },
+              {
+                "value": "4603",
+                "label": "三沙",
+                "children": []
+              },
+              {
+                "value": "4602",
+                "label": "三亚",
+                "children": []
+              },
+              {
+                "value": "4601",
+                "label": "海口",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "50",
+            "label": "重庆",
+            "children": [
+              {
+                "value": "5002",
+                "label": "重庆",
+                "children": []
+              },
+              {
+                "value": "5001",
+                "label": "重庆",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "51",
+            "label": "四川",
+            "children": [
+              {
+                "value": "5134",
+                "label": "凉山彝族自治州",
+                "children": []
+              },
+              {
+                "value": "5133",
+                "label": "甘孜藏族自治州",
+                "children": []
+              },
+              {
+                "value": "5132",
+                "label": "阿坝藏族羌族自治州",
+                "children": []
+              },
+              {
+                "value": "5120",
+                "label": "资阳",
+                "children": []
+              },
+              {
+                "value": "5119",
+                "label": "巴中",
+                "children": []
+              },
+              {
+                "value": "5118",
+                "label": "雅安",
+                "children": []
+              },
+              {
+                "value": "5117",
+                "label": "达州",
+                "children": []
+              },
+              {
+                "value": "5116",
+                "label": "广安",
+                "children": []
+              },
+              {
+                "value": "5115",
+                "label": "宜宾",
+                "children": []
+              },
+              {
+                "value": "5114",
+                "label": "眉山",
+                "children": []
+              },
+              {
+                "value": "5113",
+                "label": "南充",
+                "children": []
+              },
+              {
+                "value": "5111",
+                "label": "乐山",
+                "children": []
+              },
+              {
+                "value": "5110",
+                "label": "内江",
+                "children": []
+              },
+              {
+                "value": "5109",
+                "label": "遂宁",
+                "children": []
+              },
+              {
+                "value": "5108",
+                "label": "广元",
+                "children": []
+              },
+              {
+                "value": "5107",
+                "label": "绵阳",
+                "children": []
+              },
+              {
+                "value": "5106",
+                "label": "德阳",
+                "children": []
+              },
+              {
+                "value": "5105",
+                "label": "泸州",
+                "children": []
+              },
+              {
+                "value": "5104",
+                "label": "攀枝花",
+                "children": []
+              },
+              {
+                "value": "5103",
+                "label": "自贡",
+                "children": []
+              },
+              {
+                "value": "5101",
+                "label": "成都",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "52",
+            "label": "贵州",
+            "children": [
+              {
+                "value": "5227",
+                "label": "黔南布依族苗族自治州",
+                "children": []
+              },
+              {
+                "value": "5226",
+                "label": "黔东南苗族侗族自治州",
+                "children": []
+              },
+              {
+                "value": "5223",
+                "label": "黔西南布依族苗族自治州",
+                "children": []
+              },
+              {
+                "value": "5206",
+                "label": "铜仁",
+                "children": []
+              },
+              {
+                "value": "5205",
+                "label": "毕节",
+                "children": []
+              },
+              {
+                "value": "5204",
+                "label": "安顺",
+                "children": []
+              },
+              {
+                "value": "5203",
+                "label": "遵义",
+                "children": []
+              },
+              {
+                "value": "5202",
+                "label": "六盘水",
+                "children": []
+              },
+              {
+                "value": "5201",
+                "label": "贵阳",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "53",
+            "label": "云南",
+            "children": [
+              {
+                "value": "5334",
+                "label": "迪庆藏族自治州",
+                "children": []
+              },
+              {
+                "value": "5333",
+                "label": "怒江傈僳族自治州",
+                "children": []
+              },
+              {
+                "value": "5331",
+                "label": "德宏傣族景颇族自治州",
+                "children": []
+              },
+              {
+                "value": "5329",
+                "label": "大理白族自治州",
+                "children": []
+              },
+              {
+                "value": "5328",
+                "label": "西双版纳傣族自治州",
+                "children": []
+              },
+              {
+                "value": "5326",
+                "label": "文山壮族苗族自治州",
+                "children": []
+              },
+              {
+                "value": "5325",
+                "label": "红河哈尼族彝族自治州",
+                "children": []
+              },
+              {
+                "value": "5323",
+                "label": "楚雄彝族自治州",
+                "children": []
+              },
+              {
+                "value": "5309",
+                "label": "临沧",
+                "children": []
+              },
+              {
+                "value": "5308",
+                "label": "普洱",
+                "children": []
+              },
+              {
+                "value": "5307",
+                "label": "丽江",
+                "children": []
+              },
+              {
+                "value": "5306",
+                "label": "昭通",
+                "children": []
+              },
+              {
+                "value": "5305",
+                "label": "保山",
+                "children": []
+              },
+              {
+                "value": "5304",
+                "label": "玉溪",
+                "children": []
+              },
+              {
+                "value": "5303",
+                "label": "曲靖",
+                "children": []
+              },
+              {
+                "value": "5301",
+                "label": "昆明",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "54",
+            "label": "西藏",
+            "children": [
+              {
+                "value": "5425",
+                "label": "阿里地区",
+                "children": []
+              },
+              {
+                "value": "5424",
+                "label": "日喀则",
+                "children": []
+              },
+              {
+                "value": "5406",
+                "label": "那曲",
+                "children": []
+              },
+              {
+                "value": "5405",
+                "label": "山南",
+                "children": []
+              },
+              {
+                "value": "5404",
+                "label": "林芝",
+                "children": []
+              },
+              {
+                "value": "5403",
+                "label": "昌都",
+                "children": []
+              },
+              {
+                "value": "5402",
+                "label": "日喀则",
+                "children": []
+              },
+              {
+                "value": "5401",
+                "label": "拉萨",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "61",
+            "label": "陕西",
+            "children": [
+              {
+                "value": "6110",
+                "label": "商洛",
+                "children": []
+              },
+              {
+                "value": "6109",
+                "label": "安康",
+                "children": []
+              },
+              {
+                "value": "6108",
+                "label": "榆林",
+                "children": []
+              },
+              {
+                "value": "6107",
+                "label": "汉中",
+                "children": []
+              },
+              {
+                "value": "6106",
+                "label": "延安",
+                "children": []
+              },
+              {
+                "value": "6105",
+                "label": "渭南",
+                "children": []
+              },
+              {
+                "value": "6104",
+                "label": "咸阳",
+                "children": []
+              },
+              {
+                "value": "6103",
+                "label": "宝鸡",
+                "children": []
+              },
+              {
+                "value": "6102",
+                "label": "铜川",
+                "children": []
+              },
+              {
+                "value": "6101",
+                "label": "西安",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "62",
+            "label": "甘肃",
+            "children": [
+              {
+                "value": "6230",
+                "label": "甘南藏族自治州",
+                "children": []
+              },
+              {
+                "value": "6229",
+                "label": "临夏回族自治州",
+                "children": []
+              },
+              {
+                "value": "6212",
+                "label": "陇南",
+                "children": []
+              },
+              {
+                "value": "6211",
+                "label": "定西",
+                "children": []
+              },
+              {
+                "value": "6210",
+                "label": "庆阳",
+                "children": []
+              },
+              {
+                "value": "6209",
+                "label": "酒泉",
+                "children": []
+              },
+              {
+                "value": "6208",
+                "label": "平凉",
+                "children": []
+              },
+              {
+                "value": "6207",
+                "label": "张掖",
+                "children": []
+              },
+              {
+                "value": "6206",
+                "label": "武威",
+                "children": []
+              },
+              {
+                "value": "6205",
+                "label": "天水",
+                "children": []
+              },
+              {
+                "value": "6204",
+                "label": "白银",
+                "children": []
+              },
+              {
+                "value": "6203",
+                "label": "金昌",
+                "children": []
+              },
+              {
+                "value": "6202",
+                "label": "嘉峪关",
+                "children": []
+              },
+              {
+                "value": "6201",
+                "label": "兰州",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "63",
+            "label": "青海",
+            "children": [
+              {
+                "value": "6328",
+                "label": "海西蒙古族藏族自治州",
+                "children": []
+              },
+              {
+                "value": "6327",
+                "label": "玉树藏族自治州",
+                "children": []
+              },
+              {
+                "value": "6326",
+                "label": "果洛藏族自治州",
+                "children": []
+              },
+              {
+                "value": "6325",
+                "label": "海南藏族自治州",
+                "children": []
+              },
+              {
+                "value": "6323",
+                "label": "黄南藏族自治州",
+                "children": []
+              },
+              {
+                "value": "6322",
+                "label": "海北藏族自治州",
+                "children": []
+              },
+              {
+                "value": "6302",
+                "label": "海东",
+                "children": []
+              },
+              {
+                "value": "6301",
+                "label": "西宁",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "64",
+            "label": "宁夏",
+            "children": [
+              {
+                "value": "6405",
+                "label": "中卫",
+                "children": []
+              },
+              {
+                "value": "6404",
+                "label": "固原",
+                "children": []
+              },
+              {
+                "value": "6403",
+                "label": "吴忠",
+                "children": []
+              },
+              {
+                "value": "6402",
+                "label": "石嘴山",
+                "children": []
+              },
+              {
+                "value": "6401",
+                "label": "银川",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "65",
+            "label": "新疆",
+            "children": [
+              {
+                "value": "6590",
+                "label": "自治区直辖县级行政区划",
+                "children": []
+              },
+              {
+                "value": "6543",
+                "label": "阿勒泰地区",
+                "children": []
+              },
+              {
+                "value": "6542",
+                "label": "塔城地区",
+                "children": []
+              },
+              {
+                "value": "6540",
+                "label": "伊犁哈萨克自治州",
+                "children": []
+              },
+              {
+                "value": "6532",
+                "label": "和田地区",
+                "children": []
+              },
+              {
+                "value": "6531",
+                "label": "喀什地区",
+                "children": []
+              },
+              {
+                "value": "6530",
+                "label": "克孜勒苏柯尔克孜自治州",
+                "children": []
+              },
+              {
+                "value": "6529",
+                "label": "阿克苏地区",
+                "children": []
+              },
+              {
+                "value": "6528",
+                "label": "巴音郭楞蒙古自治州",
+                "children": []
+              },
+              {
+                "value": "6527",
+                "label": "博尔塔拉蒙古自治州",
+                "children": []
+              },
+              {
+                "value": "6523",
+                "label": "昌吉回族自治州",
+                "children": []
+              },
+              {
+                "value": "6505",
+                "label": "哈密",
+                "children": []
+              },
+              {
+                "value": "6504",
+                "label": "吐鲁番",
+                "children": []
+              },
+              {
+                "value": "6502",
+                "label": "克拉玛依",
+                "children": []
+              },
+              {
+                "value": "6501",
+                "label": "乌鲁木齐",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "101",
+            "label": "香港特别行政区",
+            "children": [
+              {
+                "value": "10001",
+                "label": "香港特别行政区",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "102",
+            "label": "澳门特别行政区",
+            "children": [
+              {
+                "value": "10002",
+                "label": "澳门特别行政区",
+                "children": []
+              }
+            ]
+          },
+          {
+            "value": "103",
+            "label": "台湾",
+            "children": [
+              {
+                "value": "10007",
+                "label": "高雄",
+                "children": []
+              },
+              {
+                "value": "10006",
+                "label": "台北",
+                "children": []
+              },
+              {
+                "value": "10005",
+                "label": "彰化",
+                "children": []
+              },
+              {
+                "value": "10004",
+                "label": "台中",
+                "children": []
+              },
+              {
+                "value": "10003",
+                "label": "新北",
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "field": "video_quote_1_20",
+        "label": "1-20秒视频报价",
+        "group": "商业报价",
+        "control": "range",
+        "operators": [
+          "range"
+        ],
+        "unit": "yuan",
+        "currencies": [
+          "CNY"
+        ],
+        "cooperation_forms": [
+          "short_video_1_20s"
+        ],
+        "range_constraints": {
+          "min": 0,
+          "max": 1000000,
+          "unit": "yuan"
+        },
+        "request_mapping": {
+          "price_type": 11
+        }
+      },
+      {
+        "field": "video_quote_21_60",
+        "label": "21-60秒视频报价",
+        "group": "商业报价",
+        "control": "range",
+        "operators": [
+          "range"
+        ],
+        "unit": "yuan",
+        "currencies": [
+          "CNY"
+        ],
+        "cooperation_forms": [
+          "short_video_21_60s"
+        ],
+        "range_constraints": {
+          "min": 0,
+          "max": 1000000,
+          "unit": "yuan"
+        },
+        "request_mapping": {
+          "price_type": 12
+        }
+      },
+      {
+        "field": "video_quote_60_plus",
+        "label": "60秒以上视频报价",
+        "group": "商业报价",
+        "control": "range",
+        "operators": [
+          "range"
+        ],
+        "unit": "yuan",
+        "currencies": [
+          "CNY"
+        ],
+        "cooperation_forms": [
+          "short_video_60s_plus"
+        ],
+        "range_constraints": {
+          "min": 0,
+          "max": 1000000,
+          "unit": "yuan"
+        },
+        "request_mapping": {
+          "price_type": 13
+        }
+      }
+    ],
+    "sorts": [
+      "platform_default"
+    ],
+    "combinations": [],
+    "compatible_plan_versions": [],
+    "combination_policy": {
+      "schema_version": "combination_policy.v2",
+      "mode": "composable",
+      "fields": [
+        "keyword",
+        "content_type",
+        "followers",
+        "region",
+        "video_quote_1_20",
+        "video_quote_21_60",
+        "video_quote_60_plus"
+      ],
+      "incompatible": [
+        [
+          "video_quote_1_20",
+          "video_quote_21_60"
+        ],
+        [
+          "video_quote_1_20",
+          "video_quote_60_plus"
+        ],
+        [
+          "video_quote_21_60",
+          "video_quote_60_plus"
+        ]
+      ]
+    }
+  },
+  "allowed_hosts": [
+    "k.kuaishou.com"
+  ],
+  "homepage_path_prefixes": [
+    "/"
+  ],
+  "action_interval_seconds": 0.5,
+  "operation_timeout_seconds": 30,
+  "response_body_max_bytes": 8388608,
+  "session_boot_timeout_seconds": 120,
+  "session": {
+    "entry_url": "https://k.kuaishou.com/#/star_plaza/video",
+    "account": {
+      "selector": "iframe[src*='aid=']",
+      "attribute": "src",
+      "capture_regex": "[?&]aid=(\\d+)"
+    },
+    "account_url_parameter": "__accountId__",
+    "protected_ready": {
+      "selector": "input[placeholder='请搜索内容关键词']"
+    },
+    "error_selectors": {
+      "ACCOUNT_SELECTION_REQUIRED": {
+        "selector": "div.account-component"
+      }
+    },
+    "identity": {
+      "selector": "span[class*='idText']",
+      "capture_regex": "^ID\\s*(\\d+)$"
+    },
+    "business_urls": [
+      "https://k.kuaishou.com/#/star_plaza/video"
+    ]
+  },
+  "search": {
+    "entry_url": "https://k.kuaishou.com/#/star_plaza/video",
+    "default_bindings": {
+      "cursor": "1"
+    },
+    "reset_actions": [],
+    "apply_actions": [],
+    "final_actions": [],
+    "ready": {
+      "selector": "input[placeholder='请搜索内容关键词']"
+    },
+    "ready_hidden": [],
+    "readback": {
+      "keyword": {
+        "selector": "input[placeholder='请搜索内容关键词']",
+        "property": "value"
+      }
+    },
+    "requests": [
+      {
+        "key": "creator_search",
+        "method": "POST",
+        "host": "k.kuaishou.com",
+        "path": "/rest/web/star/list",
+        "request_match": {
+          "currentPage": "$cursor",
+          "taskType": "1"
+        },
+        "response_match": {},
+        "success_path": "result",
+        "success_value": "1"
+      }
+    ],
+    "result_request_key": "creator_search",
+    "candidates_path": "starList",
+    "id_path": "userId",
+    "homepage_path": "verifiedHomepage",
+    "next_path": "currentPage",
+    "exhausted_path": "total",
+    "exhausted_value": "0",
+    "pagination": "page",
+    "next_page_mode": "page_fetch",
+    "resume_supported": true,
+    "initial_cursor": "1",
+    "fixed_sort": true,
+    "single_page_only": false,
+    "coverage_gaps": [
+      "第 1/2 页已用真实账号与真实筛选体核验；第 3 页仅在只读调查中观察，未进入可执行合同；达到第 2 页边界以 SEARCH_CAPABILITY_LIMIT 停止，不报告平台耗尽",
+      "平台页面自身点击分页会丢失关键词/筛选；Adapter 必须每页重建完整筛选体（真实请求体已核验）",
+      "响应无 has_more 字段，耗尽按 currentPage*20>=total 计算；空页但 total 未到终点会显式失败"
+    ],
+    "page_fetch_max_verified": 2
+  },
+  "modules": [
+    {
+      "key": "basic",
+      "basic": true,
+      "ready": {
+        "selector": "span[class*='idText']"
+      },
+      "requests": [
+        {
+          "key": "base_info",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/star/match/starPage/baseInfo",
+          "request_match": {
+            "starId": "$star_id",
+            "starType": "1"
+          },
+          "response_match": {},
+          "success_path": "result",
+          "success_value": "1"
+        },
+        {
+          "key": "fan_growth",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/post/video/portrait/fans/fluctuation/get",
+          "request_match": {
+            "starId": "$star_id",
+            "timeDim": "30"
+          },
+          "response_match": {},
+          "success_path": "result",
+          "success_value": "1"
+        }
+      ],
+      "fields": [
+        {
+          "key": "platform_creator_id",
+          "name": "快手达人 ID",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.userId"
+          }
+        },
+        {
+          "key": "nickname",
+          "name": "昵称",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.name"
+          }
+        },
+        {
+          "key": "avatar_uri",
+          "name": "头像",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.headUrl"
+          }
+        },
+        {
+          "key": "province",
+          "name": "省份",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.address"
+          }
+        },
+        {
+          "key": "city",
+          "name": "城市",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.address"
+          }
+        },
+        {
+          "key": "content_type_labels",
+          "name": "内容类型",
+          "kind": "tags",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.contentTypeTag"
+          }
+        },
+        {
+          "key": "mcn_name",
+          "name": "所属机构",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.mcnName"
+          }
+        },
+        {
+          "key": "introduction",
+          "name": "达人介绍",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.introduction"
+          }
+        },
+        {
+          "key": "followers",
+          "name": "粉丝数",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.fansNumber"
+          }
+        },
+        {
+          "key": "monthly_follower_growth_count",
+          "name": "近30天涨粉数",
+          "kind": "number",
+          "unit": "count",
+          "period_label": "近30天",
+          "source": {
+            "kind": "response",
+            "request_key": "fan_growth",
+            "path": "data.fansIncreaseNum"
+          }
+        },
+        {
+          "key": "monthly_follower_growth_rate",
+          "name": "近30天涨粉率",
+          "kind": "ratio",
+          "unit": "ratio",
+          "ratio_input": "decimal",
+          "period_label": "近30天",
+          "source": {
+            "kind": "response",
+            "request_key": "fan_growth",
+            "path": "data.fansIncreaseRate"
+          }
+        },
+        {
+          "key": "cooperation_offers",
+          "name": "短视频报价",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.priceShowInfo"
+          }
+        },
+        {
+          "key": "gender",
+          "name": "性别",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.gender"
+          }
+        },
+        {
+          "key": "profile_url",
+          "name": "主页地址",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.profileUrl"
+          }
+        },
+        {
+          "key": "content_form_labels",
+          "name": "内容形式",
+          "kind": "tags",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.contentFormTag"
+          }
+        },
+        {
+          "key": "platform_identity",
+          "name": "平台身份",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.platformTargetIdentityInfo"
+          }
+        },
+        {
+          "key": "style_detail",
+          "name": "出镜风格",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.styleDetail"
+          }
+        },
+        {
+          "key": "public_settlement",
+          "name": "对公结算",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "base_info",
+            "path": "data.publicSettlement"
+          }
+        }
+      ],
+      "checkpoint_version": 2
+    },
+    {
+      "key": "spread",
+      "ready": {
+        "selector": "span[class*='idText']"
+      },
+      "requests": [
+        {
+          "key": "video_statistics",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/post/video/works/statistics/get",
+          "request_match": {
+            "starId": "$star_id",
+            "timeDim": "30",
+            "trafficDim": "7"
+          },
+          "response_match": {},
+          "success_path": "result",
+          "success_value": "1"
+        }
+      ],
+      "fields": [
+        {
+          "key": "play_median",
+          "name": "播放量中位数",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.natureStatistics.pplayMedian"
+          }
+        },
+        {
+          "key": "expected_play",
+          "name": "预估播放量",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.beplayCnt"
+          }
+        },
+        {
+          "key": "expected_cpm",
+          "name": "预期 CPM",
+          "kind": "number",
+          "unit": "CNY_per_thousand_impressions",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.beCPM"
+          }
+        },
+        {
+          "key": "interaction_rate",
+          "name": "互动率",
+          "kind": "ratio",
+          "unit": "ratio",
+          "ratio_input": "decimal",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.natureStatistics.pinteractionRate"
+          }
+        },
+        {
+          "key": "completion_rate",
+          "name": "完播率",
+          "kind": "ratio",
+          "unit": "ratio",
+          "ratio_input": "decimal",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.natureStatistics.pcompletePlayRate"
+          }
+        },
+        {
+          "key": "average_share",
+          "name": "平均分享",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.natureStatistics.pavgShareCntData"
+          }
+        },
+        {
+          "key": "average_like",
+          "name": "平均点赞",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.natureStatistics.pavgLikeCntData"
+          }
+        },
+        {
+          "key": "average_comment",
+          "name": "平均评论",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.natureStatistics.pavgCommentCntData"
+          }
+        },
+        {
+          "key": "video_count",
+          "name": "视频数量",
+          "kind": "number",
+          "unit": "count",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.natureStatistics.preleaseCnt"
+          }
+        },
+        {
+          "key": "average_duration_seconds",
+          "name": "平均时长",
+          "kind": "number",
+          "unit": "seconds",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.natureStatistics.pavgVideoDurationData"
+          }
+        },
+        {
+          "key": "play_median_percentile",
+          "name": "播放中位数优于同类",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.natureStatistics.pplayMedianPowerPercent"
+          },
+          "unit": "ratio",
+          "period_label": "近30天/流量范围7天",
+          "ratio_input": "decimal"
+        },
+        {
+          "key": "interaction_rate_percentile",
+          "name": "互动率优于同类",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.natureStatistics.pinteractionRatePowerPercent"
+          },
+          "unit": "ratio",
+          "period_label": "近30天/流量范围7天",
+          "ratio_input": "decimal"
+        },
+        {
+          "key": "completion_rate_percentile",
+          "name": "完播率优于同类",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.natureStatistics.pcompletePlayRatePowerPercent"
+          },
+          "unit": "ratio",
+          "period_label": "近30天/流量范围7天",
+          "ratio_input": "decimal"
+        },
+        {
+          "key": "expected_play_mom",
+          "name": "预估播放环比",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.beplayCntMOM"
+          },
+          "unit": "ratio",
+          "period_label": "近30天/流量范围7天",
+          "ratio_input": "decimal"
+        },
+        {
+          "key": "expected_cpm_mom",
+          "name": "预期CPM环比",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.beCpmMOM"
+          },
+          "unit": "ratio",
+          "period_label": "近30天/流量范围7天",
+          "ratio_input": "decimal"
+        },
+        {
+          "key": "recent_cpm",
+          "name": "近期CPM",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.bcpm"
+          },
+          "unit": "CNY_per_thousand_impressions",
+          "period_label": "近30天/流量范围7天"
+        },
+        {
+          "key": "recent_cpe",
+          "name": "近期CPE",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.bcpe"
+          },
+          "unit": "CNY_per_action",
+          "period_label": "近30天/流量范围7天"
+        },
+        {
+          "key": "conversion_click_rate",
+          "name": "转化点击率",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.bavgConversionClickRate"
+          },
+          "unit": "ratio",
+          "period_label": "近30天/流量范围7天",
+          "ratio_input": "decimal"
+        },
+        {
+          "key": "visitor_num",
+          "name": "连接用户数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.visitorNum"
+          },
+          "unit": "count",
+          "period_label": "近30天/流量范围7天"
+        },
+        {
+          "key": "deep_visitor_num",
+          "name": "深度连接用户数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.deepVisitorNum"
+          },
+          "unit": "count",
+          "period_label": "近30天/流量范围7天"
+        },
+        {
+          "key": "business_play_median",
+          "name": "聚星视频播放中位数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.bplayMedian"
+          },
+          "unit": "count",
+          "period_label": "近30天/流量范围7天"
+        },
+        {
+          "key": "business_play_median_percentile",
+          "name": "聚星视频播放中位数优于同类",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.bplayMedianPowerPercent"
+          },
+          "unit": "ratio",
+          "period_label": "近30天/流量范围7天",
+          "ratio_input": "decimal"
+        },
+        {
+          "key": "business_video_count",
+          "name": "聚星视频数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.breleaseCnt"
+          },
+          "unit": "count",
+          "period_label": "近30天/流量范围7天"
+        },
+        {
+          "key": "business_completion_rate",
+          "name": "聚星视频完播率",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.bcompletePlayRate"
+          },
+          "unit": "ratio",
+          "period_label": "近30天/流量范围7天",
+          "ratio_input": "decimal"
+        },
+        {
+          "key": "business_completion_rate_percentile",
+          "name": "聚星视频完播率优于同类",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.bcompletePlayRatePowerPercent"
+          },
+          "unit": "ratio",
+          "period_label": "近30天/流量范围7天",
+          "ratio_input": "decimal"
+        },
+        {
+          "key": "business_interaction_rate",
+          "name": "聚星视频互动率",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.binteractionRate"
+          },
+          "unit": "ratio",
+          "period_label": "近30天/流量范围7天",
+          "ratio_input": "decimal"
+        },
+        {
+          "key": "business_interaction_rate_percentile",
+          "name": "聚星视频互动率优于同类",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.binteractionRatePowerPercent"
+          },
+          "unit": "ratio",
+          "period_label": "近30天/流量范围7天",
+          "ratio_input": "decimal"
+        },
+        {
+          "key": "business_average_duration_seconds",
+          "name": "聚星视频平均时长",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.bavgVideoDurationData"
+          },
+          "unit": "seconds",
+          "period_label": "近30天/流量范围7天"
+        },
+        {
+          "key": "business_average_like",
+          "name": "聚星视频平均点赞",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.bavgLikeCntData"
+          },
+          "unit": "count",
+          "period_label": "近30天/流量范围7天"
+        },
+        {
+          "key": "business_average_comment",
+          "name": "聚星视频平均评论",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.bavgCommentCntData"
+          },
+          "unit": "count",
+          "period_label": "近30天/流量范围7天"
+        },
+        {
+          "key": "business_average_share",
+          "name": "聚星视频平均分享",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "video_statistics",
+            "path": "data.businessStatistics.bavgShareCntData"
+          },
+          "unit": "count",
+          "period_label": "近30天/流量范围7天"
+        }
+      ],
+      "period_source": {
+        "kind": "dom",
+        "locator": {
+          "selector": "body"
+        }
+      },
+      "checkpoint_version": 2
+    },
+    {
+      "key": "works",
+      "ready": {
+        "selector": "span[class*='idText']"
+      },
+      "requests": [
+        {
+          "key": "representative_works",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/post/video/representative/works/info/list",
+          "request_match": {
+            "starId": "$star_id",
+            "nature": "false"
+          },
+          "response_match": {},
+          "success_path": "result",
+          "success_value": "1"
+        }
+      ],
+      "fields": [
+        {
+          "key": "works",
+          "name": "代表及近期作品",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "representative_works",
+            "path": "data.detailList"
+          }
+        }
+      ],
+      "checkpoint_version": 2
+    },
+    {
+      "key": "audience",
+      "ready": {
+        "selector": "span[class*='idText']"
+      },
+      "requests": [
+        {
+          "key": "audience_portrait",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/star/listPortrait",
+          "request_match": {
+            "starId": "$star_id",
+            "starType": "1"
+          },
+          "response_match": {},
+          "success_path": "result",
+          "success_value": "1"
+        }
+      ],
+      "fields": [
+        {
+          "key": "fan_portrait",
+          "name": "粉丝画像",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "audience_portrait",
+            "path": "data.fansPortrait"
+          }
+        },
+        {
+          "key": "viewer_portrait",
+          "name": "观众画像",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "audience_portrait",
+            "path": "data.viewerPortrait"
+          }
+        }
+      ],
+      "checkpoint_version": 1
+    }
+  ],
+  "featured": [],
+  "direct_api_enabled": false,
+  "raw_har_trace_enabled": false,
+  "coverage_gaps": [
+    "仅关键词、内容类型（38 一级类目）、粉丝量级、地域（省/市）和三档报价（单档）进入 live 能力；其余筛选只记录不启用",
+    "搜索第 1/2 页已核验；第 3 页及以后 fail closed；平台页面自身分页会丢筛选，Adapter 每页重建筛选体",
+    "履约/带货/直播/电商深层与联系方式不在本轮采集范围；履约与带货字段已在差距文档登记，后续模块化实现",
+    "详情只在既有 basic/spread/works/audience 四模块内扩展；新增字段缺失发 NO_DATA，不改变完整性判定"
+  ]
+}

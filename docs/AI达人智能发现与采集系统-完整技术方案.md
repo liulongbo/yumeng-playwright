@@ -726,7 +726,7 @@ flowchart LR
 |---|---|---|---|
 | P1 需求转换及校验 | 原始表单、平台能力版本 | 已校验的 FilterPlan 或字段错误 | 实现 |
 | P2-1 巨量星图采集 | FilterPlan 或指定达人刷新目标 | 采集快照、任务结果、完整度和检查点 | 实现 |
-| P2-2 磁力聚星采集 | 同类领域输入、该平台能力版本 | 同类结果契约 | 仅预留适配边界 |
+| P2-2 磁力聚星采集 | 平台专属 P0 表单、该平台能力版本 | 复用任务/达人结果契约 | KJX-01 分阶段接入；默认关闭，`observed` 合同不得执行 live |
 
 平台 Adapter 定义 `capabilities`、`validate_plan`、`ensure_session`、`search`、`collect_profile`、`collect_featured_collections`、`classify_error` 等能力。搜索接口返回分页检查点及“已耗尽”证据；精选作品接口返回两组默认展示集合、卡片检查点及覆盖证据，不提供全量作品分页；配置限定平台主机、页面和字段。平台条件、控件和错误页知识均留在 Adapter，任务中心只处理统一状态和结果。
 
@@ -1066,11 +1066,35 @@ API 通过 root_task_id 面向用户；管道 task_id 在阶段明细和诊断�
 
 可选接口优化另按每个请求契约登记等价性、凭据更新、线路及失败恢复证据，未通过保持关闭；它不替代 U04 的浏览器路径核验，也不是一期主路径运行的前置条件。
 
+## 19. KJX-01 磁力聚星增量接入契约（2026-10-27）
+
+本节记录用户已确认的第二平台增量实现，覆盖原“一期唯一启用平台”的历史基线；未明确修改的星图业务语义继续有效。
+
+- 一个根任务只对应 `douyin_xingtu` 或 `kuaishou_juxing`，不在一次提交中同时访问两个平台。
+- 两个平台共用任务中心、状态机、Temporal、ExecutionUnit 资源池、检查点、continue/backfill 和 `(platform, platform_creator_id)` 身份；不复制第二套采集系统。
+- `allowed_task_kinds` 继续表达仅手动（`collection + manual_update`）、仅定时（`scheduled_update`）和手动+定时（三者）资格，不新增模式列。单元并发仍为 1，不抢占正在执行的浏览器步骤；更新任务继续沿用在达人安全边界让出单元的既有语义，优先级跨平台生效。
+- `execution_unit_platform_bindings` 只登记单元具备的平台账号、expected account、独立 Profile、registry、启用状态和最近观察；受保护页面的进程内账号检查始终是登录权威，数据库观察值不能跳过实时检查。
+- 磁力聚星主账号可能包含多个均有找达人权限的子账号；执行单元必须绑定具体子账号 ID。当前合同在找达人受保护页面通过 `__accountId__` 同时校验外层与 SPA 路由，DOM 可读账号证据仍优先；详情页不重复要求不存在的账号控件，而是在每个模块前回查仍打开的找达人页账号，再校验详情达人 ID。
+- 磁力聚星 P0 表单仅含内容关键词、内容类型、粉丝数、结构化地域、1—20 秒/21—60 秒/60 秒以上视频报价和目标数。筛选范围不限制达人资料采集范围。
+- 磁力聚星能力证据分 `documented / observed / verified`；只有实际账号完成控件操作、选中状态回读、结果变化/摘要回读，并登记时间、权限、页面特征、单位/窗口/空值和成功/失败证据后才能升级为 `verified`。
+- `XINGTU_ENABLE_KUAISHOU_JUXING` 默认关闭。Feature Flag 不能把 `observed` 自动升级为 `verified`；合同或 Adapter 未验证时任务创建/Worker 均 fail closed。
+- 巨量星图采用“核心业务行为冻结”：允许任务平台、Adapter 工厂和单元资格等共享层加法修改，但其表单、执行条件、状态、去重、持久化、快照、continue/backfill 和页面口径必须回归一致。
+
+2026-10-27 阶段 A 实施状态：任务/单元共享层、迁移文件、P0 v3 模型、平台绑定、工厂与产品门禁已完成隔离验证；关键词、粉丝、地域和三档报价取得实际页面操作与摘要回读，内容类型只有选中状态证据。页面出现多次 `Network Error`，详情字段路径、分页和聚星查询投影仍未形成可执行合同，因此平台总合同保持 `observed`，聚星 Adapter 和真实入库闭环尚未实现，入口继续禁用。详见 [KJX-01 阶段 A 证据](evidence/KJX-01-stage-a-implementation-2026-10-27.md)。
+
+2026-10-28 阶段 B 实施状态：用户授权专用聚星 Profile、独立测试库和 1—3 位真实只读采集。绑定子账号 `60821564` 的独立快照已在正常关闭后冷启动恢复并精确匹配；目标数 1 的真实 `BrowserHost → KuaishouJuxingAdapter → Engine → Repository` 闭环达到 `COMPLETED`，有效/资料完整/快照均为 1，星图投影为 0，随机测试 Schema 核对后删除。聚星未登记星图 F06 精选集合时只要求其资料合同完整；星图两组精选集合完成规则保持不变。生产 Feature Flag 继续关闭，Temporal E2E、Windows 与 10 位阶段 C 仍未完成。详见 [阶段 B 证据](evidence/KJX-01-stage-b-live-sample-2026-10-27.md)。
+
+2026-10-28 阶段 B 产品闭环状态：统一达人库新增只读聚星分支（`platform_creators.projection` + 最近不可变 `creator_snapshots`，无新增表/迁移），支持按平台筛选与详情；聚星只展示自身合同字段与原始单位/窗口，星图专属指标不强行等同，缺失不显示为 0。任务中心、任务详情与任务内达人按平台切换计数、文案与指标组，聚星隐藏 F06/精选。隔离环境中已用真实 FastAPI、PostgreSQL、Temporal 测试服务器和真实 `Activities.collect`（合成 LLM/Adapter、假 BrowserHost）验证 API→Intake→Temporal→Worker→聚星配置/Adapter→Engine→DB→任务终态→API/达人库，并以真实 Uvicorn + 随机测试 Schema + 真实登录 + Chromium 验证聚星页面读取真实数据库。期间修复 `requirements.schema_version` 未允许 v3 的约束缺口（仅未应用迁移 020）与 Intake 将星图字段清单套用到聚星导致永不 `COMPLETED` 的平台耦合。真实平台经 Temporal、Windows、真实 DeepSeek 组合与「母婴 / 母婴亲子 / 10 位」仍属阶段 C；生产 Feature Flag 与正式业务库未变更。详见 [阶段 B 产品闭环证据](evidence/KJX-01-stage-b-product-integration-2026-10-28.md)。
+
+2026-10-28 阶段 C macOS 实施状态：在隔离 DB/API/Vite/Temporal/Worker + 真实 DeepSeek + 真实 Chrome 与双平台 Profile 上完成 C1—C4。C2 聚星「母婴 / 母婴亲子 / 目标 1」与 C3「目标 10」均 `COMPLETED`，C3 有效/资料完整/快照 10/10/10，仅使用第一页 20 位，第二页仍 fail closed；C4 星图「宠物 / 目标 1」首次因候选响应缺口 `PARTIAL_COMPLETED`，同一授权样本重试 `COMPLETED`，资料完整 1、F06 双集合各 4 卡片。同一执行单元跨平台严格串行，账号/Profile/数据隔离成立。期间新增聚星入口导航回退，并明确“统计接口平均值”与“页面作品波动前 15 个作品均值”两种口径。生产 Feature Flag/业务库未变更；Windows 实机验收移交 [DEPLOY-WIN-01](tasks/DEPLOY-WIN-01.md)。详见 [阶段 C 验收](evidence/KJX-01-stage-c-acceptance.md)。阶段 B 当时的生产 Flag 关闭/Windows 未测缺口以该阶段证据为准，阶段 C 已完成 macOS 部分。
+
+阶段顺序为：A 能力/账号/架构验证；B P0 最小真实闭环；C 跨平台隔离与真实端到端验收；D 高级筛选、更新、补采和定时扩展。macOS 阶段 C 已完成；Windows 实机与生产启用仍须单独授权，离线/隔离夹具通过不代表生产可用。
+
 ## 附录 A：运行配置
 
 | 配置 | 默认值 | 边界 |
 |---|---|---|
-| platform | douyin_xingtu | 一期唯一启用平台 |
+| platform | douyin_xingtu | 每任务只能选择一个平台；`kuaishou_juxing` 由独立 Feature Flag、verified 合同和可执行 Adapter 三重门禁 |
 | target_count | 20 | 用户可选 1—200 |
 | content_scope | homepage_featured_collections | 只采集两个默认精选模块；不按作品发布时间筛选 |
 | collection_types | excellent_reach / excellent_seeding | 两组独立观测、各自保留展示顺序 |

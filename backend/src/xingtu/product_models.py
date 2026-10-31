@@ -19,7 +19,7 @@ from .domain import (
 class RequirementRange(Model):
     min: Decimal | None = None
     max: Decimal | None = None
-    unit: Literal["count", "ten_thousand_count"] = "ten_thousand_count"
+    unit: Literal["count", "ten_thousand_count", "yuan"] = "ten_thousand_count"
 
     @model_validator(mode="after")
     def ordered(self) -> Self:
@@ -138,12 +138,30 @@ class QuoteRequirement(Model):
         return self
 
 
+class JuxingVideoQuotes(Model):
+    seconds_1_20: RequirementRange | None = None
+    seconds_21_60: RequirementRange | None = None
+    seconds_60_plus: RequirementRange | None = None
+
+    @model_validator(mode="after")
+    def at_least_one(self) -> JuxingVideoQuotes:
+        if not any((self.seconds_1_20, self.seconds_21_60, self.seconds_60_plus)):
+            raise ValueError("at least one video quote range is required")
+        for value in (self.seconds_1_20, self.seconds_21_60, self.seconds_60_plus):
+            if value is not None and value.unit != "yuan":
+                raise ValueError("kuaishou video quotes use yuan")
+        return self
+
+
 class RequirementForm(Model):
     """The user-authored requirement, deliberately separate from ``FilterPlan``."""
 
-    schema_version: Literal["requirement_form.v1", "requirement_form.v2"] = "requirement_form.v2"
-    platform: Literal["douyin_xingtu"] = "douyin_xingtu"
+    schema_version: Literal["requirement_form.v1", "requirement_form.v2", "requirement_form.v3"] = (
+        "requirement_form.v2"
+    )
+    platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
     keyword: str | None = None
+    content_types: list[str] = Field(default_factory=list)
     creator_types: list[str] = Field(default_factory=list)
     followers: RequirementRange | None = None
     creator_gender: str | None = None
@@ -156,6 +174,7 @@ class RequirementForm(Model):
     viewer_profile: AudienceProfileRequirement | None = None
     fan_profile: AudienceProfileRequirement | None = None
     quote: QuoteRequirement | None = None
+    juxing_video_quotes: JuxingVideoQuotes | None = None
     sort_key: str | None = None
     target_count: int = Field(default=20, ge=1, le=200, strict=True)
 
@@ -167,11 +186,37 @@ class RequirementForm(Model):
             raise ValueError("filter options cannot be blank")
         if len(self.creator_types) != len(set(self.creator_types)):
             raise ValueError("filter options must be unique")
+        if any(not value.strip() for value in self.content_types) or len(self.content_types) != len(
+            set(self.content_types)
+        ):
+            raise ValueError("content_types must be nonblank and unique")
         if self.creator_gender is not None and not self.creator_gender.strip():
             raise ValueError("creator_gender cannot be blank")
         if self.sort_key is not None and not self.sort_key.strip():
             raise ValueError("sort_key cannot be blank")
-        if self.schema_version == "requirement_form.v1":
+        if self.platform == "kuaishou_juxing":
+            if self.schema_version != "requirement_form.v3":
+                raise ValueError("kuaishou_juxing requires requirement_form.v3")
+            if any(
+                (
+                    self.creator_types,
+                    self.creator_gender,
+                    self.creator_education,
+                    self.yellow_v_certification,
+                    self.connection_users,
+                    self.viewer_profile,
+                    self.fan_profile,
+                    self.quote,
+                )
+            ):
+                raise ValueError("unsupported kuaishou_juxing P0 filter")
+            if self.followers is not None and self.followers.unit != "count":
+                raise ValueError("kuaishou followers use count")
+            if any(isinstance(value, str) for value in self.creator_regions):
+                raise ValueError("kuaishou creator_regions must be structured paths")
+        elif self.schema_version == "requirement_form.v1":
+            if self.content_types or self.juxing_video_quotes is not None:
+                raise ValueError("kuaishou filters are not valid in requirement_form.v1")
             if any(not isinstance(value, str) for value in self.creator_regions):
                 raise ValueError("v1 creator_regions must be strings")
             if any(
@@ -184,8 +229,13 @@ class RequirementForm(Model):
                 )
             ):
                 raise ValueError("v2 filters are not valid in requirement_form.v1")
-        else:
-            if self.creator_types or self.quote is not None:
+        elif self.schema_version == "requirement_form.v2":
+            if (
+                self.creator_types
+                or self.quote is not None
+                or self.content_types
+                or self.juxing_video_quotes is not None
+            ):
                 raise ValueError("legacy filters are not valid in requirement_form.v2")
             if any(isinstance(value, str) for value in self.creator_regions):
                 raise ValueError("v2 creator_regions must be structured paths")
@@ -213,11 +263,13 @@ class RequirementForm(Model):
         if not any(
             (
                 self.keyword is not None,
+                bool(self.content_types),
                 bool(self.creator_types),
                 self.followers is not None,
                 self.creator_gender is not None,
                 bool(self.creator_regions),
                 self.quote is not None,
+                self.juxing_video_quotes is not None,
                 self.creator_education is not None,
                 self.yellow_v_certification is not None,
                 self.connection_users is not None,
@@ -234,6 +286,7 @@ class RequirementForm(Model):
         if self.keyword is not None:
             data["keyword"] = self.keyword.strip()
         data["creator_types"] = sorted(value.strip() for value in self.creator_types)
+        data["content_types"] = sorted(value.strip() for value in self.content_types)
         if self.schema_version == "requirement_form.v1":
             data["creator_regions"] = sorted(
                 value.strip() for value in self.creator_regions if isinstance(value, str)
@@ -276,7 +329,7 @@ class CapabilityFieldDTO(Model):
 
 
 class CapabilityDTO(Model):
-    platform: Literal["douyin_xingtu"] = "douyin_xingtu"
+    platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
     capability_version: str
     fields: list[CapabilityFieldDTO]
     combinations: list[list[str]]
@@ -288,7 +341,13 @@ class CapabilityDTO(Model):
     fixed_sort_label: str = "平台默认排序"
 
     @classmethod
-    def from_capabilities(cls, capabilities: Capabilities) -> CapabilityDTO:
+    def from_capabilities(
+        cls,
+        capabilities: Capabilities,
+        *,
+        platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu",
+        target_count_max: int | None = None,
+    ) -> CapabilityDTO:
         if capabilities.status != "VERIFIED" or capabilities.sample_kind != "live":
             raise ValueError("only live verified capabilities may be exposed")
         labels = {
@@ -302,6 +361,7 @@ class CapabilityDTO(Model):
         if len(capabilities.sorts) != 1:
             raise ValueError("M3 requires one verified platform default sort")
         return cls(
+            platform=platform,
             capability_version=capabilities.version,
             fields=[
                 CapabilityFieldDTO(
@@ -328,6 +388,12 @@ class CapabilityDTO(Model):
             combination_policy=capabilities.combination_policy.model_dump(mode="json")
             if capabilities.combination_policy
             else None,
+            target_count_default=(
+                min(3, max(1, target_count_max or 3)) if platform == "kuaishou_juxing" else 20
+            ),
+            target_count_max=(
+                max(1, target_count_max or 3) if platform == "kuaishou_juxing" else 200
+            ),
             fixed_sort_key=capabilities.sorts[0],
         )
 
@@ -476,6 +542,7 @@ class BrowserTakeoverView(Model):
 class ExecutionUnitView(Model):
     unit_id: str
     platform: Literal["douyin_xingtu"] = "douyin_xingtu"
+    platforms: list[Literal["douyin_xingtu", "kuaishou_juxing"]] = ["douyin_xingtu"]
     account_label: str
     line_label: str
     state: str
@@ -495,6 +562,7 @@ class ExecutionUnitView(Model):
 
 class TaskSummary(Model):
     root_task_id: str
+    platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
     task_kind: TaskKind = TaskKind.COLLECTION
     status: TaskStatus
     stage: str
@@ -589,6 +657,9 @@ class CommandRequest(Model):
 
 class CreatorSummary(Model):
     creator_id: str
+    # The shared task-result query is platform-agnostic; the platform travels with each creator so
+    # the product view can label and format it without a second request or a guessed default.
+    platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
     platform_creator_id: str
     first_position: int
     view_kind: Literal["draft", "published"]
@@ -615,7 +686,7 @@ class LibraryMetric(Model):
 
 class CreatorLibrarySummary(Model):
     creator_id: str
-    platform: Literal["douyin_xingtu"] = "douyin_xingtu"
+    platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
     platform_creator_id: str
     display_name: str | None = None
     avatar_uri: str | None = None
@@ -623,6 +694,9 @@ class CreatorLibrarySummary(Model):
     province: str | None = None
     city: str | None = None
     industry_labels: list[str] = Field(default_factory=list)
+    # The platform's own content-type labels (Xingtu content themes, Juxing content types).  Kept
+    # distinct from `creator_type_label` and `industry_labels`: those are different dimensions.
+    content_theme_labels: list[str] = Field(default_factory=list)
     followers: LibraryMetric
     monthly_deep_users: LibraryMetric
     monthly_connected_users: LibraryMetric
@@ -660,7 +734,6 @@ class CreatorLibraryDetail(CreatorLibrarySummary):
     # layer maps a code to a label, and only for codes verified against the live platform (see
     # frontend/src/profile/views.ts).  Read from the same current projection as `introduction`.
     gender: str | None = None
-    content_theme_labels: list[str] = Field(default_factory=list)
     collected_field_count: int = 0
     failed_field_count: int = 0
     field_sources: dict[str, JsonValue] = Field(default_factory=dict)
@@ -784,6 +857,6 @@ class ProfileModuleCatalog(Model):
 class ProfileFieldCatalog(Model):
     """Read-only field registry slice used to label and format the creator detail page."""
 
-    platform: Literal["douyin_xingtu"] = "douyin_xingtu"
+    platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
     contract_version: str
     modules: list[ProfileModuleCatalog]

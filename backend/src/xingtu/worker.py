@@ -8,6 +8,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from playwright.async_api import Error as BrowserError
+from pydantic import ValidationError
 from temporalio import activity
 from temporalio.client import Client, WorkflowExecutionStatus
 from temporalio.common import WorkflowIDReusePolicy
@@ -16,6 +17,7 @@ from temporalio.service import RPCError
 from temporalio.worker import Worker
 
 from .adapter import BrowserAdapter
+from .adapter_factory import build_platform_adapter
 from .browser_host import BrowserHost
 from .challenge import ChallengeHandler, ChallengePolicy
 from .contracts import PlatformRegistry
@@ -84,11 +86,16 @@ def adopt_compatible_legacy_checkpoint(task: TaskRecord, registry: PlatformRegis
     if task.plan is None:
         return False
     capabilities = registry.capabilities
-    compatible = (
-        task.state == TaskStatus.QUEUED
-        and task.plan.schema_version == "filter_plan.v1"
-        and task.plan.capability_version in capabilities.compatible_plan_versions
-        and {item.field for item in task.plan.filters} == {"keyword"}
+    compatible = task.state == TaskStatus.QUEUED and (
+        (
+            task.plan.schema_version == "filter_plan.v1"
+            and task.plan.capability_version in capabilities.compatible_plan_versions
+            and {item.field for item in task.plan.filters} == {"keyword"}
+        )
+        or (
+            task.plan.schema_version == "filter_plan.v3"
+            and task.plan.capability_version == capabilities.version
+        )
     )
     checkpoint = task.checkpoint
     pristine = (
@@ -306,11 +313,30 @@ class Activities:
         }:
             return task.state
         unit = self.repo.unit(task.execution_unit_id)
+        # A challenge timeout closes the verification event but can leave the shared unit in
+        # NEEDS_VERIFICATION.  The next task (possibly for the other platform) must not inherit
+        # that stale state; a fresh browser check re-detects a real challenge.
+        if self.repo.reconcile_stale_verification(
+            task.execution_unit_id, "worker:" + task.attempt_id
+        ):
+            unit = self.repo.unit(task.execution_unit_id)
         if task.task_kind.value not in (unit.get("allowed_task_kinds") or []):
             with self.repo.edit(root) as (current, _):
                 current.state = TaskStatus.FAILED
                 current.failure_reason = "TASK_KIND_NOT_ALLOWED"
             return TaskStatus.FAILED
+        if not self.repo.unit_supports_platform(task.execution_unit_id, task.platform.value):
+            with self.repo.edit(root) as (current, _):
+                current.state = TaskStatus.WAITING_FOR_RESOURCE
+                current.failure_reason = "PLATFORM_BINDING_NOT_CONFIGURED"
+            return TaskStatus.WAITING_FOR_RESOURCE
+        try:
+            active_config = self.config.for_platform(task.platform)
+        except CollectorError as exc:
+            with self.repo.edit(root) as (current, _):
+                current.state = TaskStatus.WAITING_FOR_RESOURCE
+                current.failure_reason = str(exc)
+            return TaskStatus.WAITING_FOR_RESOURCE
         if task.task_kind != TaskKind.COLLECTION and self.repo.has_runnable_higher_priority_task(
             task.execution_unit_id, root, task.task_kind
         ):
@@ -320,8 +346,15 @@ class Activities:
                 current.state = TaskStatus.QUEUED
                 current.failure_reason = None
             return TaskStatus.QUEUED
-        registry = PlatformRegistry.model_validate_json(self.config.registry_path.read_text())
         try:
+            try:
+                registry = PlatformRegistry.model_validate_json(
+                    active_config.registry_path.read_text()
+                )
+            except (OSError, ValidationError) as exc:
+                raise CollectorError(
+                    "PLATFORM_PAGE_CHANGED", "PLATFORM_REGISTRY_NOT_EXECUTABLE"
+                ) from exc
             registry.require_enabled(live=True)
             if task.plan is not None:
                 registry.capabilities.validate_plan(task.plan, live=True)
@@ -343,7 +376,7 @@ class Activities:
             required_scopes.update(f"profile_module:{item.key}" for item in registry.modules)
             required_scopes.update(f"featured:{item.key.value}" for item in registry.featured)
             self.repo.require_contract(registry.contract_version, required_scopes)
-            await ensure_line(self.config)
+            await ensure_line(active_config)
         except CollectorError as exc:
             with self.repo.edit(root) as (current, _):
                 if current.attempt_id != task.attempt_id:
@@ -359,9 +392,9 @@ class Activities:
                 )
                 current.failure_reason = str(exc)
                 return current.state
-        evidence = build_evidence_sink(self.config.evidence, self.repo, self.private_root.parent)
+        evidence = build_evidence_sink(active_config.evidence, self.repo, self.private_root.parent)
         covers = CoverPipeline(
-            self.repo, build_cover_store(self.config.covers, self.repo, self.private_root.parent)
+            self.repo, build_cover_store(active_config.covers, self.repo, self.private_root.parent)
         )
         main_task = asyncio.current_task()
         heartbeat_error: CollectorError | None = None
@@ -416,7 +449,7 @@ class Activities:
             try:
                 async with BrowserHost.lease(
                     self.repo,
-                    self.config,
+                    active_config,
                     registry,
                     self.private_root,
                     root,
@@ -497,17 +530,18 @@ class Activities:
                                 ),
                                 adapter_version=registry.adapter_version,
                                 contract_version=registry.contract_version,
-                                network_mode=self.config.network_mode,
-                                budget=self.config.budget,
+                                network_mode=active_config.network_mode,
+                                budget=active_config.budget,
                             )
                             assert host.browser
-                            adapter = BrowserAdapter(
+                            adapter = build_platform_adapter(
+                                task.platform,
                                 host.browser,
                                 registry,
-                                self.config.expected_account_id,
+                                active_config.expected_account_id,
                                 guard,
                                 on_session_health=host.observe_session,
-                                manually_attested_account_id=self.config.manually_attested_account_id,
+                                manually_attested_account_id=active_config.manually_attested_account_id,
                             )
                             adapter.creator_interval_seconds = (
                                 self.challenge_policy.creator_interval_seconds
@@ -533,6 +567,7 @@ class Activities:
                                     "ACCOUNT_LOGIN_REQUIRED",
                                     "ACCOUNT_MISMATCH",
                                     "PLATFORM_SECURITY_CHALLENGE",
+                                    "ACCOUNT_SELECTION_REQUIRED",
                                 }:
                                     maintenance_page = adapter.detail_page or adapter.search_page
                                     if maintenance_page:
@@ -541,6 +576,56 @@ class Activities:
                                         exc.code, "browser-host:" + task.attempt_id
                                     )
                                     engine.record_error(exc)
+                                    if exc.code == "ACCOUNT_SELECTION_REQUIRED":
+                                        with self.repo.edit(root) as (current, _):
+                                            current.state = TaskStatus.WAITING_FOR_ACCOUNT
+                                            current.failure_reason = "ACCOUNT_SELECTION_REQUIRED"
+                                        if maintenance_page is None:
+                                            with self.repo.edit(root) as (current, _):
+                                                current.state = TaskStatus.PARTIAL_COMPLETED
+                                                current.failure_reason = (
+                                                    "ACCOUNT_SELECTION_REQUIRED"
+                                                )
+                                            return TaskStatus.PARTIAL_COMPLETED
+                                        assert host.browser_instance_id
+                                        event = self.repo.create_verification_event(
+                                            unit=task.execution_unit_id,
+                                            root_task_id=task.root_task_id,
+                                            generation=host.generation,
+                                            browser_instance_id=host.browser_instance_id,
+                                            timeout_seconds=self.challenge_policy.timeout_seconds,
+                                            reason="ACCOUNT_SELECTION_REQUIRED",
+                                        )
+                                        event_id = str(event["event_id"])
+                                        try:
+                                            await host.maintain_and_promote(
+                                                timeout=self.challenge_policy.timeout_seconds,
+                                                actor="browser-host:" + task.attempt_id,
+                                                page=maintenance_page,
+                                            )
+                                        except CollectorError as handoff_error:
+                                            reason = (
+                                                "ACCOUNT_SELECTION_TIMEOUT"
+                                                if handoff_error.code
+                                                in {
+                                                    "ACCOUNT_LOGIN_REQUIRED",
+                                                    "MAINTENANCE_TIMEOUT",
+                                                }
+                                                or "TIMEOUT" in handoff_error.code
+                                                else handoff_error.code
+                                            )
+                                            self.repo.expire_verification_event(
+                                                event_id,
+                                                "ACCOUNT_SELECTION_TIMEOUT"
+                                                if reason == "ACCOUNT_SELECTION_TIMEOUT"
+                                                else reason,
+                                            )
+                                            with self.repo.edit(root) as (current, _):
+                                                current.state = TaskStatus.PARTIAL_COMPLETED
+                                                current.failure_reason = reason
+                                            return TaskStatus.PARTIAL_COMPLETED
+                                        engine = None
+                                        continue
                                     if exc.code == "PLATFORM_SECURITY_CHALLENGE":
                                         attempt = challenge_handler.register(root, task.attempt_id)
                                         if not attempt.allowed:
@@ -777,6 +862,16 @@ def reconcile_quarantined_unit(
 async def run_worker(
     repo: Repository, config: UnitConfig, address: str, private_root: Path
 ) -> None:
+    for binding in getattr(config, "platform_bindings", []):
+        repo.register_unit_platform_binding(
+            config.unit_id,
+            binding.platform.value,
+            binding.account_ref,
+            binding.expected_account_id,
+            str(binding.profile_directory),
+            str(binding.registry_path),
+            enabled=binding.enabled,
+        )
     client = await Client.connect(address)
     queue = f"xingtu-{config.unit_id}"
     activities = Activities(repo, config, private_root)

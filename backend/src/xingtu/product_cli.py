@@ -97,6 +97,13 @@ async def _run_intake(unit_config: Path, profile_requirement: Path | None) -> No
     config = load_unit(unit_config)
     registry = PlatformRegistry.model_validate_json(config.registry_path.read_text())
     registry.require_enabled(live=True)
+    platform_registries: dict[str, PlatformRegistry] = {}
+    for binding in config.platform_bindings:
+        if not binding.enabled:
+            continue
+        bound_registry = PlatformRegistry.model_validate_json(binding.registry_path.read_text())
+        bound_registry.require_enabled(live=True)
+        platform_registries[binding.platform.value] = bound_registry
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
         raise CollectorError("RESOURCE_UNAVAILABLE", "DEEPSEEK_API_KEY_REQUIRED")
@@ -118,6 +125,7 @@ async def _run_intake(unit_config: Path, profile_requirement: Path | None) -> No
         adapter,
         execution_unit_id=config.unit_id,
         profile_requirement=requirement,
+        platform_registries=platform_registries,
     )
     await run_intake_worker(
         products,

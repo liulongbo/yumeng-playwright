@@ -62,12 +62,14 @@ class FakePage:
         protected_present: bool = False,
         account_text: str | None = None,
         account_count: int | None = None,
+        url: str = "about:blank",
     ):
         self.protected_present = protected_present
         self.account_text = account_text
         self.account_count = (
             account_count if account_count is not None else (1 if account_text else 0)
         )
+        self.url = url
 
     def locator(self, selector: str) -> FakeLocator:
         if selector == "#ready":
@@ -203,6 +205,40 @@ def test_creator_detail_page_capture_requires_the_bound_identity(tmp_path):
             FakeFrame(FakePage(protected_present=False, account_text="synthetic-account"))
         )
     )
+    assert runtime.session_snapshot_available() is True
+
+
+def test_protected_page_snapshot_requires_declared_url_account_match(tmp_path):
+    registry_path = tmp_path / "registry.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "session": {
+                    "protected_ready": {"selector": "#ready"},
+                    "account_url_parameter": "__accountId__",
+                }
+            }
+        )
+    )
+    config = unit_config(tmp_path, registry=registry_path)
+    runtime = BrowserRuntime(config, tmp_path)
+    runtime.protected_ready_selector = "#ready"
+    runtime.account_url_parameter = "__accountId__"
+    runtime.snapshot_debounce_seconds = 0.0
+    runtime._context = FakeContext(state={"cookies": [], "origins": []})
+
+    wrong = FakePage(
+        protected_present=True,
+        url="https://platform.invalid/?__accountId__=other#/star_plaza/video",
+    )
+    asyncio.run(runtime._capture_after_navigation(FakeFrame(wrong)))
+    assert runtime.session_snapshot_available() is False
+
+    matching = FakePage(
+        protected_present=True,
+        url="https://platform.invalid/?__accountId__=synthetic-account#/star_plaza/video",
+    )
+    asyncio.run(runtime._capture_after_navigation(FakeFrame(matching)))
     assert runtime.session_snapshot_available() is True
 
 

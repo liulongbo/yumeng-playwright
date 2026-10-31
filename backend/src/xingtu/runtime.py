@@ -17,8 +17,9 @@ from playwright.async_api import BrowserContext, ProxySettings, async_playwright
 from playwright.async_api import Error as BrowserError
 from pydantic import Field, model_validator
 
+from .contracts import account_id_from_url
 from .covers import CoverConfig
-from .domain import CollectorError, Model, NetworkMode, SegmentBudget, utcnow
+from .domain import CollectorError, Model, NetworkMode, PlatformId, SegmentBudget, utcnow
 from .evidence import EvidenceConfig
 from .platform_runtime import (
     ProfileLockBusy,
@@ -52,6 +53,27 @@ class ManualIdentityAttestation(Model):
         return self
 
 
+class PlatformBindingConfig(Model):
+    """One account/Profile/contract binding inside a shared logical execution unit."""
+
+    platform: PlatformId
+    account_ref: str = Field(min_length=1)
+    expected_account_id: str = Field(min_length=1)
+    profile_directory: Path
+    registry_path: Path
+    enabled: bool = True
+    manual_identity_attestation: ManualIdentityAttestation | None = None
+
+    @model_validator(mode="after")
+    def attestation_matches(self) -> PlatformBindingConfig:
+        if (
+            self.manual_identity_attestation
+            and self.manual_identity_attestation.account_id != self.expected_account_id
+        ):
+            raise ValueError("platform binding attestation must match expected_account_id")
+        return self
+
+
 class UnitConfig(Model):
     """Execution unit binding.
 
@@ -70,6 +92,9 @@ class UnitConfig(Model):
     line_id: str
     profile_directory: Path
     registry_path: Path
+    active_platform: PlatformId = PlatformId.DOUYIN_XINGTU
+    # Empty keeps every existing unit file valid as a single Douyin Xingtu binding.
+    platform_bindings: list[PlatformBindingConfig] = Field(default_factory=list)
     network_mode: NetworkMode = NetworkMode.PRODUCTION_LINE
     # Production-line binding.
     proxy_server: str | None = None
@@ -128,12 +153,51 @@ class UnitConfig(Model):
                 )
         if self.browser_channel and self.browser_executable_path:
             raise ValueError("configure either browser_channel or browser_executable_path")
+        platforms = [binding.platform for binding in self.platform_bindings]
+        if len(platforms) != len(set(platforms)):
+            raise ValueError("platform bindings must be unique by platform")
+        profiles = [binding.profile_directory for binding in self.platform_bindings]
+        if len(profiles) != len(set(profiles)):
+            raise ValueError("platform bindings must use distinct profile directories")
         if self.manual_identity_attestation:
             if not self.is_local_development:
                 raise ValueError("manual identity attestation is limited to local_development")
             if self.manual_identity_attestation.account_id != self.expected_account_id:
                 raise ValueError("manual identity attestation must match expected_account_id")
         return self
+
+    def binding_for(self, platform: PlatformId | str) -> PlatformBindingConfig:
+        requested = PlatformId(platform)
+        for binding in self.platform_bindings:
+            if binding.platform == requested:
+                if not binding.enabled:
+                    raise CollectorError("RESOURCE_UNAVAILABLE", "PLATFORM_BINDING_DISABLED")
+                return binding
+        if requested == PlatformId.DOUYIN_XINGTU:
+            return PlatformBindingConfig(
+                platform=requested,
+                account_ref=self.account_ref,
+                expected_account_id=self.expected_account_id,
+                profile_directory=self.profile_directory,
+                registry_path=self.registry_path,
+                manual_identity_attestation=self.manual_identity_attestation,
+            )
+        raise CollectorError("RESOURCE_UNAVAILABLE", "PLATFORM_BINDING_NOT_CONFIGURED")
+
+    def for_platform(self, platform: PlatformId | str) -> UnitConfig:
+        """Return a validated active binding while reusing line and browser-host settings."""
+
+        binding = self.binding_for(platform)
+        data = self.model_dump()
+        data.update(
+            active_platform=binding.platform,
+            account_ref=binding.account_ref,
+            expected_account_id=binding.expected_account_id,
+            profile_directory=binding.profile_directory,
+            registry_path=binding.registry_path,
+            manual_identity_attestation=binding.manual_identity_attestation,
+        )
+        return UnitConfig.model_validate(data)
 
     @property
     def is_local_development(self) -> bool:
@@ -272,6 +336,7 @@ class BrowserRuntime:
         self.snapshot_debounce_seconds = 4.0
         self.protected_ready_selector: str | None = None
         self.account_selector: str | None = None
+        self.account_url_parameter: str | None = None
 
     @property
     def launch_args(self) -> list[str]:
@@ -343,7 +408,14 @@ class BrowserRuntime:
 
     @property
     def session_snapshot_path(self) -> Path:
-        return self.private_root / "storage-state" / f"{self.config.unit_id}.json"
+        # Preserve the established Douyin filename exactly. Additional platform bindings share
+        # the logical unit id but must never overwrite Douyin's cookies/local storage.
+        platform_suffix = (
+            ""
+            if self.config.active_platform == PlatformId.DOUYIN_XINGTU
+            else f".{self.config.active_platform.value}"
+        )
+        return self.private_root / "storage-state" / f"{self.config.unit_id}{platform_suffix}.json"
 
     def session_snapshot_available(self) -> bool:
         path = self.session_snapshot_path
@@ -431,6 +503,11 @@ class BrowserRuntime:
         if self.protected_ready_selector:
             try:
                 if await page.locator(self.protected_ready_selector).count():
+                    if self.account_url_parameter:
+                        return (
+                            account_id_from_url(page.url, self.account_url_parameter)
+                            == self.config.expected_account_id
+                        )
                     return True
             except Exception:  # noqa: BLE001
                 return False
@@ -507,6 +584,7 @@ class BrowserRuntime:
                         self._context = browser
                         self.protected_ready_selector = _protected_ready_selector(config)
                         self.account_selector = _account_selector(config)
+                        self.account_url_parameter = _account_url_parameter(config)
                         # Hybrid persistence: the persistent directory keeps non-session cookies,
                         # localStorage and IndexedDB, while an explicit storage-state snapshot
                         # re-injects the whole cookie jar (including session-scoped cookies the
@@ -566,6 +644,17 @@ def load_unit(path: Path) -> UnitConfig:
 def _account_selector(config: UnitConfig) -> str | None:
     """Registry-provided account locator; ``None`` when the registry is unreadable."""
     return _registry_selector(config, "account")
+
+
+def _account_url_parameter(config: UnitConfig) -> str | None:
+    """Registry-declared URL identity fallback; absent contracts keep legacy behaviour."""
+
+    try:
+        registry = json.loads(config.registry_path.read_text())
+        parameter = (registry.get("session") or {}).get("account_url_parameter")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return parameter if isinstance(parameter, str) and parameter else None
 
 
 def _protected_ready_selector(config: UnitConfig) -> str | None:
