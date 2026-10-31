@@ -13,19 +13,27 @@
  * 只保留 商业能力 / 创作能力 / 履约能力 / 连接用户（达人库入口另有 报价与历史）。
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, Check, Copy, MapPin } from "lucide-react";
+import { ArrowLeft, Check, Copy, ExternalLink, MapPin } from "lucide-react";
 import { Link } from "react-router-dom";
 import { countUnitText, numberOrNull, ratioPercentText } from "../format";
 import { useFieldCatalog, indexCatalog } from "../fieldCatalog";
 import type { CreatorLibraryDetail, CreatorVideoPage, LibraryMetric } from "../types";
 import { AudiencePanel } from "./audience";
 import { CommercialPanel, type FeaturedContent } from "./commercial";
+import {
+  JuxingAudiencePanel,
+  JuxingBasicPanel,
+  JuxingSpreadPanel,
+  JuxingWorksPanel,
+} from "./juxing";
 import { CreationPanel, FulfillmentPanel } from "./panels";
-import { genderDisplay } from "./views";
+import { fieldView, genderDisplay } from "./views";
 
 export interface CreatorProfileProps {
   creator: CreatorLibraryDetail;
   payload: Record<string, unknown>;
+  /** Which platform's field catalog and chapters this profile renders. */
+  platform?: "douyin_xingtu" | "kuaishou_juxing";
   backTo: string;
   backLabel: string;
   scopeLabel: string;
@@ -70,7 +78,16 @@ export interface CreatorProfileProps {
  * CD-05 需求：移除「达人概览」，最终只保留 商业能力 / 创作能力 / 履约能力 / 连接用户（达人库入口另有
  * 报价与历史）。`overview` 不再是章节，`normaliseLegacySection` 负责把旧标识吞成默认章节。
  */
-type ChapterKey = "commercial" | "creation" | "fulfillment" | "audience" | "history";
+type ChapterKey =
+  | "commercial"
+  | "creation"
+  | "fulfillment"
+  | "audience"
+  | "history"
+  | "juxing_basic"
+  | "juxing_spread"
+  | "juxing_works"
+  | "juxing_audience";
 
 /** 默认进入「商业能力」（CD-05 需求 3.3）。 */
 const DEFAULT_CHAPTER: ChapterKey = "commercial";
@@ -122,13 +139,13 @@ function metricValue(metric: LibraryMetric, kind: "count" | "ratio" = "count"): 
  * C位小师妹 (`7360610271510921225`). The internal `creator_id` UUID is never shown here. The value is
  * rendered as-is (a 19-digit id must not be parsed as a number) and stays copyable.
  */
-function StarId({ value }: { value: string }) {
+function StarId({ value, label = "星图ID" }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       className="rail-star-id"
       type="button"
-      title={`复制星图ID ${value}`}
+      title={`复制${label} ${value}`}
       onClick={() => {
         void navigator.clipboard
           ?.writeText(value)
@@ -139,7 +156,7 @@ function StarId({ value }: { value: string }) {
           .catch(() => setCopied(false));
       }}
     >
-      <span>星图ID</span>
+      <span>{label}</span>
       <strong>{value}</strong>
       {copied ? <Check size={11} /> : <Copy size={11} />}
     </button>
@@ -154,6 +171,7 @@ const noCoverUrl = () => "";
 export function CreatorProfile({
   creator,
   payload,
+  platform = "douyin_xingtu",
   backTo,
   backLabel,
   scopeLabel,
@@ -169,15 +187,26 @@ export function CreatorProfile({
   actions,
   overlay,
 }: CreatorProfileProps) {
-  const catalog = useFieldCatalog();
+  const juxing = platform === "kuaishou_juxing";
+  const catalog = useFieldCatalog(platform);
   const index = useMemo(() => indexCatalog(catalog), [catalog]);
-  const [chapter, setChapter] = useState<ChapterKey>(DEFAULT_CHAPTER);
+  const [chapter, setChapter] = useState<ChapterKey>(juxing ? "juxing_basic" : DEFAULT_CHAPTER);
   const gender = genderDisplay(payload);
+  const growthCount = fieldView(payload, index, "basic", "monthly_follower_growth_count");
+  const videoCount = fieldView(payload, index, "spread", "video_count");
+  const juxingGender = juxing ? fieldView(payload, index, "basic", "gender") : null;
+  const juxingForms = juxing ? fieldView(payload, index, "basic", "content_form_labels") : null;
+  const juxingProfile = juxing ? fieldView(payload, index, "basic", "profile_url") : null;
+  const juxingFormLabels = Array.isArray(juxingForms?.data) ? juxingForms.data.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+  const juxingGenderText = typeof juxingGender?.data === "string" && juxingGender.data.trim() ? juxingGender.data.trim() : juxingGender?.text;
+  const profileText = juxingProfile?.collected && !juxingProfile.blank ? juxingProfile.text.trim() : "";
+  const publicProfileUrl = /^https?:\/\//.test(profileText) ? profileText : /^www\.kuaishou\.com\/profile\//.test(profileText) ? `https://${profileText}` : null;
 
   // CD-05 需求 3.3：旧「达人概览」标识不得导致空白页。
   // 首次挂载处理直接打开 `/creators/<id>#overview`（整页加载）的情况；同时监听 hashchange，
   // 处理页内跳转（同一文档内改 hash 不会重新挂载组件）——两种情况都落到默认章节。
   useEffect(() => {
+    if (juxing) return;
     const apply = () => {
       const legacy = normaliseLegacySection();
       if (legacy) setChapter(legacy);
@@ -185,15 +214,22 @@ export function CreatorProfile({
     apply();
     window.addEventListener("hashchange", apply);
     return () => window.removeEventListener("hashchange", apply);
-  }, []);
+  }, [juxing]);
 
-  const chapters: Array<{ key: ChapterKey; label: string }> = [
-    { key: "commercial", label: "商业能力" },
-    { key: "creation", label: "创作能力" },
-    { key: "fulfillment", label: "履约能力" },
-    { key: "audience", label: "连接用户" },
-  ];
-  if (historyChapter) chapters.push({ key: "history", label: "报价与历史" });
+  const chapters: Array<{ key: ChapterKey; label: string }> = juxing
+    ? [
+        { key: "juxing_basic", label: "基础资料" },
+        { key: "juxing_spread", label: "传播表现" },
+        { key: "juxing_works", label: "代表作品" },
+        { key: "juxing_audience", label: "受众画像" },
+      ]
+    : [
+        { key: "commercial", label: "商业能力" },
+        { key: "creation", label: "创作能力" },
+        { key: "fulfillment", label: "履约能力" },
+        { key: "audience", label: "连接用户" },
+      ];
+  if (!juxing && historyChapter) chapters.push({ key: "history", label: "报价与历史" });
 
   return (
     <div className="page-wrap creator-library-detail">
@@ -216,49 +252,94 @@ export function CreatorProfile({
             <div>
               <span className="rail-scope">{scopeLabel}</span>
               <h1>{creator.display_name || "未提供昵称"}</h1>
-              <StarId value={creator.platform_creator_id} />
+              <StarId value={creator.platform_creator_id} label={juxing ? "快手ID" : "星图ID"} />
             </div>
           </div>
           <div className="rail-kpis">
-            <div>
-              <span>月连接用户</span>
-              <strong title={creator.monthly_connected_users.raw_value ?? undefined}>
-                {metricValue(creator.monthly_connected_users)}
-              </strong>
-            </div>
-            <div>
-              <span>月深度用户</span>
-              <strong title={creator.monthly_deep_users.raw_value ?? undefined}>
-                {metricValue(creator.monthly_deep_users)}
-              </strong>
-            </div>
-            <div>
-              <span>粉丝</span>
-              <strong title={creator.followers.raw_value ?? undefined}>{metricValue(creator.followers)}</strong>
-            </div>
-            <div>
-              <span>月涨粉率</span>
-              <strong>{metricValue(creator.monthly_follower_growth_rate, "ratio")}</strong>
-            </div>
+            {juxing ? (
+              <>
+                <div>
+                  <span>粉丝</span>
+                  <strong title={creator.followers.raw_value ?? undefined}>
+                    {metricValue(creator.followers)}
+                  </strong>
+                </div>
+                <div>
+                  <span>近30天涨粉</span>
+                  <strong>
+                    {growthCount.collected && !growthCount.blank ? growthCount.text : (growthCount.state ?? "—")}
+                  </strong>
+                </div>
+                <div>
+                  <span>月涨粉率</span>
+                  <strong>{metricValue(creator.monthly_follower_growth_rate, "ratio")}</strong>
+                </div>
+                <div>
+                  <span>作品数</span>
+                  <strong>{videoCount.collected && !videoCount.blank ? videoCount.text : (videoCount.state ?? "—")}</strong>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <span>月连接用户</span>
+                  <strong title={creator.monthly_connected_users.raw_value ?? undefined}>
+                    {metricValue(creator.monthly_connected_users)}
+                  </strong>
+                </div>
+                <div>
+                  <span>月深度用户</span>
+                  <strong title={creator.monthly_deep_users.raw_value ?? undefined}>
+                    {metricValue(creator.monthly_deep_users)}
+                  </strong>
+                </div>
+                <div>
+                  <span>粉丝</span>
+                  <strong title={creator.followers.raw_value ?? undefined}>
+                    {metricValue(creator.followers)}
+                  </strong>
+                </div>
+                <div>
+                  <span>月涨粉率</span>
+                  <strong>{metricValue(creator.monthly_follower_growth_rate, "ratio")}</strong>
+                </div>
+              </>
+            )}
           </div>
           <dl className="rail-tags">
-            <Fact label="达人类型" items={creator.creator_type_label ? [creator.creator_type_label] : []} />
-            <Fact label="内容主题" items={creator.content_theme_labels} />
-            <Fact label="行业标签" items={creator.industry_labels} />
+            {juxing ? (
+              <>
+                <Fact label="内容类型" items={creator.content_theme_labels} />
+                {juxingFormLabels.length > 0 && <Fact label="内容形式" items={juxingFormLabels} />}
+              </>
+            ) : (
+              <>
+                <Fact label="达人类型" items={creator.creator_type_label ? [creator.creator_type_label] : []} />
+                <Fact label="内容主题" items={creator.content_theme_labels} />
+                <Fact label="行业标签" items={creator.industry_labels} />
+              </>
+            )}
           </dl>
           <dl className="rail-facts">
-            <div>
-              <dt>性别</dt>
-              <dd>
-                {gender ? (
-                  <span className="rail-gender" title={gender.note}>
-                    {gender.text}
-                  </span>
-                ) : (
-                  <span className="chip-empty">平台暂无数据</span>
-                )}
-              </dd>
-            </div>
+            {juxing ? (
+              <div>
+                <dt>性别</dt>
+                <dd>{juxingGender?.collected && !juxingGender.blank ? juxingGenderText : <span className="chip-empty">平台暂无数据</span>}</dd>
+              </div>
+            ) : (
+              <div>
+                <dt>性别</dt>
+                <dd>
+                  {gender ? (
+                    <span className="rail-gender" title={gender.note}>
+                      {gender.text}
+                    </span>
+                  ) : (
+                    <span className="chip-empty">平台暂无数据</span>
+                  )}
+                </dd>
+              </div>
+            )}
             <div>
               <dt>地区</dt>
               <dd>
@@ -266,6 +347,7 @@ export function CreatorProfile({
                 {[creator.province, creator.city].filter(Boolean).join(" · ") || "平台暂无数据"}
               </dd>
             </div>
+            {juxing ? <div><dt>快手主页</dt><dd>{publicProfileUrl ? <a className="rail-external-link" href={publicProfileUrl} target="_blank" rel="noreferrer">打开主页 <ExternalLink size={11} /></a> : <span className="chip-empty">平台暂无数据</span>}</dd></div> : null}
             <div>
               <dt>MCN</dt>
               <dd>{creator.mcn_name || "平台暂无数据"}</dd>
@@ -314,6 +396,12 @@ export function CreatorProfile({
             ) : null}
             {chapter === "fulfillment" ? <FulfillmentPanel payload={payload} index={index} /> : null}
             {chapter === "audience" ? <AudiencePanel payload={payload} index={index} /> : null}
+            {chapter === "juxing_basic" ? <JuxingBasicPanel payload={payload} index={index} /> : null}
+            {chapter === "juxing_spread" ? <JuxingSpreadPanel payload={payload} index={index} /> : null}
+            {chapter === "juxing_works" ? <JuxingWorksPanel payload={payload} index={index} /> : null}
+            {chapter === "juxing_audience" ? (
+              <JuxingAudiencePanel payload={payload} index={index} />
+            ) : null}
             {chapter === "history" ? historyChapter : null}
           </div>
         </div>

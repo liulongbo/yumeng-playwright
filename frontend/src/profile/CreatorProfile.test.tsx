@@ -279,6 +279,11 @@ const CREATOR: CreatorLibraryDetail = {
   expected_cpm_60_plus: metric("2969"),
   expected_cpe_21_60: metric("246"),
   expected_cpe_60_plus: metric("246"),
+  play_median: metric(null),
+  average_duration: metric(null),
+  average_likes: metric(null),
+  average_comments: metric(null),
+  average_shares: metric(null),
   profile_complete: true,
   pipeline_complete: true,
   data_updated_at: "2026-10-14T01:56:05Z",
@@ -403,10 +408,11 @@ function renderProfile(
   payload: Record<string, unknown> = PAYLOAD as Record<string, unknown>,
   videos: CreatorVideoPage | null = VIDEO_PAGE,
   videoState: { loading?: boolean; error?: unknown; onRetry?: () => void } = {},
+  platform: "douyin_xingtu" | "kuaishou_juxing" = "douyin_xingtu",
 ) {
   vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
     const path = String(input);
-    if (path === "/api/platforms/douyin_xingtu/profile-field-catalog") {
+    if (path === `/api/platforms/${platform}/profile-field-catalog`) {
       return Promise.resolve(
         new Response(JSON.stringify(catalog), { status: catalog ? 200 : 404, headers: { "Content-Type": "application/json" } }),
       );
@@ -420,6 +426,7 @@ function renderProfile(
         <CreatorProfile
           creator={creator}
           payload={payload}
+          platform={platform}
           backTo="/creators"
           backLabel="返回达人库"
           scopeLabel="当前达人资料"
@@ -903,4 +910,303 @@ describe("CreatorProfile", () => {
     expect(await view.findByText("credit_score")).toBeInTheDocument();
     expect(screen.queryByText("信用分")).not.toBeInTheDocument();
   });
+
+const JUXING_CATALOG: ProfileFieldCatalog = {
+  platform: "kuaishou_juxing",
+  contract_version: "juxing-test",
+  modules: [
+    {
+      key: "basic",
+      fields: [
+        field("platform_creator_id", "快手达人 ID", "text"),
+        field("nickname", "昵称", "text"),
+        field("avatar_uri", "头像", "text"),
+        field("province", "省份", "text"),
+        field("city", "城市", "text"),
+        field("content_type_labels", "内容类型", "tags"),
+        field("gender", "性别", "text"),
+        field("profile_url", "主页地址", "text"),
+        field("content_form_labels", "内容形式", "tags"),
+        field("mcn_name", "MCN", "text"),
+        field("introduction", "介绍", "text"),
+        field("followers", "粉丝数", "number", { unit: "count" }),
+        field("monthly_follower_growth_count", "近30天涨粉", "number", { unit: "count" }),
+        field("monthly_follower_growth_rate", "月涨粉率", "ratio", { unit: "ratio" }),
+        field("cooperation_offers", "视频报价", "structured"),
+      ],
+    },
+    {
+      key: "spread",
+      fields: [
+        field("play_median", "播放量中位数", "number", { unit: "count" }),
+        field("expected_cpm", "预期 CPM", "number", { unit: "CNY_per_thousand_impressions" }),
+        field("interaction_rate", "互动率", "ratio", { unit: "ratio" }),
+        field("video_count", "视频数", "number", { unit: "count" }),
+      ],
+    },
+    { key: "works", fields: [field("works", "代表及近期作品", "structured")] },
+    {
+      key: "audience",
+      fields: [
+        field("fan_portrait", "粉丝画像", "structured"),
+        field("viewer_portrait", "观众画像", "structured"),
+      ],
+    },
+  ],
+};
+
+const JUXING_PAYLOAD = {
+  modules: {
+    basic: {
+      status: "COLLECTED",
+      fields: [
+        { ...observation("578000000001"), field_key: "platform_creator_id" },
+        { ...observation("合成聚星达人"), field_key: "nickname" },
+        { ...observation("广东省"), field_key: "province" },
+        { ...observation("深圳市"), field_key: "city" },
+        { ...observation(["母婴亲子"]), field_key: "content_type_labels" },
+        { ...observation("女"), field_key: "gender" },
+        { ...observation("www.kuaishou.com/profile/example"), field_key: "profile_url" },
+        { ...observation(["推荐"]), field_key: "content_form_labels" },
+        { ...observation("合成 MCN"), field_key: "mcn_name" },
+        { ...observation("合成简介"), field_key: "introduction" },
+        {
+          ...observation({ kind: "number", bound: "exact", amount: "21686076" }, { unit: "count" }),
+          field_key: "followers",
+        },
+        {
+          ...observation({ kind: "number", bound: "exact", amount: "268703" }, { unit: "count", period_label: "近30天" }),
+          field_key: "monthly_follower_growth_count",
+        },
+        {
+          ...observation({ kind: "number", bound: "exact", amount: "0.0125" }, { unit: "ratio", period_label: "近30天" }),
+          field_key: "monthly_follower_growth_rate",
+        },
+        {
+          ...observation(
+            {
+              kind: "structured",
+              data: [
+                { duration: "1-20秒", platform_price_raw: 20000, price_yuan: 20, currency: "CNY" },
+              ],
+            },
+            { period_label: "页面报价" },
+          ),
+          field_key: "cooperation_offers",
+        },
+      ],
+    },
+    spread: {
+      status: "COLLECTED",
+      fields: [
+        {
+          ...observation({ kind: "number", bound: "exact", amount: "13092269" }, { unit: "count", period_label: "近30天/流量范围7天" }),
+          field_key: "play_median",
+        },
+        {
+          ...observation({ kind: "number", bound: "exact", amount: "20" }, { unit: "CNY_per_thousand_impressions", period_label: "近30天/流量范围7天" }),
+          field_key: "expected_cpm",
+        },
+        {
+          ...observation({ kind: "number", bound: "exact", amount: "0.03911" }, { unit: "ratio", period_label: "近30天/流量范围7天" }),
+          field_key: "interaction_rate",
+        },
+        {
+          ...observation({ kind: "number", bound: "exact", amount: "15" }, { unit: "count", period_label: "近30天/流量范围7天" }),
+          field_key: "video_count",
+        },
+      ],
+    },
+    works: {
+      status: "COLLECTED",
+      fields: [
+        {
+          ...observation({
+            kind: "structured",
+            data: [
+              {
+                platform_content_id: "synthetic-work-1",
+                title: "合成作品",
+                play_count: 100,
+                like_count: 10,
+                comment_count: 2,
+                share_count: 1,
+                published_at_ms: 1760000000000,
+                cover_url: "https://p3-ad.adukwai.com/example-cover.jpg",
+                product_name: "合成商品",
+                quality_hot: true,
+                contains_paid: false,
+                first_industry_name: "未知",
+              },
+            ],
+          }),
+          field_key: "works",
+        },
+      ],
+    },
+    audience: {
+      status: "COLLECTED",
+      fields: [
+        {
+          ...observation(
+            {
+              kind: "structured",
+              data: {
+                sexPercentage: [{ label: "女性", value: 0.97, tgi: 224 }, { label: "男性", value: 0.03, tgi: 5 }],
+                agePercentage: [{ label: "31-40", value: 0.24, tgi: 120 }, { label: "24-30", value: 0.3, tgi: 110 }],
+                areaPercentage: [{ label: "山东", value: 0.13, tgi: 183 }, { label: "河北", value: 0.12, tgi: 160 }],
+                interestPercentage: [],
+              },
+            },
+            { period_label: "近30天" },
+          ),
+          field_key: "fan_portrait",
+        },
+        {
+          ...observation({ kind: "structured", data: { sexPercentage: [{ label: "女性", value: 0.5, tgi: 100 }] } }, { period_label: "近30天" }),
+          field_key: "viewer_portrait",
+        },
+      ],
+    },
+  },
+  profile_complete: true,
+  pipeline_complete: true,
+};
+
+const JUXING_CREATOR: CreatorLibraryDetail = {
+  creator_id: "55555555-5555-4555-8555-555555555555",
+  platform: "kuaishou_juxing",
+  platform_creator_id: "578000000001",
+  display_name: "合成聚星达人",
+  avatar_uri: null,
+  creator_type_label: null,
+  province: "广东省",
+  city: "深圳市",
+  industry_labels: [],
+  content_theme_labels: ["母婴亲子"],
+  followers: metric("21686076"),
+  monthly_deep_users: metric(null),
+  monthly_connected_users: metric(null),
+  monthly_follower_growth_rate: metric("0.0125"),
+  interaction_rate: metric(null),
+  completion_rate: metric(null),
+  expected_cpm_21_60: metric(null),
+  expected_cpm_60_plus: metric(null),
+  expected_cpe_21_60: metric(null),
+  expected_cpe_60_plus: metric(null),
+  play_median: metric("186"),
+  average_duration: metric("10.476"),
+  average_likes: metric("2"),
+  average_comments: metric(null),
+  average_shares: metric(null),
+  profile_complete: true,
+  pipeline_complete: true,
+  data_updated_at: "2026-10-27T20:00:00+08:00",
+  latest_snapshot_id: "66666666-6666-4666-8666-666666666666",
+  mcn_name: "合成 MCN",
+  introduction: "合成简介",
+  gender: null,
+  collected_field_count: 19,
+  failed_field_count: 0,
+  field_sources: {},
+  module_statuses: { basic: "COLLECTED", spread: "COLLECTED", works: "COLLECTED", audience: "COLLECTED" },
+  profile_payload: JUXING_PAYLOAD,
+};
+
+describe("CreatorProfile (juxing)", () => {
+  it("renders juxing chapters, platform-native units and a 快手ID without Xingtu semantics", async () => {
+    const view = renderProfile(
+      JUXING_CATALOG,
+      JUXING_CREATOR,
+      JUXING_PAYLOAD as Record<string, unknown>,
+      null,
+      {},
+      "kuaishou_juxing",
+    );
+    const user = userEvent.setup();
+    // The rail identifies the platform's own id and only shows juxing KPIs.
+    expect(await view.findByText("快手ID")).toBeInTheDocument();
+    expect(view.queryByText("星图ID")).not.toBeInTheDocument();
+    expect(view.getByText("性别")).toBeInTheDocument();
+    expect(view.getByText("女")).toBeInTheDocument();
+    expect(view.getByText("内容形式")).toBeInTheDocument();
+    expect(view.getByText("推荐")).toBeInTheDocument();
+    expect(view.getByRole("link", { name: /打开主页/ })).toHaveAttribute("href", "https://www.kuaishou.com/profile/example");
+    expect(view.getByText("粉丝")).toBeInTheDocument();
+    expect(view.getByText("近30天涨粉")).toBeInTheDocument();
+    expect(view.getByText("月涨粉率")).toBeInTheDocument();
+    expect(view.getByText("作品数")).toBeInTheDocument();
+    // Xingtu-only chapters must not exist.
+    expect(view.queryByRole("tab", { name: "商业能力" })).not.toBeInTheDocument();
+    expect(view.queryByRole("tab", { name: "创作能力" })).not.toBeInTheDocument();
+    expect(view.queryByRole("tab", { name: "履约能力" })).not.toBeInTheDocument();
+    expect(view.getByRole("tab", { name: "基础资料" })).toHaveAttribute("aria-selected", "true");
+
+    // Default chapter: content type and the platform offer rows (raw integer and CNY value).
+    expect(view.getAllByText("母婴亲子").length).toBeGreaterThan(0);
+    expect(await view.findByText("1-20秒")).toBeInTheDocument();
+    expect(view.getByText("20 元")).toBeInTheDocument();
+    expect(view.getByText("平台原值 20,000")).toBeInTheDocument();
+
+    await user.click(view.getByRole("tab", { name: "传播表现" }));
+    expect(await view.findByText("播放量中位数")).toBeInTheDocument();
+    expect(view.getByText("13,092,269")).toBeInTheDocument();
+    expect(view.getByText("预期 CPM")).toBeInTheDocument();
+    // The field's own observation window is kept; the catalog registers no period for juxing.
+    expect(view.getAllByText(/近30天\/流量范围7天/).length).toBeGreaterThan(0);
+
+    await user.click(view.getByRole("tab", { name: "代表作品" }));
+    expect(await view.findByText("合成作品")).toBeInTheDocument();
+    expect(view.getByText("100")).toBeInTheDocument();
+    // The platform's 作品波动 card is the first-15 mean; the page reproduces that calculation
+    // separately from the statistics-interface average fields.
+    expect(view.getByText("作品波动（最近15个作品平均）")).toBeInTheDocument();
+    expect(view.getByText("播放 100 · 点赞 10 · 评论 2 · 分享 1")).toBeInTheDocument();
+
+    await user.click(view.getByRole("tab", { name: "受众画像" }));
+    expect(await view.findByText("粉丝画像")).toBeInTheDocument();
+    expect(view.getByText("观众画像")).toBeInTheDocument();
+    expect(view.getAllByText("查看平台原始结构").length).toBe(2);
+  });
+
+  it("renders juxing covers, verified work badges and parsed portrait distributions", async () => {
+    const view = renderProfile(
+      JUXING_CATALOG,
+      JUXING_CREATOR,
+      JUXING_PAYLOAD as Record<string, unknown>,
+      null,
+      {},
+      "kuaishou_juxing",
+    );
+    const user = userEvent.setup();
+    await user.click(view.getByRole("tab", { name: "代表作品" }));
+    const cover = view.container.querySelector(".juxing-work img");
+    expect(cover).not.toBeNull();
+    expect(cover).toHaveAttribute("src", "https://p3-ad.adukwai.com/example-cover.jpg");
+    expect(await view.findByText(/带货商品：合成商品/)).toBeInTheDocument();
+    expect(view.getByText("优质")).toBeInTheDocument();
+    await user.click(view.getByRole("tab", { name: "受众画像" }));
+    expect(await view.findByText("97.0%")).toBeInTheDocument();
+    expect(view.getByText("224")).toBeInTheDocument();
+    expect(view.getAllByText("性别").length).toBeGreaterThan(1);
+    expect(view.getByText("24-30")).toBeInTheDocument();
+    expect(view.getByText("山东")).toBeInTheDocument();
+  });
+
+  it("never shows a Xingtu metric as zero for a missing juxing dimension", () => {
+    const view = renderProfile(
+      JUXING_CATALOG,
+      JUXING_CREATOR,
+      JUXING_PAYLOAD as Record<string, unknown>,
+      null,
+      {},
+      "kuaishou_juxing",
+    );
+    // 月连接用户/月深度用户/CPM/CPE 不属于聚星合同：不出现 0，也不出现这些星图标签。
+    expect(view.queryByText("月深度用户")).not.toBeInTheDocument();
+    expect(view.queryByText("月连接用户")).not.toBeInTheDocument();
+    expect(view.queryByText("CPM / CPE 原始值")).not.toBeInTheDocument();
+  });
+});
+
 });

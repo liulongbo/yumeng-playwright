@@ -19,8 +19,8 @@ import { formatDate, shortId, statusLabel, terminalStatuses, waitingStatuses } f
 import type {
   AudienceProfile, CapabilityDimension, CapabilityField, ContentPage,
   CreatorLibraryDetail, CreatorLibraryQuote, CreatorLibrarySummary, CreatorSummary, CreatorVideoPage,
-  IntakeProgress, BrowserTakeover, ExecutionUnit, RangeValue, RequirementForm, RequirementFormV2,
-  TaskDetail, TaskKind, TaskStatus,
+  CountRangeValue, IntakeProgress, BrowserTakeover, ExecutionUnit, RangeValue, RequirementForm, RequirementFormV2,
+  RequirementFormV3, TaskDetail, TaskKind, TaskStatus,
 } from "./types";
 import { BrandMark, EmptyState, ErrorState, LoadingState, PageHeader, SkeletonRows, StatusBadge } from "./ui";
 
@@ -29,6 +29,7 @@ const taskKindLabel: Record<TaskKind, string> = {
   manual_update: "手动更新",
   scheduled_update: "定时更新",
 };
+const platformLabel = { douyin_xingtu: "巨量星图", kuaishou_juxing: "磁力聚星" } as const;
 
 function taskTitle(task: { task_kind?: TaskKind; keyword: string | null; counts: { target_count: number } }) {
   if (!task.task_kind || task.task_kind === "collection") return task.keyword || "系统内部任务";
@@ -116,6 +117,7 @@ export function LoginPage() {
 export function TasksPage() {
   const [status, setStatus] = useState("");
   const [taskKind, setTaskKind] = useState("");
+  const [platform, setPlatform] = useState("");
   const [keyword, setKeyword] = useState("");
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
@@ -124,11 +126,12 @@ export function TasksPage() {
     const value = new URLSearchParams({ limit: "20" });
     if (status) value.set("status", status);
     if (taskKind) value.set("task_kind", taskKind);
+    if (platform) value.set("platform", platform);
     if (createdFrom) value.set("created_from", new Date(`${createdFrom}T00:00:00`).toISOString());
     if (createdTo) { const exclusive = new Date(`${createdTo}T00:00:00`); exclusive.setDate(exclusive.getDate() + 1); value.set("created_to", exclusive.toISOString()); }
     if (cursor) value.set("cursor", cursor);
     return value;
-  }, [status, taskKind, createdFrom, createdTo, cursor]);
+  }, [status, taskKind, platform, createdFrom, createdTo, cursor]);
   const tasks = useQuery({ queryKey: ["tasks", params.toString()], queryFn: () => api.listTasks(params), refetchInterval: 15_000 });
   const visible = (tasks.data?.items ?? []).filter((task) => !keyword.trim() || (task.keyword || "").toLowerCase().includes(keyword.trim().toLowerCase()) || task.root_task_id.includes(keyword.trim()));
   const summary = tasks.data?.items.reduce((acc, task) => {
@@ -150,6 +153,7 @@ export function TasksPage() {
     <section className="panel task-panel">
       <div className="toolbar">
         <div className="search-box"><Search size={17} /><input aria-label="搜索任务" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="搜索关键词或任务 ID" /></div>
+        <label className="select-wrap"><ListFilter size={16} /><select aria-label="按平台筛选" value={platform} onChange={(e) => { setPlatform(e.target.value); setCursor(null); }}><option value="">全部平台</option><option value="douyin_xingtu">巨量星图</option><option value="kuaishou_juxing">磁力聚星</option></select></label>
         <label className="select-wrap"><ListFilter size={16} /><select aria-label="按任务类型筛选" value={taskKind} onChange={(e) => { setTaskKind(e.target.value); setCursor(null); }}><option value="">全部类型</option><option value="collection">采集任务</option><option value="manual_update">手动更新</option><option value="scheduled_update">定时更新</option></select></label>
         <label className="select-wrap"><ListFilter size={16} /><select aria-label="按状态筛选" value={status} onChange={(e) => { setStatus(e.target.value); setCursor(null); }}><option value="">全部状态</option>{allStatuses.map((item) => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>
         <label className="date-filter"><span>从</span><input aria-label="创建开始日期" type="date" value={createdFrom} onChange={(e) => { setCreatedFrom(e.target.value); setCursor(null); }} /></label>
@@ -159,9 +163,9 @@ export function TasksPage() {
       {tasks.isLoading ? <SkeletonRows rows={6} /> : tasks.isError ? <ErrorState error={tasks.error} retry={() => tasks.refetch()} /> : visible.length === 0 ? <EmptyState title="没有匹配的任务" description={tasks.data?.items.length ? "调整搜索词或状态筛选后再试。" : "创建第一个达人采集任务，提交后即可在这里追踪进度。"} action={!tasks.data?.items.length && <Link to="/tasks/new" className="button primary"><Plus size={16} />创建任务</Link>} /> : <div className="task-table" role="table">
         <div className="task-row table-head" role="row"><span>任务</span><span>进度</span><span>结果计数</span><span>创建信息</span><span /></div>
         {visible.map((task) => <Link className="task-row" role="row" to={`/tasks/${task.root_task_id}`} key={task.root_task_id}>
-          <div className="task-main"><StatusBadge status={task.status} pulse={!terminalStatuses.has(task.status)} /><strong>{taskTitle(task)}</strong><span>#{shortId(task.root_task_id)} · {taskKindLabel[task.task_kind] || taskKindLabel.collection} · {task.source === "product" ? "产品提交" : "内部任务"}</span></div>
+          <div className="task-main"><StatusBadge status={task.status} pulse={!terminalStatuses.has(task.status)} /><strong>{taskTitle(task)}</strong><span>#{shortId(task.root_task_id)} · {platformLabel[task.platform ?? "douyin_xingtu"]} · {taskKindLabel[task.task_kind] || taskKindLabel.collection} · {task.source === "product" ? "产品提交" : "内部任务"}</span>{task.failure_reason === "ACCOUNT_SELECTION_REQUIRED" && <span className="task-account-alert">需要选择子账号</span>}</div>
           <div className="task-stage"><strong>{task.stage}</strong><div className="mini-progress"><i style={{ width: `${Math.min(100, task.counts.target_count ? task.counts.valid_count / task.counts.target_count * 100 : 0)}%` }} /></div><span>{task.counts.valid_count} / {task.counts.target_count} 位{(task.task_kind ?? "collection") === "collection" ? "有效达人" : "已更新"}</span></div>
-          <div className="count-pills"><span><b>{task.counts.discovered_count}</b>{(task.task_kind ?? "collection") === "collection" ? "发现" : "目标"}</span><span><b>{task.counts.profile_complete_count}</b>资料</span><span><b>{task.counts.featured_complete_count}</b>精选</span>{task.counts.failed_count > 0 && <span className="failed"><b>{task.counts.failed_count}</b>失败</span>}</div>
+          <div className="count-pills"><span><b>{task.counts.discovered_count}</b>{(task.task_kind ?? "collection") === "collection" ? "发现" : "目标"}</span><span><b>{task.counts.profile_complete_count}</b>资料</span>{task.platform !== "kuaishou_juxing" && <span><b>{task.counts.featured_complete_count}</b>精选</span>}{task.counts.failed_count > 0 && <span className="failed"><b>{task.counts.failed_count}</b>失败</span>}</div>
           <div className="task-meta"><strong>{task.created_by_name || "系统"}</strong><span>{formatDate(task.created_at)}</span></div>
           <ChevronRight size={18} />
         </Link>)}
@@ -177,6 +181,16 @@ function Metric({ label, value, detail, accent = "" }: { label: string; value: n
 
 function emptyRequirement(target = 20): RequirementFormV2 {
   return { schema_version: "requirement_form.v2", platform: "douyin_xingtu", keyword: null, creator_types: [], followers: null, creator_gender: null, creator_regions: [], creator_education: null, yellow_v_certification: null, connection_users: null, viewer_profile: null, fan_profile: null, quote: null, sort_key: null, target_count: target };
+}
+
+function emptyJuxingRequirement(target = 10): RequirementFormV3 {
+  return {
+    schema_version: "requirement_form.v3", platform: "kuaishou_juxing", keyword: null,
+    content_types: [], creator_types: [], followers: null, creator_gender: null,
+    creator_regions: [], creator_education: null, yellow_v_certification: null,
+    connection_users: null, viewer_profile: null, fan_profile: null, quote: null,
+    juxing_video_quotes: null, sort_key: null, target_count: target,
+  };
 }
 
 function upgradeRequirement(form: RequirementForm): RequirementFormV2 {
@@ -201,18 +215,35 @@ export function NewTaskPage() {
   const navigate = useNavigate();
   const [search] = useSearchParams();
   const origin = search.get("origin");
-  const capabilities = useQuery({ queryKey: ["capabilities"], queryFn: api.capabilities });
+  const [selectedPlatform, setSelectedPlatform] = useState<"douyin_xingtu" | "kuaishou_juxing">("douyin_xingtu");
+  const capabilities = useQuery({ queryKey: ["capabilities", selectedPlatform], queryFn: () => api.capabilities(selectedPlatform) });
+  const platforms = useQuery({ queryKey: ["platforms"], queryFn: api.platforms, retry: false });
   const original = useQuery({ queryKey: ["task", origin], queryFn: () => api.task(origin!), enabled: Boolean(origin) });
   const [form, setForm] = useState<RequirementFormV2>(emptyRequirement());
+  const [juxingForm, setJuxingForm] = useState<RequirementFormV3>(emptyJuxingRequirement());
   const [clientError, setClientError] = useState("");
   const keyRef = useRef(crypto.randomUUID());
-  useEffect(() => { if (capabilities.data && !origin) setForm(emptyRequirement(capabilities.data.target_count_default)); }, [capabilities.data, origin]);
-  useEffect(() => { if (original.data?.requirement) setForm(upgradeRequirement(original.data.requirement)); }, [original.data]);
-  const submit = useMutation({ mutationFn: () => api.createTask(form, keyRef.current, origin), onSuccess: (result) => navigate(`/tasks/${result.root_task_id}`) });
+  useEffect(() => {
+    if (!capabilities.data || origin) return;
+    if (selectedPlatform === "douyin_xingtu") setForm(emptyRequirement(capabilities.data.target_count_default));
+    else setJuxingForm(emptyJuxingRequirement(capabilities.data.target_count_default));
+  }, [capabilities.data, origin, selectedPlatform]);
+  useEffect(() => {
+    const requirement = original.data?.requirement;
+    if (!requirement) return;
+    if (requirement.schema_version === "requirement_form.v3") {
+      setSelectedPlatform("kuaishou_juxing"); setJuxingForm(requirement);
+    } else { setSelectedPlatform("douyin_xingtu"); setForm(upgradeRequirement(requirement)); }
+  }, [original.data]);
+  const activeForm: RequirementForm = selectedPlatform === "douyin_xingtu" ? form : juxingForm;
+  const submit = useMutation({ mutationFn: () => api.createTask(activeForm, keyRef.current, origin), onSuccess: (result) => navigate(`/tasks/${result.root_task_id}`) });
   function update<K extends keyof RequirementFormV2>(key: K, value: RequirementFormV2[K]) { setForm((current) => ({ ...current, [key]: value })); }
   function submitForm(event: FormEvent) {
     event.preventDefault(); setClientError("");
-    if (!hasBusinessFilter(form)) { setClientError("请至少设置一项业务筛选条件。"); return; }
+    const hasFilter = selectedPlatform === "douyin_xingtu"
+      ? hasBusinessFilter(form)
+      : Boolean(juxingForm.keyword?.trim() || juxingForm.content_types.length || juxingForm.followers || juxingForm.creator_regions.length || juxingForm.juxing_video_quotes);
+    if (!hasFilter) { setClientError("请至少设置一项业务筛选条件。"); return; }
     submit.mutate();
   }
   if (capabilities.isLoading || (origin && original.isLoading)) return <div className="page-wrap"><LoadingState label="正在读取可用筛选能力" /></div>;
@@ -221,25 +252,34 @@ export function NewTaskPage() {
   const keywordField = cap.fields.find((field) => field.field === "keyword");
   const backgroundFields = cap.fields.filter((field) => field.group === "背景信息");
   const audienceFields = cap.fields.filter((field) => field.group === "受众画像");
-  const summary = selectedConditionSummary(form, cap.fields);
+  const summary = selectedPlatform === "douyin_xingtu"
+    ? selectedConditionSummary(form, cap.fields)
+    : selectedJuxingConditionSummary(juxingForm, cap.fields);
   return <div className="page-wrap narrow-page">
-    <PageHeader eyebrow={origin ? "MODIFY & RESUBMIT" : "NEW COLLECTION TASK"} title={origin ? "修改并重新提交" : "创建采集任务"} description={origin ? "旧任务与原始需求保持不变，本次提交会创建一个新任务。" : "只展示当前真实核验通过的星图筛选能力。"} actions={<Link className="button ghost" to={origin ? `/tasks/${origin}` : "/tasks"}><ArrowLeft size={17} />返回</Link>} />
+    <PageHeader eyebrow={origin ? "MODIFY & RESUBMIT" : "NEW COLLECTION TASK"} title={origin ? "修改并重新提交" : "创建采集任务"} description={origin ? "旧任务与原始需求保持不变，本次提交会创建一个新任务。" : "按所选平台仅展示当前真实核验通过的筛选能力。"} actions={<Link className="button ghost" to={origin ? `/tasks/${origin}` : "/tasks"}><ArrowLeft size={17} />返回</Link>} />
     <form className="intake-layout" onSubmit={submitForm}>
       <section className="panel form-panel">
+        <div className="section-heading"><span className="step-index">00</span><div><h2>采集平台</h2><p>一个任务只访问一个平台；不同平台不会在同一任务内同时启动。</p></div></div>
+        <div className="platform-selector" role="radiogroup" aria-label="采集平台">
+          {(platforms.data ?? [
+            { platform: "douyin_xingtu", label: "巨量星图", enabled: true, capability_status: "verified", contract_version: cap.capability_version },
+            { platform: "kuaishou_juxing", label: "磁力聚星", enabled: false, capability_status: "observed", contract_version: null, disabled_reason: "等待授权环境完成筛选回读与真实合同验证" },
+          ]).map((platform) => <button key={platform.platform} type="button" role="radio" aria-checked={platform.platform === selectedPlatform} className={`platform-option ${platform.platform === selectedPlatform ? "active" : ""}`} disabled={!platform.enabled} onClick={() => { setSelectedPlatform(platform.platform); setClientError(""); keyRef.current = crypto.randomUUID(); }}><strong>{platform.label}</strong><span>{platform.capability_status === "verified" ? "已验证可用" : "能力已观察，尚待验证"}</span>{platform.disabled_reason && <small>{platform.disabled_reason}</small>}</button>)}
+        </div>
         <div className="section-heading"><span className="step-index">01</span><div><h2>达人筛选条件</h2><p>系统会先转换并校验需求，合法后才申请浏览器资源。</p></div></div>
         <div className="capability-banner"><ShieldCheck size={18} /><div><strong>已核验能力版本</strong><span>{cap.capability_version}</span></div><em>{cap.fields.length} 项条件可用</em></div>
-        <div className="field-grid">
+        {selectedPlatform === "douyin_xingtu" ? <div className="field-grid">
           {keywordField && <CapabilityInput field={keywordField} form={form} update={update} setForm={setForm} />}
           <fieldset className="capability-group"><legend>背景信息</legend><p>达人自身属性</p><div className="field-grid">{backgroundFields.map((field) => <CapabilityInput key={field.field} field={field} form={form} update={update} setForm={setForm} />)}</div></fieldset>
           <fieldset className="capability-group"><legend>受众画像</legend><p>连接深度、粉丝量与唯一一种画像</p><div className="field-grid">{audienceFields.map((field) => <CapabilityInput key={field.field} field={field} form={form} update={update} setForm={setForm} />)}</div><div className="profile-exclusion"><ShieldCheck size={15} />巨量星图仅允许观众画像与粉丝画像二选一；选择一侧会清空另一侧。</div></fieldset>
           <label className="field"><span>目标达人数量 <i>必填</i></span><div className="number-field"><input type="number" min={cap.target_count_min} max={cap.target_count_max} step={1} value={form.target_count} onChange={(e) => update("target_count", Number(e.target.value))} required /><b>位</b></div><small>允许 {cap.target_count_min}—{cap.target_count_max}，默认 {cap.target_count_default}。平台实际可发现数量受当前搜索能力边界限制。</small></label>
-        </div>
+        </div> : <JuxingCapabilityInputs fields={cap.fields} form={juxingForm} setForm={setJuxingForm} targetMin={cap.target_count_min} targetMax={cap.target_count_max} />}
         <div className="fixed-setting"><span>排序方式</span><strong>{cap.fixed_sort_label}</strong><small>固定由当前平台能力决定</small></div>
         {(clientError || submit.isError) && <div className="form-error" role="alert"><AlertCircle size={17} /><div><strong>{clientError || friendlyError(submit.error)}</strong>{submit.error instanceof ApiError && submit.error.detail.field_errors?.map((item) => <span key={item.path}>{item.path}：{item.message}</span>)}</div></div>}
       </section>
       <aside className="submit-card">
         <div className="section-heading compact"><span className="step-index">02</span><div><h2>确认提交</h2><p>提交后立即获得任务编号。</p></div></div>
-        <dl><div><dt>平台</dt><dd>巨量星图</dd></div><div><dt>已选条件</dt><dd>{summary.length ? `${summary.length} 项` : "待填写"}</dd></div><div><dt>目标数量</dt><dd>{form.target_count} 位</dd></div><div><dt>排序</dt><dd>{cap.fixed_sort_label}</dd></div></dl>
+        <dl><div><dt>平台</dt><dd>{platformLabel[selectedPlatform]}</dd></div><div><dt>已选条件</dt><dd>{summary.length ? `${summary.length} 项` : "待填写"}</dd></div><div><dt>目标数量</dt><dd>{activeForm.target_count} 位</dd></div><div><dt>排序</dt><dd>{cap.fixed_sort_label}</dd></div></dl>
         {summary.length > 0 && <ul className="condition-summary">{summary.map((item) => <li key={item}>{item}</li>)}</ul>}
         <div className="submit-assurance"><Check size={16} /><span>重复点击或网络重试不会创建第二个任务</span></div>
         <button className="button primary submit-button" disabled={submit.isPending}>{submit.isPending ? <><LoaderCircle className="spin" size={18} />正在可靠提交</> : <><WandSparkles size={18} />提交采集任务</>}</button>
@@ -249,6 +289,116 @@ export function NewTaskPage() {
   </div>;
 }
 
+const JUXING_QUOTE_TIERS: Array<{ key: "seconds_1_20" | "seconds_21_60" | "seconds_60_plus"; label: string }> = [
+  { key: "seconds_1_20", label: "1-20秒视频" },
+  { key: "seconds_21_60", label: "21-60秒视频" },
+  { key: "seconds_60_plus", label: "60秒以上视频" },
+];
+type JuxingQuotes = NonNullable<RequirementFormV3["juxing_video_quotes"]>;
+const EMPTY_JUXING_QUOTES: JuxingQuotes = { seconds_1_20: null, seconds_21_60: null, seconds_60_plus: null };
+
+function JuxingFollowersField({ field, value, onChange }: { field: CapabilityField; value: CountRangeValue | null; onChange: (value: CountRangeValue | null) => void }) {
+  const preset = field.options.find((option) => option.range && Number(option.range.min) === value?.min && (option.range.max === null ? value?.max === null : Number(option.range.max) === value?.max));
+  const custom = Boolean(value && !preset);
+  const inWan = (raw: number | null) => raw === null ? "" : String(raw / 10_000);
+  const fromWan = (raw: string) => raw === "" ? null : Math.round(Number(raw) * 10_000);
+  const setRange = (min: number | null, max: number | null) => onChange(min === null && max === null ? null : { min, max, unit: "count" });
+  return <div className="field full">
+    <span>{field.label} <i>已核验</i></span>
+    <select aria-label={field.label} value={preset?.value ?? (value ? "custom" : "")} onChange={(event) => {
+      const raw = event.target.value;
+      if (raw === "custom") { if (!value) onChange({ min: 0, max: null, unit: "count" }); return; }
+      const option = field.options.find((item) => item.value === raw);
+      if (!option) { onChange(null); return; }
+      if (option.range) onChange({ min: option.range.min === null ? null : Number(option.range.min), max: option.range.max === null ? null : Number(option.range.max), unit: "count" });
+    }}>
+      <option value="">全部／不限</option>
+      {field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      <option value="custom">自定义（万）</option>
+    </select>
+    {custom && <div className="range-fields juxing-range"><input aria-label="粉丝下限（万）" type="number" min="0" step="any" value={inWan(value?.min ?? null)} onChange={(event) => setRange(fromWan(event.target.value), value?.max ?? null)} /><b>—</b><input aria-label="粉丝上限（万）" type="number" min="0" step="any" value={inWan(value?.max ?? null)} onChange={(event) => setRange(value?.min ?? null, fromWan(event.target.value))} /><em>万</em></div>}
+    <small>预设区间来自平台真实控件；自定义按“万”输入后换算为平台整数 count。</small>
+  </div>;
+}
+
+function JuxingQuoteField({ value, onChange }: { value: RequirementFormV3["juxing_video_quotes"]; onChange: (value: RequirementFormV3["juxing_video_quotes"]) => void }) {
+  const [tier, setTier] = useState<keyof JuxingQuotes | "">("");
+  const selected = JUXING_QUOTE_TIERS.find((item) => value?.[item.key]);
+  // Only follow the value when it actually names a tier.  Clearing the previous tier's range on
+  // a tier switch makes `value` null for one render; resetting the control there would bounce the
+  // operator back to「全部／不限」and hide the inputs they just switched to.
+  useEffect(() => { if (selected?.key) setTier(selected.key); }, [selected?.key]);
+  const range = tier ? value?.[tier] ?? null : null;
+  function updateBound(field: "min" | "max", raw: string) {
+    if (!tier) return;
+    const current = value?.[tier] ?? { min: null, max: null, unit: "yuan" as const };
+    const next = { ...current, [field]: raw === "" ? null : Number(raw), unit: "yuan" as const };
+    if (next.min === null && next.max === null) onChange(null);
+    else onChange({ ...EMPTY_JUXING_QUOTES, [tier]: next });
+  }
+  return <div className="field full">
+    <span>视频报价 <i>已核验</i></span>
+    <select aria-label="报价档位" value={tier} onChange={(event) => {
+      const next = event.target.value as keyof JuxingQuotes | "";
+      setTier(next);
+      if (!next) { onChange(null); return; }
+      const existing = value?.[next] ?? null;
+      onChange(existing ? { ...EMPTY_JUXING_QUOTES, [next]: existing } : null);
+    }}>
+      <option value="">全部／不限</option>
+      {JUXING_QUOTE_TIERS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+    </select>
+    {tier && <div className="range-fields juxing-range"><input aria-label="报价下限（元）" type="number" min="0" step="any" value={range?.min ?? ""} onChange={(event) => updateBound("min", event.target.value)} /><b>—</b><input aria-label="报价上限（元）" type="number" min="0" step="any" value={range?.max ?? ""} onChange={(event) => updateBound("max", event.target.value)} /><em>元</em></div>}
+    <small>一次只按一个报价档位筛选；平台整数 = 元 × 1000；留空表示该边界不限。</small>
+  </div>;
+}
+
+function JuxingCapabilityInputs({ fields, form, setForm, targetMin, targetMax }: { fields: CapabilityField[]; form: RequirementFormV3; setForm: Dispatch<SetStateAction<RequirementFormV3>>; targetMin: number; targetMax: number }) {
+  const keyword = fields.find((field) => field.field === "keyword");
+  const contentType = fields.find((field) => field.field === "content_type");
+  const followers = fields.find((field) => field.field === "followers");
+  const region = fields.find((field) => field.field === "region");
+  const quotes = fields.filter((field) => field.field.startsWith("video_quote_"));
+  return <div className="field-grid">
+    {keyword && <label className="field full"><span>{keyword.label} <i>已核验</i></span><div className="input-with-icon"><Search size={18} /><input value={form.keyword ?? ""} onChange={(event) => setForm((current) => ({ ...current, keyword: event.target.value || null }))} placeholder="例如：母婴" /></div><small>按内容关键词查找；原文不会被模型改写。</small></label>}
+    {contentType && <label className="field"><span>{contentType.label} <i>已核验</i></span><select aria-label={contentType.label} value={form.content_types[0] ?? ""} onChange={(event) => setForm((current) => ({ ...current, content_types: event.target.value ? [event.target.value] : [] }))}><option value="">全部／不限</option>{contentType.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><small>当前开放平台真实类目「{contentType.options.length}」个；单任务选择一个一级类目。</small></label>}
+    {followers && <JuxingFollowersField field={followers} value={form.followers} onChange={(value) => setForm((current) => ({ ...current, followers: value }))} />}
+    {region && <RegionField field={region} value={form.creator_regions} onChange={(value) => setForm((current) => ({ ...current, creator_regions: value }))} />}
+    {quotes.length === 3 && <JuxingQuoteField value={form.juxing_video_quotes} onChange={(value) => setForm((current) => ({ ...current, juxing_video_quotes: value }))} />}
+    <label className="field"><span>目标达人数量 <i>必填</i></span><div className="number-field"><input type="number" min={targetMin} max={targetMax} step={1} value={form.target_count} onChange={(event) => setForm((current) => ({ ...current, target_count: Number(event.target.value) }))} required /><b>位</b></div><small>当前环境允许 {targetMin}—{targetMax} 位；上限由服务端能力配置决定。</small></label>
+  </div>;
+}
+
+function selectedJuxingConditionSummary(form: RequirementFormV3, fields: CapabilityField[]) {
+  const result: string[] = [];
+  if (form.keyword?.trim()) result.push(`关键词：${form.keyword.trim()}`);
+  if (form.content_types.length) {
+    const field = fields.find((item) => item.field === "content_type");
+    result.push(`内容类型：${form.content_types.map((value) => field?.options.find((option) => option.value === value)?.label ?? value).join("、")}`);
+  }
+  if (form.followers) {
+    const field = fields.find((item) => item.field === "followers");
+    const preset = field?.options.find((option) => option.range && Number(option.range.min) === form.followers?.min && (option.range.max === null ? form.followers?.max === null : Number(option.range.max) === form.followers?.max));
+    const wan = (value: number | null | undefined) => value === null || value === undefined ? "不限" : `${value / 10_000}万`;
+    result.push(`粉丝数量：${preset?.label ?? `${wan(form.followers.min)}—${wan(form.followers.max)}`}`);
+  }
+  if (form.creator_regions.length) {
+    const field = fields.find((item) => item.field === "region");
+    const labels = form.creator_regions.map((item) => {
+      const province = field?.region_tree.find((node) => node.value === item.province_code)?.label ?? item.province_code;
+      return item.city ? `${province}/${item.city}` : province;
+    });
+    result.push(`达人地域：${labels.join("、")}`);
+  }
+  const quoteTier = JUXING_QUOTE_TIERS.find((item) => form.juxing_video_quotes?.[item.key]);
+  if (quoteTier && form.juxing_video_quotes) {
+    const range = form.juxing_video_quotes[quoteTier.key];
+    const bound = (value: number | null | undefined) => value === null || value === undefined ? "不限" : `${value} 元`;
+    result.push(`视频报价：${quoteTier.label} ${bound(range?.min)}—${bound(range?.max)}`);
+  }
+  return result;
+}
+
 type FormUpdate = <K extends keyof RequirementFormV2>(key: K, value: RequirementFormV2[K]) => void;
 
 function CapabilityInput({ field, form, update, setForm }: { field: CapabilityField; form: RequirementFormV2; update: FormUpdate; setForm: Dispatch<SetStateAction<RequirementFormV2>> }) {
@@ -256,7 +406,7 @@ function CapabilityInput({ field, form, update, setForm }: { field: CapabilityFi
   if (field.field === "gender") return <SelectField field={field} value={form.creator_gender} onChange={(value) => update("creator_gender", value as RequirementFormV2["creator_gender"])} />;
   if (field.field === "education") return <SelectField field={field} value={form.creator_education} onChange={(value) => update("creator_education", value as RequirementFormV2["creator_education"])} />;
   if (field.field === "yellow_v") return <SelectField field={field} value={form.yellow_v_certification} onChange={(value) => update("yellow_v_certification", value as RequirementFormV2["yellow_v_certification"])} />;
-  if (field.field === "region") return <RegionField field={field} form={form} update={update} />;
+  if (field.field === "region") return <RegionField field={field} value={form.creator_regions} onChange={(value) => update("creator_regions", value)} />;
   if (field.field === "connection_users") return <ConnectionField field={field} value={form.connection_users} onChange={(value) => update("connection_users", value)} />;
   if (field.field === "followers") return <FollowersField field={field} value={form.followers} onChange={(value) => update("followers", value)} />;
   if (field.field === "viewer_profile" || field.field === "fan_profile") return <ProfileField field={field} value={form[field.field]} onChange={(value) => setForm((current) => ({ ...current, [field.field]: value, [field.field === "viewer_profile" ? "fan_profile" : "viewer_profile"]: value ? null : current[field.field === "viewer_profile" ? "fan_profile" : "viewer_profile"] }))} />;
@@ -267,20 +417,21 @@ function SelectField({ field, value, onChange }: { field: CapabilityField; value
   return <label className="field"><span>{field.label} <i>已核验</i></span><select value={value ?? ""} onChange={(event) => onChange(event.target.value || null)}><option value="">全部／不限</option>{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
 }
 
-function RegionField({ field, form, update }: { field: CapabilityField; form: RequirementFormV2; update: FormUpdate }) {
+export type RegionSelectionValue = { province_code: string; city?: string | null };
+function RegionField({ field, value, onChange }: { field: CapabilityField; value: RegionSelectionValue[]; onChange: (value: RegionSelectionValue[]) => void }) {
   const [province, setProvince] = useState("");
   const [city, setCity] = useState("");
   const node = field.region_tree.find((item) => item.value === province);
   function commit(provinceCode: string, cityValue: string) {
     if (!provinceCode) return;
-    let next = form.creator_regions.filter((item) => item.province_code !== provinceCode || (cityValue ? item.city : false));
+    let next = value.filter((item) => item.province_code !== provinceCode || (cityValue ? item.city : false));
     if (cityValue) next = next.filter((item) => !(item.province_code === provinceCode && !item.city));
     const candidate = { province_code: provinceCode, ...(cityValue ? { city: cityValue } : {}) };
     if (!next.some((item) => item.province_code === provinceCode && (item.city ?? null) === (cityValue || null))) next.push(candidate);
-    update("creator_regions", next);
+    onChange(next);
   }
   function add() { commit(province, city); }
-  return <div className="field full"><span>{field.label} <i>已核验</i></span><div className="region-picker"><select aria-label="省级地域" value={province} onChange={(event) => { const value = event.target.value; setProvince(value); setCity(""); if (value) commit(value, ""); }}><option value="">选择省份</option>{field.region_tree.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select><select aria-label="二级地域" value={city} onChange={(event) => { const value = event.target.value; setCity(value); if (province) commit(province, value); }} disabled={!node?.children.length}><option value="">整省</option>{node?.children.map((item) => <option value={item.label} key={item.value}>{item.label}</option>)}</select><button type="button" className="button secondary" onClick={add}>添加</button></div><div className="selection-chips">{form.creator_regions.map((item) => { const provinceLabel = field.region_tree.find((nodeItem) => nodeItem.value === item.province_code)?.label ?? item.province_code; const label = item.city ? `${provinceLabel} / ${item.city}` : provinceLabel; return <button type="button" key={`${item.province_code}:${item.city ?? ""}`} onClick={() => update("creator_regions", form.creator_regions.filter((current) => current !== item))}>{label} ×</button>; })}</div></div>;
+  return <div className="field full"><span>{field.label} <i>已核验</i></span><div className="region-picker"><select aria-label="省级地域" value={province} onChange={(event) => { const next = event.target.value; setProvince(next); setCity(""); if (next) commit(next, ""); }}><option value="">选择省份</option>{field.region_tree.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select><select aria-label="二级地域" value={city} onChange={(event) => { const next = event.target.value; setCity(next); if (province) commit(province, next); }} disabled={!node?.children.length}><option value="">整省</option>{node?.children.map((item) => <option value={item.label} key={item.value}>{item.label}</option>)}</select><button type="button" className="button secondary" onClick={add}>添加</button></div><div className="selection-chips">{value.map((item) => { const provinceLabel = field.region_tree.find((nodeItem) => nodeItem.value === item.province_code)?.label ?? item.province_code; const label = item.city ? `${provinceLabel} / ${item.city}` : provinceLabel; return <button type="button" key={`${item.province_code}:${item.city ?? ""}`} onClick={() => onChange(value.filter((current) => current !== item))}>{label} ×</button>; })}</div></div>;
 }
 
 function RangeInputs({ value, constraint, onChange }: { value: RangeValue | null; constraint?: { min: number; max: number } | null; onChange: (value: RangeValue | null) => void }) {
@@ -334,6 +485,12 @@ export function TaskDetailPage() {
     getNextPageParam: (page) => page.next_cursor ?? undefined,
     enabled: Boolean(task.data),
   });
+  const juxingCapabilities = useQuery({
+    queryKey: ["capabilities", "kuaishou_juxing"],
+    queryFn: () => api.capabilities("kuaishou_juxing"),
+    enabled: task.data?.platform === "kuaishou_juxing",
+    staleTime: 30 * 60 * 1000,
+  });
   useEffect(() => {
     if (task.data && terminalStatuses.has(task.data.status)) {
       queryClient.invalidateQueries({ queryKey: ["creators", taskId] });
@@ -348,16 +505,29 @@ export function TaskDetailPage() {
   if (task.isError || !task.data) return <div className="page-wrap"><ErrorState error={task.error} retry={() => task.refetch()} /></div>;
   const item = task.data;
   const taskKind = item.task_kind ?? "collection";
+  const juxingTask = item.platform === "kuaishou_juxing";
+  const juxingRequirement = item.requirement?.schema_version === "requirement_form.v3" ? item.requirement : null;
+  const juxingConditions = juxingRequirement ? selectedJuxingConditionSummary(juxingRequirement, juxingCapabilities.data?.fields ?? []) : [];
   const remainingToTarget = Math.max(0, item.counts.target_count - item.counts.valid_count);
   const backfillPending = Math.max(0, item.counts.valid_count - item.counts.profile_complete_count);
-  const countCards = taskKind === "collection" ? [
-    ["已发现", item.counts.discovered_count, "候选达人"],
-    ["有效入库", item.counts.valid_count, `目标 ${item.counts.target_count}${remainingToTarget > 0 ? ` · 还差 ${remainingToTarget} 位` : ""}`],
-    ["资料完整", item.counts.profile_complete_count, backfillPending > 0 ? `待补采 ${backfillPending} 位` : "全部完整"],
-    ["精选完整", item.counts.featured_complete_count, "F06 双集合"],
-  ] : [
-    ["目标达人", item.counts.target_count, taskKindLabel[taskKind]], ["已更新", item.counts.valid_count, `目标 ${item.counts.target_count}`],
-    ["资料完整", item.counts.profile_complete_count, "F05 模块"], ["精选完整", item.counts.featured_complete_count, "F06 双集合"],
+  const completeDetail = backfillPending > 0 ? `待补采 ${backfillPending} 位` : "全部完整";
+  // 聚星没有星图 F06 两组精选集合：绝不能用一个恒为 0 的「精选完整」卡片暗示缺失。
+  const countCards = taskKind === "collection"
+    ? [
+        ["已发现", item.counts.discovered_count, "候选达人"],
+        ["有效入库", item.counts.valid_count, `目标 ${item.counts.target_count}${remainingToTarget > 0 ? ` · 还差 ${remainingToTarget} 位` : ""}`],
+        ...(juxingTask
+          ? [["资料完整", item.counts.profile_complete_count, completeDetail] as const]
+          : [
+              ["资料完整", item.counts.profile_complete_count, backfillPending > 0 ? `待补采 ${backfillPending} 位` : "全部完整"] as const,
+              ["精选完整", item.counts.featured_complete_count, "F06 双集合"] as const,
+            ]),
+      ]
+    : [
+        ["目标达人", item.counts.target_count, taskKindLabel[taskKind]],
+        ["已更新", item.counts.valid_count, `目标 ${item.counts.target_count}`],
+        ["资料完整", item.counts.profile_complete_count, "F05 模块"],
+        ["精选完整", item.counts.featured_complete_count, "F06 双集合"],
   ];
   return <div className="page-wrap">
     <div className="detail-topline"><Link to="/tasks" className="back-link"><ArrowLeft size={17} />任务中心</Link><span>/</span><span>#{shortId(item.root_task_id)}</span></div>
@@ -380,7 +550,7 @@ export function TaskDetailPage() {
       <section className="panel creators-panel"><div className="panel-heading"><div><h2>任务内达人</h2><p>执行中只展示已持久草稿；终态展示任务关联快照。</p></div><span>{creators.data?.pages.flatMap((page) => page.items).length ?? 0} 位可查看</span></div>
         {creators.isLoading ? <SkeletonRows rows={4} /> : creators.isError ? <ErrorState error={creators.error} retry={() => creators.refetch()} /> : !creators.data?.pages[0]?.items.length ? <EmptyState title={terminalStatuses.has(item.status) ? "当前任务没有有效达人" : "达人结果正在形成"} description={terminalStatuses.has(item.status) ? "查看任务状态与失败原因，确认是零结果、部分完成还是执行失败。" : "发现并有效落库后，达人会出现在这里。"} /> : <><div className="creator-list">{creators.data.pages.flatMap((page) => page.items).map((creator) => <CreatorRow key={creator.creator_id} taskId={taskId} creator={creator} />)}</div>{creators.hasNextPage && <div className="pagination"><button className="button secondary" disabled={creators.isFetchingNextPage} onClick={() => creators.fetchNextPage()}>{creators.isFetchingNextPage ? "正在读取" : "查看更多达人"}<ArrowRight size={16} /></button></div>}</>}
       </section>
-      {taskKind === "collection" ? <aside className="panel requirement-panel"><div className="panel-heading"><div><h2>需求与执行约束</h2><p>原始需求和执行计划分开留存。</p></div></div><dl><div><dt>内容关键词</dt><dd>{item.requirement?.keyword || item.keyword || "—"}</dd></div><div><dt>目标数量</dt><dd>{item.counts.target_count} 位</dd></div><div><dt>排序方式</dt><dd>平台默认排序</dd></div><div><dt>来源</dt><dd>{item.source === "product" ? "媒介产品提交" : "系统内部任务"}</dd></div></dl>{item.plan && <details><summary>查看最终执行计划</summary><pre>{JSON.stringify(item.plan, null, 2)}</pre></details>}{item.origin_root_task_id && <Link to={`/tasks/${item.origin_root_task_id}`} className="origin-link"><RotateCcw size={15} />查看来源任务</Link>}</aside> : <aside className="panel requirement-panel"><div className="panel-heading"><div><h2>更新目标</h2><p>批次内每位达人独立采集、独立保存；失败不影响其他达人。</p></div></div><dl><div><dt>任务类型</dt><dd>{taskKindLabel[taskKind]}</dd></div><div><dt>目标数量</dt><dd>{item.counts.target_count} 位</dd></div><div><dt>已更新</dt><dd>{item.counts.valid_count} 位</dd></div><div><dt>来源</dt><dd>{item.created_by_name || "定时调度"}</dd></div></dl><div className="update-target-list">{(item.update_targets ?? []).map((target) => <div key={target.platform_creator_id}><span>{target.display_name || `达人 ${target.first_position + 1}`}</span><em>{updateTargetStateLabel[target.state] || target.state}</em>{target.failure_reason && <small>{target.failure_reason}</small>}</div>)}</div></aside>}
+      {taskKind === "collection" ? <aside className="panel requirement-panel"><div className="panel-heading"><div><h2>需求与执行约束</h2><p>原始需求和执行计划分开留存。</p></div></div><dl><div><dt>平台</dt><dd>{platformLabel[item.platform ?? "douyin_xingtu"]}</dd></div><div><dt>内容关键词</dt><dd>{item.requirement?.keyword || item.keyword || "—"}</dd></div>{juxingConditions.filter((condition) => !condition.startsWith("关键词：")).map((condition) => { const [label, ...rest] = condition.split("："); return <div key={condition}><dt>{label}</dt><dd>{rest.join("：")}</dd></div>; })}<div><dt>目标数量</dt><dd>{item.counts.target_count} 位</dd></div><div><dt>排序方式</dt><dd>平台默认排序</dd></div><div><dt>来源</dt><dd>{item.source === "product" ? "媒介产品提交" : "系统内部任务"}</dd></div></dl>{item.plan && <details><summary>查看最终执行计划</summary><pre>{JSON.stringify(item.plan, null, 2)}</pre></details>}{item.origin_root_task_id && <Link to={`/tasks/${item.origin_root_task_id}`} className="origin-link"><RotateCcw size={15} />查看来源任务</Link>}</aside> : <aside className="panel requirement-panel"><div className="panel-heading"><div><h2>更新目标</h2><p>批次内每位达人独立采集、独立保存；失败不影响其他达人。</p></div></div><dl><div><dt>平台</dt><dd>{platformLabel[item.platform ?? "douyin_xingtu"]}</dd></div><div><dt>任务类型</dt><dd>{taskKindLabel[taskKind]}</dd></div><div><dt>目标数量</dt><dd>{item.counts.target_count} 位</dd></div><div><dt>已更新</dt><dd>{item.counts.valid_count} 位</dd></div><div><dt>来源</dt><dd>{item.created_by_name || "定时调度"}</dd></div></dl><div className="update-target-list">{(item.update_targets ?? []).map((target) => <div key={target.platform_creator_id}><span>{target.display_name || `达人 ${target.first_position + 1}`}</span><em>{updateTargetStateLabel[target.state] || target.state}</em>{target.failure_reason && <small>{target.failure_reason}</small>}</div>)}</div></aside>}
     </div>
   </div>;
 }
@@ -459,8 +629,14 @@ function attentionDetail(task: TaskDetail) {
   // including the persisted results — is fine. Say what happened and that the offered action is
   // real instead of showing a bare internal code (FIX-01 P0-A acceptance wording).
   const scoped = retryScopeMessage(task);
-  if (scoped) return scoped;
+  if (scoped) return task.failure_reason ? `${scoped} 服务端原因：${task.failure_reason}` : scoped;
   const reason = task.failure_reason;
+  if (reason === "ACCOUNT_SELECTION_REQUIRED") {
+    return "磁力聚星需要选择子账号。当前任务已暂停，请在 Chrome 中选择 cpg果汁（60821564）；完成后系统会重新校验账号身份并继续采集，请勿选择其他子账号。";
+  }
+  if (reason === "ACCOUNT_SELECTION_TIMEOUT") {
+    return "等待选择子账号超过保护窗口，任务已停止。请重新发起任务，并在 Chrome 中选择 cpg果汁（60821564）后继续采集。";
+  }
   if (reason && reason.startsWith("SECURITY_CHALLENGE_")) {
     return "任务因平台安全验证未完成而停止。请先完成验证；当前不提供重试。";
   }
@@ -470,15 +646,20 @@ function attentionDetail(task: TaskDetail) {
 }
 
 function taskMessage(task: TaskDetail) {
+  const juxing = task.platform === "kuaishou_juxing";
   const messages: Partial<Record<TaskStatus, string>> = {
     RECEIVED: "需求已可靠保存，等待转换工作流接管。", PARSING: "正在把原始筛选条件转换为可执行计划，并逐字段校验。",
-    QUEUED: "执行计划已通过校验，正在等待采集资源。", SEARCHING: "正在星图中按已核验条件发现达人。",
-    COLLECTING: "正在采集达人主页资料与两组精选作品。", PERSISTING: "数据已采集，正在发布任务不可变快照。",
+    QUEUED: "执行计划已通过校验，正在等待采集资源。",
+    SEARCHING: juxing ? "正在磁力聚星中按已核验条件发现达人。" : "正在星图中按已核验条件发现达人。",
+    COLLECTING: juxing ? "正在采集达人基础、传播、作品与受众资料。" : "正在采集达人主页资料与两组精选作品。",
+    PERSISTING: "数据已采集，正在发布任务不可变快照。",
     COMPLETED: "目标链路已完成，可查看发布快照。", PARTIAL_COMPLETED: "部分结果已保存，请查看失败步骤与可用操作。",
     FAILED_VALIDATION: "原始需求未能安全映射为执行计划，未申请浏览器资源。", FAILED: "执行未完成，已保存的结果不会丢失。",
     CANCELLING: "取消已受理，正在等待执行中的步骤安全收尾。", CANCELLED: "任务已按你的操作取消，已持久的结果保留。",
     PAUSED_BUDGET: "本次执行预算已用完，可在确认后继续。", WAITING_FOR_LOGIN: "平台会话需要维护，本里程碑暂不提供远程登录入口。",
-    WAITING_FOR_ACCOUNT: "当前平台账号与任务绑定账号不一致，采集已暂停。",
+    WAITING_FOR_ACCOUNT: task.failure_reason === "ACCOUNT_SELECTION_REQUIRED"
+      ? "磁力聚星需要选择子账号，请在 Chrome 中选择 cpg果汁（60821564）后继续采集。"
+      : "当前平台账号与任务绑定账号不一致，采集已暂停。",
     WAITING_FOR_VERIFICATION: "平台要求安全验证，业务采集已暂停，完成验证并稳定后会自动恢复。",
   };
   if (task.status === "RECEIVED" && task.intake) {
@@ -506,8 +687,10 @@ function ChallengePanel({ task }: { task: TaskDetail }) {
   return <section className={`challenge-panel ${challenge.terminal_reason ? "terminal" : ""}`}>
     <div className="challenge-icon"><ShieldCheck size={20} /></div>
     <div className="challenge-copy">
-      <div className="challenge-heading"><strong>安全验证托管</strong><span>{stateLabel[challenge.state] || challenge.state}</span></div>
-      <p>{challenge.terminal_message || (challenge.requires_user_action ? "请在平台原生页面完成安全验证；系统不会操作验证控件。" : "验证状态已记录，后续恢复由服务端检查决定。")}</p>
+      {challenge.challenge_type === "ACCOUNT_SELECTION" ? <div className="challenge-heading"><strong>子账号选择托管</strong><span>{stateLabel[challenge.state] || challenge.state}</span></div> : <div className="challenge-heading"><strong>安全验证托管</strong><span>{stateLabel[challenge.state] || challenge.state}</span></div>}
+      <p>{challenge.challenge_type === "ACCOUNT_SELECTION"
+        ? (challenge.terminal_message || "磁力聚星需要选择子账号。请在 Chrome 中选择 cpg果汁（60821564）；系统会重新校验账号后继续采集。请勿选择其他子账号。")
+        : (challenge.terminal_message || (challenge.requires_user_action ? "请在平台原生页面完成安全验证；系统不会操作验证控件。" : "验证状态已记录，后续恢复由服务端检查决定。"))}</p>
       <div className="challenge-facts">
         <span><b>{challenge.detected_count}</b>触发次数</span>
         <span><b>{challenge.recovery_count}</b>恢复次数</span>
@@ -519,6 +702,7 @@ function ChallengePanel({ task }: { task: TaskDetail }) {
         <span>{challenge.monitoring ? "正在监测稳定恢复条件" : "未处于实时监测"}</span>
         <span>{challenge.delivered_result}</span>
       </div>
+      {challenge.challenge_type === "ACCOUNT_SELECTION" && challenge.requires_user_action && <div className="challenge-foot"><Link to="/execution-units" className="button secondary">前往执行单元接管浏览器</Link><span>正确子账号：cpg果汁（60821564）</span></div>}
     </div>
   </section>;
 }
@@ -562,27 +746,45 @@ function ProgressRail({ status, kind = "collection" }: { status: TaskStatus; kin
 
 // 「任务内达人」与「达人库」共用同一套指标名称、取值与格式化规则：字段都从快照 JSONB 按达人库
 // 读模型使用的同名字段键读取，缺失即显示“暂无数据”，不推测数值。CPM/CPE 与达人库列表行一致地
-// 并列展示 21–60 秒与 60 秒以上两档平台原始值。
+// 并列展示 21–60 秒与 60 秒以上两档平台原始值。聚星没有这些指标，因此按平台切换指标组，而不是
+// 让它们以「暂无数据」占位或把聚星指标冒充星图指标。
 function CreatorRow({ taskId, creator }: { taskId: string; creator: CreatorSummary }) {
-  const view = snapshotCreatorView(creator.payload, {
-    creator_id: creator.creator_id,
-    platform_creator_id: creator.platform_creator_id,
-    snapshot_id: creator.snapshot_id,
-    observed_at: creator.observed_at,
-  });
+  const platform = creator.platform ?? "douyin_xingtu";
+  const juxing = platform === "kuaishou_juxing";
+  const view = snapshotCreatorView(
+    creator.payload,
+    {
+      creator_id: creator.creator_id,
+      platform_creator_id: creator.platform_creator_id,
+      snapshot_id: creator.snapshot_id,
+      observed_at: creator.observed_at,
+    },
+    platform,
+  );
   const name = view.display_name || `达人 ${creator.first_position + 1}`;
   return <Link className="creator-row" to={`/tasks/${taskId}/creators/${creator.creator_id}`} aria-label={`查看达人 ${name} 详情`}>
     <div className="creator-rank">{String(creator.first_position + 1).padStart(2, "0")}</div>
     <div className="creator-avatar">{view.avatar_uri ? <img src={view.avatar_uri} alt="" /> : <UserRound size={20} />}</div>
     <div className="creator-copy">
       <strong>{name}</strong>
-      <span>{creatorTags(view) || "标签暂无数据"}</span>
-      <em>平台 ID {creator.platform_creator_id}</em>
+      <span>{juxing ? (view.content_theme_labels.join(" · ") || "内容类型暂无数据") : (creatorTags(view) || "标签暂无数据")}</span>
+      <em>{juxing ? "快手ID" : "平台 ID"} {creator.platform_creator_id}</em>
     </div>
-    <div className="creator-stat"><span>粉丝</span><strong>{numberText(view.followers.value)}</strong></div>
-    <div className="creator-stat"><span>月深度用户</span><strong>{rawMetric(view.monthly_deep_users)}</strong></div>
-    <div className="creator-stat engagement"><span>互动 / 完播原始值</span><strong>{rawMetric(view.interaction_rate)} / {rawMetric(view.completion_rate)}</strong></div>
-    <div className="creator-stat commercial"><span>CPM / CPE 原始值</span><strong>{rawMetric(view.expected_cpm_21_60)} / {rawMetric(view.expected_cpe_21_60)}</strong><small>21–60 秒 · 60 秒以上 {rawMetric(view.expected_cpm_60_plus)} / {rawMetric(view.expected_cpe_60_plus)}</small></div>
+    {juxing ? (
+      <>
+        <div className="creator-stat"><span>粉丝</span><strong>{numberText(view.followers.value)}</strong></div>
+        <div className="creator-stat"><span>月涨粉率</span><strong>{ratioMetric(view.monthly_follower_growth_rate)}</strong></div>
+        <div className="creator-stat"><span>互动 / 完播</span><strong>{ratioMetric(view.interaction_rate)} / {ratioMetric(view.completion_rate)}</strong></div>
+        <div className="creator-stat"><span>播放中位数</span><strong>{numberText(view.play_median.value)}</strong></div>
+      </>
+    ) : (
+      <>
+        <div className="creator-stat"><span>粉丝</span><strong>{numberText(view.followers.value)}</strong></div>
+        <div className="creator-stat"><span>月深度用户</span><strong>{rawMetric(view.monthly_deep_users)}</strong></div>
+        <div className="creator-stat engagement"><span>互动 / 完播原始值</span><strong>{rawMetric(view.interaction_rate)} / {rawMetric(view.completion_rate)}</strong></div>
+        <div className="creator-stat commercial"><span>CPM / CPE 原始值</span><strong>{rawMetric(view.expected_cpm_21_60)} / {rawMetric(view.expected_cpe_21_60)}</strong><small>21–60 秒 · 60 秒以上 {rawMetric(view.expected_cpm_60_plus)} / {rawMetric(view.expected_cpe_60_plus)}</small></div>
+      </>
+    )}
     <span className={`view-label ${creator.view_kind}`}>{creator.view_kind === "draft" ? "执行中草稿" : "已发布快照"}</span>
     <ChevronRight size={18} />
   </Link>;
@@ -611,7 +813,7 @@ function creatorTags(creator: Pick<CreatorLibrarySummary, "creator_type_label" |
  */
 function ProvenancePanel({ creator, payload }: { creator: CreatorLibraryDetail; payload: Record<string, unknown> }) {
   const [open, setOpen] = useState(false);
-  const catalog = useFieldCatalog();
+  const catalog = useFieldCatalog(creator.platform);
   const index = useMemo(() => indexCatalog(catalog), [catalog]);
   return <>
     <p className="rail-snapshot-note">
@@ -632,9 +834,10 @@ function ProvenancePanel({ creator, payload }: { creator: CreatorLibraryDetail; 
   </>;
 }
 
-function CreatorDetailView({ creator, profilePayload, backTo, backLabel, scopeLabel, description, badgeLabel, badgeTone, notice, contents, videos, historyChapter, actions }: {
+function CreatorDetailView({ creator, profilePayload, platform = "douyin_xingtu", backTo, backLabel, scopeLabel, description, badgeLabel, badgeTone, notice, contents, videos, historyChapter, actions }: {
   creator: CreatorLibraryDetail;
   profilePayload: Record<string, unknown>;
+  platform?: "douyin_xingtu" | "kuaishou_juxing";
   backTo: string;
   backLabel: string;
   scopeLabel: string;
@@ -645,13 +848,14 @@ function CreatorDetailView({ creator, profilePayload, backTo, backLabel, scopeLa
   /** 两组精选视频集合的真实数据源；由各入口按自己的快照范围提供。 */
   contents?: FeaturedContent;
   /** 「创作能力」的作品观测取数（页面 + 该入口的授权封面地址构造器）；由各入口按自己的快照范围提供。 */
-  videos: ReturnType<typeof useVideoObservations>;
+  videos?: ReturnType<typeof useVideoObservations>;
   historyChapter?: ReactNode;
   actions?: ReactNode;
 }) {
   return <CreatorProfile
     creator={creator}
     payload={profilePayload}
+    platform={platform}
     backTo={backTo}
     backLabel={backLabel}
     scopeLabel={scopeLabel}
@@ -660,11 +864,11 @@ function CreatorDetailView({ creator, profilePayload, backTo, backLabel, scopeLa
     badgeTone={badgeTone}
     notice={notice}
     contents={contents}
-    videos={videos.page}
-    videosLoading={videos.loading}
-    videosError={videos.error}
-    onRetryVideos={videos.onRetry}
-    videoCoverUrl={videos.coverUrl}
+    videos={videos?.page}
+    videosLoading={videos?.loading}
+    videosError={videos?.error}
+    onRetryVideos={videos?.onRetry}
+    videoCoverUrl={videos?.coverUrl}
     historyChapter={historyChapter}
     actions={actions}
     overlay={<ProvenancePanel creator={creator} payload={profilePayload} />}
@@ -741,6 +945,7 @@ function featuredCollectionView(
  */
 function useFeaturedContent(
   scope: { kind: "task"; taskId: string; creatorId: string } | { kind: "library"; creatorId: string },
+  enabled = true,
 ): FeaturedContent {
   const taskScoped = scope.kind === "task";
   const fetchType = (type: "excellent_reach" | "excellent_seeding") =>
@@ -750,10 +955,12 @@ function useFeaturedContent(
   const reach = useQuery({
     queryKey: ["featured", scope.kind, scope.creatorId, (scope as { taskId?: string }).taskId ?? "", "excellent_reach"],
     queryFn: () => fetchType("excellent_reach"),
+    enabled,
   });
   const seeding = useQuery({
     queryKey: ["featured", scope.kind, scope.creatorId, (scope as { taskId?: string }).taskId ?? "", "excellent_seeding"],
     queryFn: () => fetchType("excellent_seeding"),
+    enabled,
   });
   const coverUrl = taskScoped
     ? (objectId: string) =>
@@ -782,6 +989,7 @@ function useFeaturedContent(
  */
 function useVideoObservations(
   scope: { kind: "task"; taskId: string; creatorId: string } | { kind: "library"; creatorId: string },
+  enabled = true,
 ): {
   page: CreatorVideoPage | null;
   coverUrl: (objectId: string) => string;
@@ -797,6 +1005,7 @@ function useVideoObservations(
       taskScoped
         ? api.taskCreatorVideos(taskId, scope.creatorId)
         : api.creatorLibraryVideos(scope.creatorId),
+    enabled,
   });
   const coverUrl = taskScoped
     ? (objectId: string) => `/api/tasks/${taskId}/covers/${encodeURIComponent(objectId)}`
@@ -848,32 +1057,42 @@ function taskSnapshotQuotes(payload: Record<string, unknown>): CreatorLibraryQuo
 export function CreatorDetailPage() {
   const { taskId = "", creatorId = "" } = useParams();
   const creator = useQuery({ queryKey: ["creator", taskId, creatorId], queryFn: () => api.creator(taskId, creatorId) });
-  const contents = useFeaturedContent({ kind: "task", taskId, creatorId });
-  const videos = useVideoObservations({ kind: "task", taskId, creatorId });
-  const catalog = useFieldCatalog();
+  const platform = creator.data?.platform ?? "douyin_xingtu";
+  const juxing = platform === "kuaishou_juxing";
+  // 聚星没有星图 F06 精选集合与星图作品观测表：不发起这些请求，也不把空结果伪装成业务数据。
+  const contents = useFeaturedContent({ kind: "task", taskId, creatorId }, Boolean(creator.data) && !juxing);
+  const videos = useVideoObservations({ kind: "task", taskId, creatorId }, Boolean(creator.data) && !juxing);
+  const catalog = useFieldCatalog(platform);
   const index = useMemo(() => indexCatalog(catalog), [catalog]);
   if (creator.isLoading) return <div className="page-wrap"><LoadingState label="正在读取达人快照" /></div>;
   if (creator.isError || !creator.data) return <div className="page-wrap"><ErrorState error={creator.error} retry={() => creator.refetch()} /></div>;
   const item = creator.data;
-  const view = snapshotCreatorView(item.payload, {
-    creator_id: item.creator_id,
-    platform_creator_id: item.platform_creator_id,
-    snapshot_id: item.snapshot_id,
-    observed_at: item.observed_at,
-  });
-  const snapshotQuotes = taskSnapshotQuotes(item.payload);
+  const view = snapshotCreatorView(
+    item.payload,
+    {
+      creator_id: item.creator_id,
+      platform_creator_id: item.platform_creator_id,
+      snapshot_id: item.snapshot_id,
+      observed_at: item.observed_at,
+    },
+    platform,
+  );
+  const snapshotQuotes = juxing ? [] : taskSnapshotQuotes(item.payload);
   return <CreatorDetailView
     creator={view}
     profilePayload={item.payload}
+    platform={platform}
     backTo={`/tasks/${taskId}`}
     backLabel="返回任务"
     scopeLabel="本任务采集快照"
-    description="指标取自本任务采集的不可变快照，与达人库当前投影可能不同步；字段口径均为平台原始值。"
+    description={juxing
+      ? "指标取自本任务采集的不可变快照；字段、单位与统计窗口均为磁力聚星平台原始口径。"
+      : "指标取自本任务采集的不可变快照，与达人库当前投影可能不同步；字段口径均为平台原始值。"}
     badgeLabel={item.view_kind === "draft" ? "执行中草稿" : completeLabel(view)}
     badgeTone={item.view_kind === "draft" || !(view.profile_complete && view.pipeline_complete) ? "draft" : "published"}
     notice={item.view_kind === "draft" ? <div className="draft-banner"><Clock3 size={18} /><div><strong>这是执行中的持久草稿</strong><span>字段与作品仍可能补齐；任务发布后将切换到不可变快照。</span></div></div> : undefined}
-    contents={contents}
-    videos={videos}
+    contents={juxing ? undefined : contents}
+    videos={juxing ? undefined : videos}
     historyChapter={snapshotQuotes.length ? <div className="profile-sections">
       <QuoteTable payload={item.payload} index={index} />
       <section className="panel library-detail-panel"><div className="panel-heading"><div><h2>报价观察</h2><p>本任务快照内每次采集到的报价观察，保留原始报价与合作形式。</p></div><span>{snapshotQuotes.length} 条</span></div><div className="quote-list">{snapshotQuotes.map((quote) => <div key={`${quote.position}-${quote.cooperation_form ?? ""}`}><strong>{quote.cooperation_form || "未标记合作形式"}</strong><span>{quote.settlement_description || "结算说明暂无数据"}</span><b>{quote.price_raw === null ? "暂无报价" : String(quote.price_raw)}</b>{quote.origin_price_raw !== null && quote.origin_price_raw !== quote.price_raw && <em>原价 {String(quote.origin_price_raw)}</em>}<small>{formatDate(quote.observed_at)}</small></div>)}</div></section>
@@ -908,10 +1127,22 @@ function rawMetric(metric: { raw_value: string | null; value: string | number | 
   return metric.is_approximate && value !== "暂无数据" ? `≈${value}` : value;
 }
 
+function ratioMetric(metric: { raw_value: string | null; value: string | number | null; is_approximate: boolean }) {
+  const raw = metric.raw_value ?? metric.value;
+  if (raw === null) return "暂无数据";
+  const numeric = Number(metric.value ?? raw);
+  if (!Number.isFinite(numeric)) return rawMetric(metric);
+  const percent = `${(numeric * 100).toFixed(2)}%`;
+  return metric.is_approximate ? `≈${percent}` : percent;
+}
+
 function numberText(value: string | number | null) { return value === null ? "—" : Number(value).toLocaleString("zh-CN"); }
 
 export function CreatorLibraryPage() {
   const [search, setSearch] = useSearchParams();
+  const platform: "douyin_xingtu" | "kuaishou_juxing" =
+    search.get("platform") === "kuaishou_juxing" ? "kuaishou_juxing" : "douyin_xingtu";
+  const juxing = platform === "kuaishou_juxing";
   const params = useMemo(() => new URLSearchParams(search), [search]);
   const library = useInfiniteQuery({
     queryKey: ["creator-library", params.toString()],
@@ -929,28 +1160,44 @@ export function CreatorLibraryPage() {
     if (value) next.set(key, value); else next.delete(key);
     next.delete("cursor"); setSearch(next);
   };
+  /**
+   * Switching platform must not carry a Xingtu-only filter into the Juxing query: the server rejects
+   * those explicitly, and a stale URL would leave the page on a validation error instead of the list.
+   */
+  const setPlatform = (value: "douyin_xingtu" | "kuaishou_juxing") => {
+    const next = new URLSearchParams();
+    if (value === "kuaishou_juxing") next.set("platform", value);
+    setSearch(next);
+  };
   const items = library.data?.pages.flatMap((page) => page.items) ?? [];
   return <div className="page-wrap creator-library-page">
-    <PageHeader eyebrow="CREATOR LIBRARY" title="达人库" description="独立于任务结果的巨量星图当前达人资料；所有商业和表现指标保持平台原始口径。" />
+    <PageHeader
+      eyebrow="CREATOR LIBRARY"
+      title="达人库"
+      description={juxing
+        ? "独立于任务结果的磁力聚星当前达人资料；字段、单位与统计窗口保持聚星平台原始口径。"
+        : "独立于任务结果的巨量星图当前达人资料；所有商业和表现指标保持平台原始口径。"}
+    />
     <section className="panel library-filters">
       <div className="panel-heading"><div><h2>筛选与排序</h2><p>缺失数据仍保留；数值筛选仅作用于已成功采集的原始值。</p></div><label className="library-check"><input type="checkbox" checked={search.get("complete_only") === "true"} onChange={(event) => setFilter("complete_only", event.target.checked ? "true" : "")} />仅看数据完整</label></div>
       <div className="library-filter-grid">
-        <label>行业<input aria-label="按行业筛选" value={search.get("industry") ?? ""} onChange={(event) => setFilter("industry", event.target.value)} placeholder="例如：食品饮料" /></label>
-        <label>达人类型<input aria-label="按达人类型筛选" value={search.get("creator_type") ?? ""} onChange={(event) => setFilter("creator_type", event.target.value)} placeholder="例如：生活" /></label>
+        <label>平台<select aria-label="达人库平台" value={platform} onChange={(event) => setPlatform(event.target.value as "douyin_xingtu" | "kuaishou_juxing")}><option value="douyin_xingtu">巨量星图</option><option value="kuaishou_juxing">磁力聚星</option></select></label>
+        {!juxing && <label>行业<input aria-label="按行业筛选" value={search.get("industry") ?? ""} onChange={(event) => setFilter("industry", event.target.value)} placeholder="例如：食品饮料" /></label>}
+        {!juxing && <label>达人类型<input aria-label="按达人类型筛选" value={search.get("creator_type") ?? ""} onChange={(event) => setFilter("creator_type", event.target.value)} placeholder="例如：生活" /></label>}
         <label>省份<input aria-label="按省份筛选" value={search.get("province") ?? ""} onChange={(event) => setFilter("province", event.target.value)} placeholder="例如：北京市" /></label>
         <label>城市<input aria-label="按城市筛选" value={search.get("city") ?? ""} onChange={(event) => setFilter("city", event.target.value)} placeholder="例如：朝阳区" /></label>
         <label>粉丝数下限<input type="number" min="0" value={search.get("followers_min") ?? ""} onChange={(event) => setFilter("followers_min", event.target.value)} /></label>
         <label>粉丝数上限<input type="number" min="0" value={search.get("followers_max") ?? ""} onChange={(event) => setFilter("followers_max", event.target.value)} /></label>
-        <label>互动原始值下限<input type="number" min="0" value={search.get("interaction_min") ?? ""} onChange={(event) => setFilter("interaction_min", event.target.value)} /></label>
-        <label>完播原始值下限<input type="number" min="0" value={search.get("completion_min") ?? ""} onChange={(event) => setFilter("completion_min", event.target.value)} /></label>
-        <label>预期 CPM 下限<input type="number" min="0" value={search.get("expected_cpm_min") ?? ""} onChange={(event) => setFilter("expected_cpm_min", event.target.value)} /></label>
-        <label>预期 CPE 下限<input type="number" min="0" value={search.get("expected_cpe_min") ?? ""} onChange={(event) => setFilter("expected_cpe_min", event.target.value)} /></label>
-        <label>合作形式<input aria-label="按合作形式筛选" value={search.get("cooperation_form") ?? ""} onChange={(event) => setFilter("cooperation_form", event.target.value)} placeholder="例如：植入视频" /></label>
-        <label>排序<select aria-label="达人库排序" value={search.get("sort") ?? "updated_at"} onChange={(event) => setFilter("sort", event.target.value)}><option value="updated_at">最近更新时间</option><option value="followers">粉丝数</option><option value="monthly_growth">月涨粉原始值</option><option value="interaction">互动原始值</option><option value="completion">完播原始值</option><option value="expected_cpm">预期 CPM 原始值</option><option value="expected_cpe">预期 CPE 原始值</option></select></label>
+        {!juxing && <label>互动原始值下限<input type="number" min="0" value={search.get("interaction_min") ?? ""} onChange={(event) => setFilter("interaction_min", event.target.value)} /></label>}
+        {!juxing && <label>完播原始值下限<input type="number" min="0" value={search.get("completion_min") ?? ""} onChange={(event) => setFilter("completion_min", event.target.value)} /></label>}
+        {!juxing && <label>预期 CPM 下限<input type="number" min="0" value={search.get("expected_cpm_min") ?? ""} onChange={(event) => setFilter("expected_cpm_min", event.target.value)} /></label>}
+        {!juxing && <label>预期 CPE 下限<input type="number" min="0" value={search.get("expected_cpe_min") ?? ""} onChange={(event) => setFilter("expected_cpe_min", event.target.value)} /></label>}
+        {!juxing && <label>合作形式<input aria-label="按合作形式筛选" value={search.get("cooperation_form") ?? ""} onChange={(event) => setFilter("cooperation_form", event.target.value)} placeholder="例如：植入视频" /></label>}
+        <label>排序<select aria-label="达人库排序" value={search.get("sort") ?? "updated_at"} onChange={(event) => setFilter("sort", event.target.value)}><option value="updated_at">最近更新时间</option><option value="followers">粉丝数</option>{!juxing && <><option value="monthly_growth">月涨粉原始值</option><option value="interaction">互动原始值</option><option value="completion">完播原始值</option><option value="expected_cpm">预期 CPM 原始值</option><option value="expected_cpe">预期 CPE 原始值</option></>}</select></label>
       </div>
     </section>
-    <section className="panel library-results"><div className="panel-heading"><div><h2>巨量星图达人</h2><p>默认按最近更新时间倒序；“原始值”不代表统一百分比、币种或跨平台指标。</p></div><span>{items.length} 位已加载</span></div>
-      {library.isLoading ? <SkeletonRows rows={7} /> : library.isError ? <ErrorState error={library.error} retry={() => library.refetch()} /> : !items.length ? <EmptyState title="暂无匹配达人" description="调整筛选条件后重试；系统不会用空值补造数据。" /> : <div className="library-rows">{items.map((creator) => <CreatorLibraryRow key={creator.creator_id} creator={creator} />)}</div>}
+    <section className="panel library-results"><div className="panel-heading"><div><h2>{juxing ? "磁力聚星达人" : "巨量星图达人"}</h2><p>{juxing ? "默认按最近更新时间倒序；聚星专属指标保留原单位与统计窗口，不与星图指标等同。" : "默认按最近更新时间倒序；“原始值”不代表统一百分比、币种或跨平台指标。"}</p></div><span>{items.length} 位已加载</span></div>
+      {library.isLoading ? <SkeletonRows rows={7} /> : library.isError ? <ErrorState error={library.error} retry={() => library.refetch()} /> : !items.length ? <EmptyState title="暂无匹配达人" description={juxing ? "该平台当前没有已发布的聚星达人资料；系统不会用空值补造数据。" : "调整筛选条件后重试；系统不会用空值补造数据。"} /> : <div className="library-rows">{items.map((creator) => <CreatorLibraryRow key={creator.creator_id} creator={creator} />)}</div>}
       {library.hasNextPage && <div className="pagination"><button className="button secondary" disabled={library.isFetchingNextPage} onClick={() => library.fetchNextPage()}>{library.isFetchingNextPage ? "正在读取" : "查看更多达人"}<ArrowRight size={16} /></button></div>}
     </section>
   </div>;
@@ -958,13 +1205,32 @@ export function CreatorLibraryPage() {
 
 function CreatorLibraryRow({ creator }: { creator: CreatorLibrarySummary }) {
   const complete = creator.profile_complete && creator.pipeline_complete;
+  const juxing = creator.platform === "kuaishou_juxing";
   return <Link className="library-row" to={`/creators/${creator.creator_id}`}>
     <div className="creator-avatar">{creator.avatar_uri ? <img src={creator.avatar_uri} alt="" /> : <UserRound size={20} />}</div>
-    <div className="library-identity"><strong>{creator.display_name || "未提供昵称"}</strong><span>{creator.creator_type_label || "类型暂无数据"} · {[creator.province, creator.city].filter(Boolean).join(" / ") || "地区暂无数据"}</span><em>{creator.industry_labels.length ? creator.industry_labels.join(" / ") : "行业暂无数据"}</em></div>
+    <div className="library-identity">
+      <strong>{creator.display_name || "未提供昵称"}</strong>
+      {/* Xingtu rows keep their original「达人类型 · 地区」line; juxing has no verified creator
+          type taxonomy, so it states the platform instead of inventing one. */}
+      <span>{juxing ? "磁力聚星" : (creator.creator_type_label || "类型暂无数据")} · {[creator.province, creator.city].filter(Boolean).join(" / ") || "地区暂无数据"}</span>
+      <em>{juxing
+        ? (creator.content_theme_labels.length ? creator.content_theme_labels.join(" / ") : "内容类型暂无数据")
+        : (creator.industry_labels.length ? creator.industry_labels.join(" / ") : "行业暂无数据")}</em>
+    </div>
     <div className="library-stat"><span>粉丝</span><strong>{numberText(creator.followers.value)}</strong></div>
-    <div className="library-stat"><span>月深度用户</span><strong>{rawMetric(creator.monthly_deep_users)}</strong></div>
-    <div className="library-stat"><span>互动 / 完播原始值</span><strong>{rawMetric(creator.interaction_rate)} / {rawMetric(creator.completion_rate)}</strong></div>
-    <div className="library-stat"><span>CPM / CPE 原始值</span><strong>{rawMetric(creator.expected_cpm_21_60)} / {rawMetric(creator.expected_cpe_21_60)}</strong></div>
+    {juxing ? (
+      <>
+        <div className="library-stat"><span>月涨粉率</span><strong>{ratioMetric(creator.monthly_follower_growth_rate)}</strong></div>
+        <div className="library-stat"><span>互动 / 完播</span><strong>{ratioMetric(creator.interaction_rate)} / {ratioMetric(creator.completion_rate)}</strong></div>
+        <div className="library-stat"><span>播放中位数</span><strong>{numberText(creator.play_median.value)}</strong></div>
+      </>
+    ) : (
+      <>
+        <div className="library-stat"><span>月深度用户</span><strong>{rawMetric(creator.monthly_deep_users)}</strong></div>
+        <div className="library-stat"><span>互动 / 完播原始值</span><strong>{rawMetric(creator.interaction_rate)} / {rawMetric(creator.completion_rate)}</strong></div>
+        <div className="library-stat"><span>CPM / CPE 原始值</span><strong>{rawMetric(creator.expected_cpm_21_60)} / {rawMetric(creator.expected_cpe_21_60)}</strong></div>
+      </>
+    )}
     <div className={`library-quality ${complete ? "complete" : "incomplete"}`}><span>{complete ? "采集完整" : "数据不完整"}</span><small>{creator.data_updated_at ? formatDate(creator.data_updated_at) : "暂无更新时间"}</small></div><ChevronRight size={18} />
   </Link>;
 }
@@ -973,10 +1239,14 @@ export function CreatorLibraryDetailPage() {
   const { creatorId = "" } = useParams();
   const queryClient = useQueryClient();
   const detail = useQuery({ queryKey: ["creator-library", creatorId], queryFn: () => api.creatorLibraryDetail(creatorId) });
-  const quotes = useQuery({ queryKey: ["creator-library-quotes", creatorId], queryFn: () => api.creatorLibraryQuotes(creatorId), enabled: Boolean(detail.data) });
+  const platform = detail.data?.platform ?? "douyin_xingtu";
+  const juxing = platform === "kuaishou_juxing";
+  // 聚星没有星图报价/历史/精选/作品观测读模型，也没有更新服务：不发起这些只属于星图的请求。
+  const quotes = useQuery({ queryKey: ["creator-library-quotes", creatorId], queryFn: () => api.creatorLibraryQuotes(creatorId), enabled: Boolean(detail.data) && !juxing });
   const update = useQuery({
     queryKey: ["creator-update", creatorId],
     queryFn: () => api.creatorUpdateStatus(creatorId),
+    enabled: Boolean(detail.data) && !juxing,
     refetchInterval: (query) => (query.state.data?.in_flight_root_task_id ? 5_000 : false),
   });
   const requestUpdate = useMutation({
@@ -986,8 +1256,8 @@ export function CreatorLibraryDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["creator-library", creatorId] });
     },
   });
-  const contents = useFeaturedContent({ kind: "library", creatorId });
-  const videos = useVideoObservations({ kind: "library", creatorId });
+  const contents = useFeaturedContent({ kind: "library", creatorId }, Boolean(detail.data) && !juxing);
+  const videos = useVideoObservations({ kind: "library", creatorId }, Boolean(detail.data) && !juxing);
   if (detail.isLoading) return <div className="page-wrap"><LoadingState label="正在读取达人库资料" /></div>;
   if (detail.isError || !detail.data) return <div className="page-wrap"><ErrorState error={detail.error} retry={() => detail.refetch()} /></div>;
   const creator = detail.data;
@@ -1015,15 +1285,16 @@ export function CreatorLibraryDetailPage() {
   return <CreatorDetailView
     creator={creator}
     profilePayload={creator.profile_payload || {}}
+    platform={platform}
     backTo="/creators"
     backLabel="返回达人库"
     scopeLabel="当前达人资料"
     badgeLabel={completeLabel(creator)}
     badgeTone={creator.profile_complete && creator.pipeline_complete ? "published" : "draft"}
-    contents={contents}
-    videos={videos}
-    actions={updateActions}
-    historyChapter={<div className="profile-sections">
+    contents={juxing ? undefined : contents}
+    videos={juxing ? undefined : videos}
+    actions={juxing ? undefined : updateActions}
+    historyChapter={juxing ? undefined : <div className="profile-sections">
       <section className="panel library-detail-panel"><div className="panel-heading"><div><h2>报价历史</h2><p>同一合作形式的较早观察，保留原始报价与观测时间。</p></div><span>{quoteHistory.length} 条</span></div>{quotes.isLoading ? <SkeletonRows rows={3} /> : quotes.isError ? <ErrorState error={quotes.error} retry={() => quotes.refetch()} /> : <div className="quote-list">{quoteHistory.length ? quoteHistory.map((quote) => <div key={`${quote.snapshot_id}-${quote.position}`}><strong>{quote.cooperation_form || "未标记合作形式"}</strong><span>{quote.settlement_description || "结算说明暂无数据"}</span><b>{quote.price_raw === null ? "暂无报价" : String(quote.price_raw)}</b><small>{formatDate(quote.observed_at)}</small></div>) : <p className="muted">暂无更早报价观察。</p>}</div>}</section>
     </div>}
   />;
@@ -1038,6 +1309,7 @@ function secondsLabel(value: string | null) {
 function unitLabel(unit: ExecutionUnit) {
   if (unit.takeover_state === "ACTIVE") return "人工接管中";
   if (unit.takeover_state === "VERIFYING") return "正在校验验证结果";
+  if (unit.verification_state === "ACCOUNT_SELECTION_REQUIRED") return "需要选择子账号";
   if (unit.verification_state) return "等待人工验证";
   if (unit.browser_status === "QUARANTINED") return "已隔离";
   if (unit.browser_status === "SUSPECTED_OFFLINE") return "疑似失联";
@@ -1077,7 +1349,7 @@ function TakeoverWorkspace({ takeover, close }: { takeover: BrowserTakeover; clo
         <div className="takeover-actions">
           <button className="button ghost" disabled={!actionable || reappearance.isPending} onClick={() => setFeedbackOpen(true)}><TriangleAlert size={16} />仍有验证/无法完成</button>
           <button className="button secondary" disabled={!actionable || release.isPending} onClick={() => release.mutate()}>放弃接管</button>
-          <button className="button primary" disabled={!actionable || complete.isPending} onClick={() => complete.mutate()}><Check size={16} />我已完成验证</button>
+          <button className="button primary" disabled={!actionable || complete.isPending} onClick={() => complete.mutate()}><Check size={16} />我已完成验证/选择</button>
         </div>
       </footer>
       {feedbackOpen && <div className="takeover-feedback" role="group" aria-label="无法完成原因"><label>当前情况<select value={feedbackReason} onChange={(event) => setFeedbackReason(event.target.value)}><option value="PLATFORM_SECURITY_CHALLENGE">滑块或交互验证再次出现</option><option value="ACCOUNT_LOGIN_REQUIRED">已跳转登录页</option><option value="ACCOUNT_MISMATCH">当前账号不正确</option><option value="NETWORK_OR_PROTECTED_PAGE_UNAVAILABLE">网络或页面无法访问</option><option value="HUMAN_CANNOT_COMPLETE">人工暂时无法完成</option></select></label><button className="button secondary" onClick={() => setFeedbackOpen(false)}>取消</button><button className="button primary" disabled={reappearance.isPending} onClick={() => { reappearance.mutate(feedbackReason); setFeedbackOpen(false); }}>提交状态</button></div>}
@@ -1107,14 +1379,14 @@ export function ExecutionUnitsPage() {
     .sort((left, right) => left.remaining_seconds - right.remaining_seconds)[0];
   return <div className="page-wrap">
     <PageHeader eyebrow="RESOURCE CONTROL" title="执行单元管理" description="查看采集资源状态，并在平台要求时接管原浏览器完成人工验证。" />
-    {waiting.length > 0 && <section className="verification-alert"><TriangleAlert size={20} /><div><strong>{waiting.length} 个执行单元需要人工验证</strong><span>{waiting.map((event) => `${event.unit_id}（剩余 ${Math.floor(event.remaining_seconds / 60)} 分钟）`).join(" · ")}</span>{nearingDeadline && <em>当前验证等待窗口剩余 {Math.floor(nearingDeadline.remaining_seconds / 60)}:{String(nearingDeadline.remaining_seconds % 60).padStart(2, "0")}。若平台再次出现验证，请在原浏览器内完成后重新提交校验。</em>}</div></section>}
+    {waiting.length > 0 && <section className="verification-alert"><TriangleAlert size={20} /><div><strong>{waiting.length} 个执行单元需要人工验证</strong><span>{waiting.map((event) => `${event.unit_id}（${event.reason === "ACCOUNT_SELECTION_REQUIRED" ? "需要选择子账号 cpg果汁（60821564）" : "需要人工验证"}，剩余 ${Math.floor(event.remaining_seconds / 60)} 分钟）`).join(" · ")}</span>{nearingDeadline && <em>当前验证等待窗口剩余 {Math.floor(nearingDeadline.remaining_seconds / 60)}:{String(nearingDeadline.remaining_seconds % 60).padStart(2, "0")}。若平台再次出现验证，请在原浏览器内完成后重新提交校验。</em>}</div></section>}
     <section className="unit-summary-grid">
       <div className="panel"><span>可用单元</span><strong>{units.data.filter((unit) => unit.state === "READY" && unit.worker_status === "ONLINE").length}</strong></div>
       <div className="panel"><span>采集中</span><strong>{units.data.filter((unit) => unit.mode === "collect").length}</strong></div>
       <div className="panel warning"><span>待人工验证</span><strong>{waiting.length}</strong></div>
       <div className="panel danger"><span>隔离/异常</span><strong>{units.data.filter((unit) => ["QUARANTINED", "SUSPECTED_OFFLINE"].includes(unit.browser_status) || ["OFFLINE", "DUPLICATE"].includes(unit.worker_status)).length}</strong></div>
     </section>
-    <section className="panel unit-table-wrap"><table className="unit-table"><thead><tr><th>执行单元</th><th>运行状态</th><th>绑定账号/线路</th><th>当前任务</th><th>Worker</th><th>浏览器</th><th>验证</th><th>最近心跳</th><th /></tr></thead><tbody>{units.data.map((unit) => <tr key={unit.unit_id}><td><strong>{unit.unit_id}</strong><small>{unit.platform}</small></td><td><b>{unitLabel(unit)}</b><small>{unit.actionable_reason || "—"}</small></td><td><span>{unit.account_label}</span><small>{unit.line_label}</small></td><td>{unit.current_root_task_id ? <Link to={`/tasks/${unit.current_root_task_id}`}>{shortId(unit.current_root_task_id)}</Link> : "—"}</td><td><b>{unit.worker_status}</b><small>{unit.worker_instances} 实例 · {formatDate(unit.worker_last_heartbeat_at)}</small></td><td>{unit.browser_status}</td><td>{unit.verification_state ? <><b>{unit.takeover_state || unit.verification_state}</b><small>{secondsLabel(unit.verification_deadline_at)}</small></> : "正常"}</td><td>{formatDate(unit.last_heartbeat_at)}</td><td>{unit.verification_state ? <button className="button primary" disabled={request.isPending || unit.takeover_state === "VERIFYING"} onClick={() => request.mutate(unit.unit_id)}>{unit.takeover_state === "ACTIVE" ? "重新进入" : unit.takeover_state === "REQUESTED" ? "查看接管" : unit.takeover_state === "VERIFYING" ? "系统校验中" : "接管浏览器"}</button> : <button className="button ghost" disabled>查看</button>}</td></tr>)}</tbody></table></section>
+    <section className="panel unit-table-wrap"><table className="unit-table"><thead><tr><th>执行单元</th><th>运行状态</th><th>绑定账号/线路</th><th>当前任务</th><th>Worker</th><th>浏览器</th><th>验证</th><th>最近心跳</th><th /></tr></thead><tbody>{units.data.map((unit) => <tr key={unit.unit_id}><td><strong>{unit.unit_id}</strong><small>{(unit.platforms ?? [unit.platform]).map((platform) => platformLabel[platform]).join(" / ")}</small></td><td><b>{unitLabel(unit)}</b><small>{unit.actionable_reason || "—"}</small></td><td><span>{unit.account_label}</span><small>{unit.line_label}</small></td><td>{unit.current_root_task_id ? <Link to={`/tasks/${unit.current_root_task_id}`}>{shortId(unit.current_root_task_id)}</Link> : "—"}</td><td><b>{unit.worker_status}</b><small>{unit.worker_instances} 实例 · {formatDate(unit.worker_last_heartbeat_at)}</small></td><td>{unit.browser_status}</td><td>{unit.verification_state ? <><b>{unit.takeover_state || unit.verification_state}</b><small>{secondsLabel(unit.verification_deadline_at)}</small></> : "正常"}</td><td>{formatDate(unit.last_heartbeat_at)}</td><td>{unit.verification_state ? <button className="button primary" disabled={request.isPending || unit.takeover_state === "VERIFYING"} onClick={() => request.mutate(unit.unit_id)}>{unit.takeover_state === "ACTIVE" ? "重新进入" : unit.takeover_state === "REQUESTED" ? "查看接管" : unit.takeover_state === "VERIFYING" ? "系统校验中" : "接管浏览器"}</button> : <button className="button ghost" disabled>查看</button>}</td></tr>)}</tbody></table></section>
     {request.isError && <div className="form-error" role="alert"><AlertCircle size={16} />{friendlyError(request.error)}</div>}
     {takeover.data && <TakeoverWorkspace takeover={takeover.data} close={() => { setTakeoverId(null); queryClient.invalidateQueries({ queryKey: ["execution-units"] }); }} />}
   </div>;

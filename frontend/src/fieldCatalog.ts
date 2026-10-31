@@ -1,10 +1,11 @@
 /**
  * Field labels, kinds and payload access for the creator detail view.
  *
- * The 81 registered profile fields carry no display name in their snapshot envelope (measured over
- * all 78 stored snapshots: every field has `field_key` and no `name`), so the page reads the labels
- * from the verified registry through `/api/platforms/douyin_xingtu/profile-field-catalog`.  When
- * that request fails the page degrades to the English field key instead of inventing a label.
+ * The registered profile fields carry no display name in their snapshot envelope (measured over all
+ * stored snapshots: every field has `field_key` and no `name`), so the page reads the labels from the
+ * platform's verified registry through
+ * `/api/platforms/{platform}/profile-field-catalog`.  When that request fails the page degrades to
+ * the English field key instead of inventing a label.
  */
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api";
@@ -20,14 +21,17 @@ export const MODULE_LABELS: Record<string, string> = {
   conversion: "转化价值",
   fans: "连接用户",
   creation: "创作能力",
+  works: "代表作品",
+  audience: "受众画像",
 };
 
 const DEFAULT_STALE_MS = 30 * 60 * 1000;
+export type Platform = "douyin_xingtu" | "kuaishou_juxing";
 
-export function useFieldCatalog() {
+export function useFieldCatalog(platform: Platform = "douyin_xingtu") {
   const query = useQuery({
-    queryKey: ["profile-field-catalog"],
-    queryFn: () => api.profileFieldCatalog(),
+    queryKey: ["profile-field-catalog", platform],
+    queryFn: () => api.profileFieldCatalog(platform),
     staleTime: DEFAULT_STALE_MS,
     retry: 1,
   });

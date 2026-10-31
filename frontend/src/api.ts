@@ -1,7 +1,7 @@
 import type {
   Capabilities, ContentPage, CreatorLibraryDetail, CreatorLibraryHistory, CreatorLibraryPage,
   CreatorLibraryQuote, CreatorPage, CreatorSummary, CreatorUpdateResponse, CreatorUpdateStatus,
-  CreatorVideoPage, ProductError, ProfileFieldCatalog,
+  CreatorVideoPage, PlatformOption, ProductError, ProfileFieldCatalog,
   BrowserTakeover, ExecutionUnit, RequirementForm, TaskDetail, TaskPage, UserView, VerificationEvent,
 } from "./types";
 
@@ -37,8 +37,11 @@ export const api = {
     method: "POST", body: JSON.stringify({ username, password }),
   }),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
-  capabilities: () => request<Capabilities>("/api/platforms/douyin_xingtu/capabilities"),
-  profileFieldCatalog: () => request<ProfileFieldCatalog>("/api/platforms/douyin_xingtu/profile-field-catalog"),
+  capabilities: (platform: "douyin_xingtu" | "kuaishou_juxing" = "douyin_xingtu") =>
+    request<Capabilities>(`/api/platforms/${platform}/capabilities`),
+  platforms: () => request<PlatformOption[]>("/api/platforms"),
+  profileFieldCatalog: (platform: "douyin_xingtu" | "kuaishou_juxing" = "douyin_xingtu") =>
+    request<ProfileFieldCatalog>(`/api/platforms/${platform}/profile-field-catalog`),
   listTasks: (params: URLSearchParams) => request<TaskPage>(`/api/tasks?${params.toString()}`),
   task: (id: string) => request<TaskDetail>(`/api/tasks/${id}`),
   executionUnits: () => request<ExecutionUnit[]>("/api/execution-units"),

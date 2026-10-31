@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -65,6 +65,33 @@ describe("M3 product application", () => {
     expect(screen.getByText("6")).toBeInTheDocument();
   });
 
+  it("filters the task center by platform and keeps juxing rows free of featured counts", async () => {
+    const paths: string[] = [];
+    const juxingTask = {
+      ...task,
+      root_task_id: "22222222-2222-4222-8222-222222222222",
+      platform: "kuaishou_juxing",
+      task_kind: "collection",
+      keyword: "母婴",
+      counts: { target_count: 1, discovered_count: 3, valid_count: 1, profile_complete_count: 1, featured_complete_count: 0, failed_count: 0 },
+    };
+    vi.mocked(fetch).mockImplementation((input) => {
+      const path = String(input);
+      paths.push(path);
+      if (path === "/api/auth/me") return json(user);
+      if (path.startsWith("/api/tasks?")) return json({ items: [juxingTask], next_cursor: null });
+      return json({}, 404);
+    });
+    renderApp("/tasks");
+    expect(await screen.findByRole("heading", { name: "任务中心" })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "按平台筛选" }), "kuaishou_juxing");
+    await waitFor(() => expect(paths.some((path) => path.includes("platform=kuaishou_juxing"))).toBe(true));
+    const row = await screen.findByRole("row", { name: /母婴/ });
+    expect(within(row).getByText(/磁力聚星/)).toBeInTheDocument();
+    expect(within(row).queryByText("精选")).not.toBeInTheDocument();
+    expect(within(row).queryByText("0")).not.toBeInTheDocument();
+  });
+
   it("renders only server-enabled capabilities and submits one idempotent task", async () => {
     const calls: Array<{ path: string; init?: RequestInit }> = [];
     vi.mocked(fetch).mockImplementation((input, init) => {
@@ -83,6 +110,9 @@ describe("M3 product application", () => {
     });
     renderApp("/tasks/new");
     const keyword = await screen.findByPlaceholderText("例如：宠物、母婴辅食、户外露营");
+    expect(screen.getByRole("radio", { name: /巨量星图/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: /磁力聚星/ })).toBeDisabled();
+    expect(screen.getByText("能力已观察，尚待验证")).toBeInTheDocument();
     expect(screen.queryByText("达人类型")).not.toBeInTheDocument();
     await userEvent.type(keyword, "宠物");
     await userEvent.click(screen.getByRole("button", { name: /提交采集任务/ }));
@@ -90,6 +120,211 @@ describe("M3 product application", () => {
     const create = calls.find((call) => call.path === "/api/tasks" && call.init?.method === "POST")!;
     expect(new Headers(create.init?.headers).get("Idempotency-Key")).toBe("00000000-0000-4000-8000-000000000001");
     expect(JSON.parse(String(create.init?.body))).toMatchObject({ keyword: "宠物", target_count: 20 });
+  });
+
+  it("switches to the verified Juxing contract and submits a single-platform v3 task", async () => {
+    const calls: Array<{ path: string; init?: RequestInit }> = [];
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const path = String(input); calls.push({ path, init });
+      if (path === "/api/auth/me") return json(user);
+      if (path === "/api/platforms") return json([
+        { platform: "douyin_xingtu", label: "巨量星图", enabled: true, capability_status: "verified", contract_version: "live-v2" },
+        { platform: "kuaishou_juxing", label: "磁力聚星", enabled: true, capability_status: "verified", contract_version: "juxing-stage-b-v1" },
+      ]);
+      if (path === "/api/platforms/douyin_xingtu/capabilities") return json({
+        platform: "douyin_xingtu", capability_version: "live-v2",
+        fields: [{ field: "keyword", label: "内容关键词", operators: ["eq"], options: [], currencies: [], cooperation_forms: [], keyword_mode: "content" }],
+        combinations: [["keyword"]], target_count_default: 20, target_count_min: 1,
+        target_count_max: 200, fixed_sort_key: "platform_default", fixed_sort_label: "平台默认排序",
+      });
+      if (path === "/api/platforms/kuaishou_juxing/capabilities") return json({
+        platform: "kuaishou_juxing", capability_version: "juxing-video-square-stage-b-v1",
+        fields: [
+          { field: "keyword", label: "内容关键词", operators: ["eq"], options: [], currencies: [], cooperation_forms: [], keyword_mode: "content" },
+          { field: "content_type", label: "内容类型", operators: ["in"], options: [{ value: "maternal_child", label: "母婴亲子" }], currencies: [], cooperation_forms: [] },
+        ],
+        combinations: [["keyword"], ["content_type"], ["keyword", "content_type"]],
+        target_count_default: 3, target_count_min: 1, target_count_max: 3,
+        fixed_sort_key: "platform_default", fixed_sort_label: "平台默认排序",
+      });
+      if (path === "/api/tasks" && init?.method === "POST") return json({ root_task_id: task.root_task_id, status: "RECEIVED" }, 202);
+      if (path === `/api/tasks/${task.root_task_id}`) return json({ ...taskDetail, status: "RECEIVED" });
+      if (path.startsWith(`/api/tasks/${task.root_task_id}/creators`)) return json({ items: [], next_cursor: null });
+      return json({}, 404);
+    });
+    renderApp("/tasks/new");
+    const juxing = await screen.findByRole("radio", { name: /磁力聚星/ });
+    expect(juxing).toBeEnabled();
+    await userEvent.click(juxing);
+    const keyword = await screen.findByPlaceholderText("例如：母婴");
+    await userEvent.type(keyword, "母婴");
+    await userEvent.selectOptions(screen.getByRole("combobox"), "maternal_child");
+    await userEvent.click(screen.getByRole("button", { name: /提交采集任务/ }));
+    await waitFor(() => expect(calls.some((call) => call.path === "/api/tasks" && call.init?.method === "POST")).toBe(true));
+    const create = calls.find((call) => call.path === "/api/tasks" && call.init?.method === "POST")!;
+    expect(JSON.parse(String(create.init?.body))).toMatchObject({
+      schema_version: "requirement_form.v3", platform: "kuaishou_juxing",
+      keyword: "母婴", content_types: ["maternal_child"], target_count: 3,
+    });
+  });
+
+  it("submits juxing followers, region and quote ranges from the verified controls", async () => {
+    const calls: Array<{ path: string; init?: RequestInit }> = [];
+    const base = { operators: [], options: [], dimensions: [], region_tree: [], incompatible_with: [], currencies: [], cooperation_forms: [] };
+    const capFields = [
+      { ...base, field: "keyword", label: "内容关键词", operators: ["eq"], keyword_mode: "content" },
+      { ...base, field: "content_type", label: "内容类型", operators: ["in"], control: "single-select", options: [{ value: "maternal_child", label: "母婴亲子" }, { value: "670", label: "美妆" }] },
+      { ...base, field: "followers", label: "粉丝数量", operators: ["range"], control: "range", unit: "count", range_constraints: { min: 0, max: 100000000, unit: "count" }, options: [{ value: "10w_100w", label: "10万-100万", range: { min: 100000, max: 1000000 } }, { value: "under_10w", label: "10万以下", range: { min: 0, max: 100000 } }] },
+      { ...base, field: "region", label: "达人地域", operators: ["compound"], control: "cascader", region_tree: [{ value: "11", label: "北京", children: [{ value: "1101", label: "北京", children: [] }] }] },
+      { ...base, field: "video_quote_1_20", label: "1-20秒视频报价", operators: ["range"], control: "range", unit: "yuan", currencies: ["CNY"], cooperation_forms: ["short_video_1_20s"], range_constraints: { min: 0, max: 1000000, unit: "yuan" } },
+      { ...base, field: "video_quote_21_60", label: "21-60秒视频报价", operators: ["range"], control: "range", unit: "yuan", currencies: ["CNY"], cooperation_forms: ["short_video_21_60s"], range_constraints: { min: 0, max: 1000000, unit: "yuan" } },
+      { ...base, field: "video_quote_60_plus", label: "60秒以上视频报价", operators: ["range"], control: "range", unit: "yuan", currencies: ["CNY"], cooperation_forms: ["short_video_60s_plus"], range_constraints: { min: 0, max: 1000000, unit: "yuan" } },
+    ];
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const path = String(input); calls.push({ path, init });
+      if (path === "/api/auth/me") return json(user);
+      if (path === "/api/platforms") return json([
+        { platform: "douyin_xingtu", label: "巨量星图", enabled: true, capability_status: "verified", contract_version: "live-v2" },
+        { platform: "kuaishou_juxing", label: "磁力聚星", enabled: true, capability_status: "verified", contract_version: "juxing-stage-c-v2" },
+      ]);
+      if (path === "/api/platforms/douyin_xingtu/capabilities") return json({
+        platform: "douyin_xingtu", capability_version: "live-v2",
+        fields: [{ ...base, field: "keyword", label: "内容关键词", operators: ["eq"], keyword_mode: "content" }],
+        combinations: [["keyword"]], target_count_default: 20, target_count_min: 1, target_count_max: 200,
+        fixed_sort_key: "platform_default", fixed_sort_label: "平台默认排序",
+      });
+      if (path === "/api/platforms/kuaishou_juxing/capabilities") return json({
+        platform: "kuaishou_juxing", capability_version: "juxing-video-square-stage-c-v2", fields: capFields,
+        combinations: [], combination_policy: { schema_version: "combination_policy.v2", mode: "composable", fields: ["keyword", "content_type", "followers", "region", "video_quote_1_20", "video_quote_21_60", "video_quote_60_plus"], incompatible: [] },
+        target_count_default: 3, target_count_min: 1, target_count_max: 30,
+        fixed_sort_key: "platform_default", fixed_sort_label: "平台默认排序",
+      });
+      if (path === "/api/tasks" && init?.method === "POST") return json({ root_task_id: task.root_task_id, status: "RECEIVED" }, 202);
+      if (path === `/api/tasks/${task.root_task_id}`) return json({ ...taskDetail, status: "RECEIVED" });
+      if (path.startsWith(`/api/tasks/${task.root_task_id}/creators`)) return json({ items: [], next_cursor: null });
+      return json({}, 404);
+    });
+    renderApp("/tasks/new");
+    await userEvent.click(await screen.findByRole("radio", { name: /磁力聚星/ }));
+    await userEvent.type(await screen.findByPlaceholderText("例如：母婴"), "母婴");
+    await userEvent.selectOptions(screen.getByLabelText("内容类型"), "maternal_child");
+    await userEvent.selectOptions(screen.getByLabelText("粉丝数量"), "10w_100w");
+    await userEvent.selectOptions(screen.getByLabelText("省级地域"), "11");
+    await userEvent.selectOptions(screen.getByLabelText("报价档位"), "seconds_21_60");
+    await userEvent.type(screen.getByLabelText("报价上限（元）"), "10000");
+    await userEvent.click(screen.getByRole("button", { name: /提交采集任务/ }));
+    await waitFor(() => expect(calls.some((call) => call.path === "/api/tasks" && call.init?.method === "POST")).toBe(true));
+    const create = calls.find((call) => call.path === "/api/tasks" && call.init?.method === "POST")!;
+    expect(JSON.parse(String(create.init?.body))).toMatchObject({
+      schema_version: "requirement_form.v3", platform: "kuaishou_juxing", keyword: "母婴",
+      content_types: ["maternal_child"],
+      followers: { min: 100000, max: 1000000, unit: "count" },
+      creator_regions: [{ province_code: "11" }],
+      juxing_video_quotes: { seconds_1_20: null, seconds_21_60: { min: null, max: 10000, unit: "yuan" }, seconds_60_plus: null },
+    });
+  });
+
+  it("keeps the newly picked juxing quote tier usable and drops the previous tier's range", async () => {
+    const calls: Array<{ path: string; init?: RequestInit }> = [];
+    const base = { operators: [], options: [], dimensions: [], region_tree: [], incompatible_with: [], currencies: [], cooperation_forms: [] };
+    const quote = (field: string, label: string, cooperation: string) => ({
+      ...base, field, label, operators: ["range"], control: "range", unit: "yuan", currencies: ["CNY"],
+      cooperation_forms: [cooperation], range_constraints: { min: 0, max: 1000000, unit: "yuan" },
+    });
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const path = String(input); calls.push({ path, init });
+      if (path === "/api/auth/me") return json(user);
+      if (path === "/api/platforms") return json([
+        { platform: "douyin_xingtu", label: "巨量星图", enabled: true, capability_status: "verified", contract_version: "live-v2" },
+        { platform: "kuaishou_juxing", label: "磁力聚星", enabled: true, capability_status: "verified", contract_version: "juxing-stage-c-v2" },
+      ]);
+      if (path === "/api/platforms/douyin_xingtu/capabilities") return json({
+        platform: "douyin_xingtu", capability_version: "live-v2",
+        fields: [{ ...base, field: "keyword", label: "内容关键词", operators: ["eq"], keyword_mode: "content" }],
+        combinations: [["keyword"]], target_count_default: 20, target_count_min: 1, target_count_max: 200,
+        fixed_sort_key: "platform_default", fixed_sort_label: "平台默认排序",
+      });
+      if (path === "/api/platforms/kuaishou_juxing/capabilities") return json({
+        platform: "kuaishou_juxing", capability_version: "juxing-video-square-stage-c-v2",
+        fields: [
+          quote("video_quote_1_20", "1-20秒视频报价", "short_video_1_20s"),
+          quote("video_quote_21_60", "21-60秒视频报价", "short_video_21_60s"),
+          quote("video_quote_60_plus", "60秒以上视频报价", "short_video_60s_plus"),
+        ],
+        combinations: [], combination_policy: {
+          schema_version: "combination_policy.v2", mode: "composable",
+          fields: ["video_quote_1_20", "video_quote_21_60", "video_quote_60_plus"],
+          incompatible: [["video_quote_1_20", "video_quote_21_60"]],
+        },
+        target_count_default: 3, target_count_min: 1, target_count_max: 30,
+        fixed_sort_key: "platform_default", fixed_sort_label: "平台默认排序",
+      });
+      if (path === "/api/tasks" && init?.method === "POST") return json({ root_task_id: task.root_task_id, status: "RECEIVED" }, 202);
+      if (path === `/api/tasks/${task.root_task_id}`) return json({ ...taskDetail, status: "RECEIVED" });
+      if (path.startsWith(`/api/tasks/${task.root_task_id}/creators`)) return json({ items: [], next_cursor: null });
+      return json({}, 404);
+    });
+    renderApp("/tasks/new");
+    await userEvent.click(await screen.findByRole("radio", { name: /磁力聚星/ }));
+    await userEvent.selectOptions(await screen.findByLabelText("报价档位"), "seconds_21_60");
+    await userEvent.type(screen.getByLabelText("报价上限（元）"), "10000");
+    // The tiers are mutually exclusive, so switching drops the old range for real.  The control
+    // must still follow the operator to the tier they picked instead of snapping back to 全部/不限.
+    await userEvent.selectOptions(screen.getByLabelText("报价档位"), "seconds_60_plus");
+    expect(screen.getByLabelText("报价档位")).toHaveValue("seconds_60_plus");
+    await userEvent.type(screen.getByLabelText("报价下限（元）"), "5000");
+    await userEvent.click(screen.getByRole("button", { name: /提交采集任务/ }));
+    await waitFor(() => expect(calls.some((call) => call.path === "/api/tasks" && call.init?.method === "POST")).toBe(true));
+    const create = calls.find((call) => call.path === "/api/tasks" && call.init?.method === "POST")!;
+    expect(JSON.parse(String(create.init?.body))).toMatchObject({
+      platform: "kuaishou_juxing",
+      juxing_video_quotes: { seconds_1_20: null, seconds_21_60: null, seconds_60_plus: { min: 5000, max: null, unit: "yuan" } },
+    });
+  });
+
+  it("uses the server-configured juxing target ceiling for an authorized 10-creator run", async () => {
+    const calls: Array<{ path: string; init?: RequestInit }> = [];
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const path = String(input); calls.push({ path, init });
+      if (path === "/api/auth/me") return json(user);
+      if (path === "/api/platforms") return json([
+        { platform: "douyin_xingtu", label: "巨量星图", enabled: true, capability_status: "verified", contract_version: "live-v2" },
+        { platform: "kuaishou_juxing", label: "磁力聚星", enabled: true, capability_status: "verified", contract_version: "juxing-stage-b-v1" },
+      ]);
+      if (path === "/api/platforms/douyin_xingtu/capabilities") return json({
+        platform: "douyin_xingtu", capability_version: "live-v2",
+        fields: [{ field: "keyword", label: "内容关键词", operators: ["eq"], options: [], currencies: [], cooperation_forms: [], keyword_mode: "content" }],
+        combinations: [["keyword"]], target_count_default: 20, target_count_min: 1,
+        target_count_max: 200, fixed_sort_key: "platform_default", fixed_sort_label: "平台默认排序",
+      });
+      if (path === "/api/platforms/kuaishou_juxing/capabilities") return json({
+        platform: "kuaishou_juxing", capability_version: "juxing-video-square-stage-b-v1",
+        fields: [
+          { field: "keyword", label: "内容关键词", operators: ["eq"], options: [], currencies: [], cooperation_forms: [], keyword_mode: "content" },
+          { field: "content_type", label: "内容类型", operators: ["in"], options: [{ value: "maternal_child", label: "母婴亲子" }], currencies: [], cooperation_forms: [] },
+        ],
+        combinations: [["keyword"], ["content_type"], ["keyword", "content_type"]],
+        target_count_default: 3, target_count_min: 1, target_count_max: 10,
+        fixed_sort_key: "platform_default", fixed_sort_label: "平台默认排序",
+      });
+      if (path === "/api/tasks" && init?.method === "POST") return json({ root_task_id: task.root_task_id, status: "RECEIVED" }, 202);
+      if (path === `/api/tasks/${task.root_task_id}`) return json({ ...taskDetail, status: "RECEIVED" });
+      if (path.startsWith(`/api/tasks/${task.root_task_id}/creators`)) return json({ items: [], next_cursor: null });
+      return json({}, 404);
+    });
+    renderApp("/tasks/new");
+    await userEvent.click(await screen.findByRole("radio", { name: /磁力聚星/ }));
+    await userEvent.type(await screen.findByPlaceholderText("例如：母婴"), "母婴");
+    await userEvent.selectOptions(screen.getByRole("combobox"), "maternal_child");
+    const target = screen.getByRole("spinbutton");
+    expect(target).toHaveAttribute("max", "10");
+    fireEvent.change(target, { target: { value: "10" } });
+    await userEvent.click(screen.getByRole("button", { name: /提交采集任务/ }));
+    await waitFor(() => expect(calls.some((call) => call.path === "/api/tasks" && call.init?.method === "POST")).toBe(true));
+    const create = calls.find((call) => call.path === "/api/tasks" && call.init?.method === "POST")!;
+    expect(JSON.parse(String(create.init?.body))).toMatchObject({
+      schema_version: "requirement_form.v3", platform: "kuaishou_juxing", target_count: 10,
+    });
   });
 
   it("renders v2 background and audience controls and enforces profile exclusivity", async () => {
@@ -229,6 +464,9 @@ describe("M3 product application", () => {
     expect(await screen.findByRole("heading", { name: "达人库" })).toBeInTheDocument();
     expect(await screen.findByText("达人 A")).toBeInTheDocument();
     expect(screen.getByText("≈4,889.9w")).toBeInTheDocument();
+    // The Xingtu row keeps its original「达人类型 · 地区」line; the platform name belongs to the
+    // page filter, not to the row identity.
+    expect(screen.getByText("生活 · 北京市 / 朝阳区")).toBeInTheDocument();
     expect(screen.getByText("数据不完整")).toBeInTheDocument();
     expect(screen.getAllByText("CPM / CPE 原始值").length).toBeGreaterThan(0);
   });
@@ -727,6 +965,88 @@ describe("RETRY-01 retry scope", () => {
     expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("只补足剩余 1 位有效达人"));
     expect(calls.filter((call) => call.path.endsWith("/retry"))).toHaveLength(0);
   });
+
+  it("shows the actual failure reason alongside the retry scope", async () => {
+    mockDetail({
+      ...continueDetail,
+      platform: "kuaishou_juxing",
+      failure_reason: "PLATFORM_PAGE_CHANGED:BROWSER_ACTION_FAILED",
+    });
+    renderApp(`/tasks/${task.root_task_id}`);
+    expect(await screen.findByText(/PLATFORM_PAGE_CHANGED:BROWSER_ACTION_FAILED/)).toBeInTheDocument();
+    expect(screen.getByText(/只补数量，不会重新采集已入库达人/)).toBeInTheDocument();
+  });
+
+  it("shows the juxing child-account selection reminder with the exact account", async () => {
+    mockDetail({
+      ...taskDetail,
+      platform: "kuaishou_juxing",
+      status: "WAITING_FOR_ACCOUNT",
+      stage: "等待选择子账号",
+      allowed_actions: ["cancel"],
+      failure_reason: "ACCOUNT_SELECTION_REQUIRED",
+      challenge: {
+        state: "DETECTED", challenge_type: "ACCOUNT_SELECTION",
+        requires_user_action: true, monitoring: true,
+        detected_count: 1, recovery_count: 0, waiting_seconds: 42,
+        completed_creator_count: 0, remaining_creator_count: 22,
+        delivered_result: "已保留 0 位达人及其已持久数据",
+      },
+      counts: { target_count: 22, discovered_count: 0, valid_count: 0, profile_complete_count: 0, featured_complete_count: 0, failed_count: 0 },
+    });
+    renderApp(`/tasks/${task.root_task_id}`);
+    expect((await screen.findAllByText(/磁力聚星需要选择子账号/)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/cpg果汁（60821564）/).length).toBeGreaterThan(0);
+    expect(screen.getByText("子账号选择托管")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /前往执行单元接管浏览器/ })).toHaveAttribute("href", "/execution-units");
+  });
+
+  it("shows juxing followers, region, quote and content-type conditions on task detail", async () => {
+    const juxingDetail = {
+      ...taskDetail,
+      platform: "kuaishou_juxing",
+      keyword: "母婴",
+      capability_version: "juxing-video-square-stage-c-v2",
+      requirement: {
+        schema_version: "requirement_form.v3", platform: "kuaishou_juxing", keyword: "母婴",
+        content_types: ["maternal_child"], creator_types: [], followers: { min: 100000, max: 1000000, unit: "count" },
+        creator_gender: null, creator_regions: [{ province_code: "11" }], creator_education: null,
+        yellow_v_certification: null, connection_users: null, viewer_profile: null, fan_profile: null,
+        quote: null, juxing_video_quotes: { seconds_1_20: null, seconds_21_60: { min: null, max: 10000, unit: "yuan" }, seconds_60_plus: null },
+        sort_key: null, target_count: 10,
+      },
+      plan: null,
+      counts: { target_count: 10, discovered_count: 20, valid_count: 10, profile_complete_count: 10, featured_complete_count: 0, failed_count: 0 },
+      status: "COMPLETED", stage: "已完成", allowed_actions: [], failure_reason: null,
+    };
+    const base = { operators: [], options: [], dimensions: [], region_tree: [], incompatible_with: [], currencies: [], cooperation_forms: [] };
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      const path = String(input);
+      if (path === "/api/auth/me") return json(user);
+      if (path === `/api/tasks/${task.root_task_id}` && init?.method !== "POST") return json(juxingDetail);
+      if (path === "/api/platforms/kuaishou_juxing/capabilities") return json({
+        platform: "kuaishou_juxing", capability_version: "juxing-video-square-stage-c-v2",
+        fields: [
+          { ...base, field: "content_type", label: "内容类型", operators: ["in"], control: "single-select", options: [{ value: "maternal_child", label: "母婴亲子" }] },
+          { ...base, field: "followers", label: "粉丝数量", operators: ["range"], control: "range", unit: "count", options: [{ value: "10w_100w", label: "10万-100万", range: { min: 100000, max: 1000000 } }] },
+          { ...base, field: "region", label: "达人地域", operators: ["compound"], control: "cascader", region_tree: [{ value: "11", label: "北京", children: [{ value: "1101", label: "北京", children: [] }] }] },
+          { ...base, field: "video_quote_1_20", label: "1-20秒视频报价", operators: ["range"], unit: "yuan", currencies: ["CNY"], cooperation_forms: ["short_video_1_20s"] },
+          { ...base, field: "video_quote_21_60", label: "21-60秒视频报价", operators: ["range"], unit: "yuan", currencies: ["CNY"], cooperation_forms: ["short_video_21_60s"] },
+          { ...base, field: "video_quote_60_plus", label: "60秒以上视频报价", operators: ["range"], unit: "yuan", currencies: ["CNY"], cooperation_forms: ["short_video_60s_plus"] },
+        ],
+        combinations: [], target_count_default: 3, target_count_min: 1, target_count_max: 30,
+        fixed_sort_key: "platform_default", fixed_sort_label: "平台默认排序",
+      });
+      if (path.startsWith(`/api/tasks/${task.root_task_id}/creators`)) return json({ items: [], next_cursor: null });
+      return json({}, 404);
+    });
+    renderApp(`/tasks/${task.root_task_id}`);
+    expect(await screen.findByText("内容类型")).toBeInTheDocument();
+    expect(await screen.findByText("母婴亲子")).toBeInTheDocument();
+    expect(screen.getByText("10万-100万")).toBeInTheDocument();
+    expect(screen.getByText("北京")).toBeInTheDocument();
+    expect(screen.getByText(/21-60秒视频/)).toBeInTheDocument();
+  });
 });
 
 describe("RETRY-01 update tasks", () => {
@@ -756,5 +1076,251 @@ describe("RETRY-01 update tasks", () => {
     renderApp(`/tasks/${task.root_task_id}`);
     expect(await screen.findByRole("button", { name: /重试失败步骤/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /补采缺失字段/ })).not.toBeInTheDocument();
+  });
+});
+
+
+// --- KJX-01: juxing product pages ---------------------------------------------------------
+
+const KJX_TASK_ID = "77777777-7777-4777-8777-777777777777";
+const KJX_CREATOR_ID = "88888888-8888-4888-8888-888888888888";
+
+const juxingMetric = (value: string | null) => ({
+  value,
+  raw_value: value,
+  unit: value === null ? null : "count",
+  is_approximate: false,
+  status: value === null ? "NO_DATA" : "COLLECTED",
+  observed_at: null,
+});
+
+const juxingCatalog = {
+  platform: "kuaishou_juxing" as const,
+  contract_version: "juxing-test",
+  modules: [
+    {
+      key: "basic",
+      fields: [
+        { key: "nickname", name: "昵称", contract_name: "昵称", name_source: "contract" as const, kind: "text", unit: null, period_label: null, empty_values: [], missing_source_status: null },
+        { key: "content_type_labels", name: "内容类型", contract_name: "内容类型", name_source: "contract" as const, kind: "tags", unit: null, period_label: null, empty_values: [], missing_source_status: null },
+        { key: "followers", name: "粉丝数", contract_name: "粉丝数", name_source: "contract" as const, kind: "number", unit: "count", period_label: null, empty_values: [], missing_source_status: null },
+        { key: "cooperation_offers", name: "视频报价", contract_name: "视频报价", name_source: "contract" as const, kind: "structured", unit: null, period_label: null, empty_values: [], missing_source_status: null },
+      ],
+    },
+    { key: "spread", fields: [
+      { key: "play_median", name: "播放量中位数", contract_name: "播放量中位数", name_source: "contract" as const, kind: "number", unit: "count", period_label: null, empty_values: [], missing_source_status: null },
+    ] },
+    { key: "works", fields: [
+      { key: "works", name: "代表及近期作品", contract_name: "代表及近期作品", name_source: "contract" as const, kind: "structured", unit: null, period_label: null, empty_values: [], missing_source_status: null },
+    ] },
+    { key: "audience", fields: [
+      { key: "fan_portrait", name: "粉丝画像", contract_name: "粉丝画像", name_source: "contract" as const, kind: "structured", unit: null, period_label: null, empty_values: [], missing_source_status: null },
+      { key: "viewer_portrait", name: "观众画像", contract_name: "观众画像", name_source: "contract" as const, kind: "structured", unit: null, period_label: null, empty_values: [], missing_source_status: null },
+    ] },
+  ],
+};
+
+const juxingCreatorPayload = {
+  modules: {
+    basic: {
+      status: "COLLECTED",
+      fields: [
+        { field_key: "nickname", value: "聚星同名达人", status: "COLLECTED" },
+        { field_key: "content_type_labels", value: ["母婴亲子"], status: "COLLECTED" },
+        { field_key: "followers", value: { kind: "number", amount: "21686076", bound: "exact" }, status: "COLLECTED", unit: "count" },
+        {
+          field_key: "cooperation_offers",
+          status: "COLLECTED",
+          value: { kind: "structured", data: [{ duration: "1-20秒", platform_price_raw: 20000, price_yuan: 20, currency: "CNY" }] },
+        },
+      ],
+    },
+    spread: {
+      status: "COLLECTED",
+      fields: [{ field_key: "play_median", value: { kind: "number", amount: "13092269", bound: "exact" }, status: "COLLECTED", unit: "count" }],
+    },
+    works: {
+      status: "COLLECTED",
+      fields: [{ field_key: "works", value: { kind: "structured", data: [{ platform_content_id: "w1", title: "合成作品", play_count: 100 }] }, status: "COLLECTED" }],
+    },
+    audience: {
+      status: "COLLECTED",
+      fields: [{ field_key: "fan_portrait", value: { kind: "structured", data: { gender: { male: 0.4 } } }, status: "COLLECTED", period_label: "近30天" }],
+    },
+  },
+  profile_complete: true,
+  pipeline_complete: true,
+};
+
+const juxingLibrarySummary = {
+  creator_id: KJX_CREATOR_ID,
+  platform: "kuaishou_juxing" as const,
+  platform_creator_id: "578000000001",
+  display_name: "聚星同名达人",
+  avatar_uri: null,
+  creator_type_label: null,
+  province: "广东省",
+  city: "深圳市",
+  industry_labels: [],
+  content_theme_labels: ["母婴亲子"],
+  followers: juxingMetric("21686076"),
+  monthly_deep_users: juxingMetric(null),
+  monthly_connected_users: juxingMetric(null),
+  monthly_follower_growth_rate: juxingMetric("0.0125"),
+  interaction_rate: juxingMetric("0.03911"),
+  completion_rate: juxingMetric("0.22881"),
+  play_median: juxingMetric("13092269"),
+  average_duration: juxingMetric("10.476"),
+  average_likes: juxingMetric("2"),
+  average_comments: juxingMetric(null),
+  average_shares: juxingMetric(null),
+  expected_cpm_21_60: juxingMetric(null),
+  expected_cpm_60_plus: juxingMetric(null),
+  expected_cpe_21_60: juxingMetric(null),
+  expected_cpe_60_plus: juxingMetric(null),
+  profile_complete: true,
+  pipeline_complete: true,
+  data_updated_at: "2026-10-27T20:00:00+08:00",
+};
+
+const juxingLibraryDetail = {
+  ...juxingLibrarySummary,
+  latest_snapshot_id: "99999999-9999-4999-8999-999999999999",
+  mcn_name: "合成 MCN",
+  introduction: "合成简介",
+  gender: null,
+  collected_field_count: 6,
+  failed_field_count: 0,
+  field_sources: {},
+  module_statuses: { basic: "COLLECTED", spread: "COLLECTED", works: "COLLECTED", audience: "COLLECTED" },
+  profile_payload: juxingCreatorPayload,
+};
+
+const juxingTask = {
+  root_task_id: KJX_TASK_ID,
+  platform: "kuaishou_juxing" as const,
+  status: "COMPLETED",
+  stage: "已完成",
+  version: 5,
+  created_at: "2026-10-27T20:00:00Z",
+  updated_at: "2026-10-27T20:10:00Z",
+  completed_at: "2026-10-27T20:10:00Z",
+  created_by: "user-a",
+  created_by_name: "媒介 A",
+  source: "product" as const,
+  keyword: "母婴",
+  counts: { target_count: 1, discovered_count: 1, valid_count: 1, profile_complete_count: 1, featured_complete_count: 0, failed_count: 0 },
+  allowed_actions: [],
+  failure_reason: null,
+};
+
+const juxingTaskDetail = {
+  ...juxingTask,
+  task_kind: "collection" as const,
+  requirement: { schema_version: "requirement_form.v3", platform: "kuaishou_juxing", keyword: "母婴", content_types: ["maternal_child"], creator_types: [], followers: null, creator_gender: null, creator_regions: [], creator_education: null, yellow_v_certification: null, connection_users: null, viewer_profile: null, fan_profile: null, quote: null, juxing_video_quotes: null, sort_key: null, target_count: 1 },
+  capability_version: "juxing-video-square-stage-b-v1",
+  plan: null,
+  field_errors: [],
+  origin_root_task_id: null,
+  challenge: null,
+  intake: null,
+  update_targets: [],
+  retry_plan: null,
+};
+
+const juxingCreatorSummary = {
+  creator_id: KJX_CREATOR_ID,
+  platform: "kuaishou_juxing" as const,
+  platform_creator_id: "578000000001",
+  first_position: 0,
+  view_kind: "published" as const,
+  snapshot_id: "99999999-9999-4999-8999-999999999999",
+  observed_at: "2026-10-27T20:00:00+08:00",
+  payload: juxingCreatorPayload,
+};
+
+function mockJuxingApi(overrides: Record<string, unknown> = {}) {
+  vi.mocked(fetch).mockImplementation((input) => {
+    const path = String(input);
+    if (path === "/api/auth/me") return json(user);
+    if (path === "/api/platforms/kuaishou_juxing/profile-field-catalog") return json(juxingCatalog);
+    if (path.startsWith("/api/creator-library?")) {
+      return json({ items: [juxingLibrarySummary], next_cursor: null });
+    }
+    if (path === `/api/creator-library/${KJX_CREATOR_ID}`) return json(juxingLibraryDetail);
+    if (path === `/api/tasks/${KJX_TASK_ID}`) return json(juxingTaskDetail);
+    if (path.startsWith(`/api/tasks/${KJX_TASK_ID}/creators?`)) {
+      return json({ items: [juxingCreatorSummary], next_cursor: null });
+    }
+    if (path === `/api/tasks/${KJX_TASK_ID}/creators/${KJX_CREATOR_ID}`) return json(juxingCreatorSummary);
+    if (path in overrides) return json(overrides[path]);
+    return json({}, 404);
+  });
+}
+
+describe("KJX-01 juxing product pages", () => {
+  beforeEach(() => { vi.stubGlobal("fetch", vi.fn()); });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+  it("lists juxing creators under the platform filter and drops Xingtu-only filters", async () => {
+    mockJuxingApi();
+    renderApp("/creators?platform=kuaishou_juxing");
+    expect(await screen.findByText("磁力聚星达人")).toBeInTheDocument();
+    expect(await screen.findByText("聚星同名达人")).toBeInTheDocument();
+    expect(screen.getByText(/磁力聚星 · 广东省/)).toBeInTheDocument();
+    expect(screen.getByText("月涨粉率")).toBeInTheDocument();
+    expect(screen.getByText("1.25%")).toBeInTheDocument();
+    expect(screen.queryByLabelText("按行业筛选")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("按合作形式筛选")).not.toBeInTheDocument();
+    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes("platform=kuaishou_juxing"))).toBe(true);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("达人库平台"), "douyin_xingtu");
+    await waitFor(() => {
+      const nextUrls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+      expect(nextUrls.some((url) => url.includes("/api/creator-library?") && !url.includes("platform="))).toBe(true);
+    });
+    expect(await screen.findByLabelText("按行业筛选")).toBeInTheDocument();
+  });
+
+  it("renders a juxing library detail and never requests Xingtu-only sub-resources", async () => {
+    mockJuxingApi();
+    renderApp(`/creators/${KJX_CREATOR_ID}`);
+    expect(await screen.findByText("快手ID")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "基础资料" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "传播表现" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "商业能力" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /手动更新/ })).not.toBeInTheDocument();
+    await waitFor(() => {
+      const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+      expect(urls.some((url) => url.includes(`/api/creator-library/${KJX_CREATOR_ID}/quotes`))).toBe(false);
+      expect(urls.some((url) => url.includes(`/api/creator-library/${KJX_CREATOR_ID}/update`))).toBe(false);
+      expect(urls.some((url) => url.includes(`/api/creator-library/${KJX_CREATOR_ID}/contents`))).toBe(false);
+      expect(urls.some((url) => url.includes(`/api/creator-library/${KJX_CREATOR_ID}/videos`))).toBe(false);
+    });
+  });
+
+  it("shows juxing task counts without the F06 card and uses platform-aware copy", async () => {
+    mockJuxingApi();
+    renderApp(`/tasks/${KJX_TASK_ID}`);
+    expect(await screen.findByText("磁力聚星")).toBeInTheDocument();
+    expect(screen.queryByText("精选完整")).not.toBeInTheDocument();
+    expect(screen.queryByText("F06 双集合")).not.toBeInTheDocument();
+    expect(screen.queryByText(/正在星图中/)).not.toBeInTheDocument();
+    expect(await screen.findByText("聚星同名达人")).toBeInTheDocument();
+    expect(screen.getByText(/快手ID 578000000001/)).toBeInTheDocument();
+  });
+
+  it("renders a juxing task creator detail from the task snapshot without Xingtu requests", async () => {
+    mockJuxingApi();
+    renderApp(`/tasks/${KJX_TASK_ID}/creators/${KJX_CREATOR_ID}`);
+    expect(await screen.findByText("快手ID")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "代表作品" })).toBeInTheDocument();
+    await waitFor(() => {
+      const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+      expect(urls.some((url) => url.includes("/contents"))).toBe(false);
+      expect(urls.some((url) => url.includes("/videos"))).toBe(false);
+    });
   });
 });

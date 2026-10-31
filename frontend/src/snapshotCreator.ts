@@ -153,6 +153,10 @@ function allFields(payload: Record<string, unknown>): Array<Record<string, unkno
  * `data_updated_at` uses the snapshot's own capture time, and `latest_snapshot_id` the snapshot the
  * task holds — never the library's cross-task "latest projection" for the same creator. A task
  * detail page must not show a newer crawl than the one the task actually produced.
+ *
+ * `platform` selects which field keys mean what.  The Xingtu mapping is unchanged.  Juxing fills the
+ * fields it actually collects (same basic keys, plus its own content-type labels and monthly growth)
+ * and leaves Xingtu-only metrics explicitly empty instead of reinterpreting juxing numbers as them.
  */
 export function snapshotCreatorView(
   payload: Record<string, unknown>,
@@ -162,35 +166,48 @@ export function snapshotCreatorView(
     snapshot_id: string | null;
     observed_at: string | null;
   },
+  platform: "douyin_xingtu" | "kuaishou_juxing" = "douyin_xingtu",
 ): CreatorLibraryDetail {
   const fields = allFields(payload);
   const collectedCount = fields.filter((field) => field.status === "COLLECTED").length;
   const failedCount = fields.filter((field) => field.status === "FAILED").length;
+  const juxing = platform === "kuaishou_juxing";
 
   return {
     creator_id: identity.creator_id,
-    platform: "douyin_xingtu",
+    platform,
     platform_creator_id: identity.platform_creator_id,
     display_name: textField(payload, "nickname"),
     avatar_uri: textField(payload, "avatar_uri"),
-    creator_type_label: textField(payload, "creator_type_label"),
+    creator_type_label: juxing ? null : textField(payload, "creator_type_label"),
     province: textField(payload, "province"),
     city: textField(payload, "city"),
-    industry_labels: listField(payload, "industry_labels"),
+    industry_labels: juxing ? [] : listField(payload, "industry_labels"),
     mcn_name: textField(payload, "mcn_name"),
     introduction: textField(payload, "introduction"),
-    gender: textField(payload, "gender"),
-    content_theme_labels: listField(payload, "content_theme_labels"),
+    gender: juxing ? null : textField(payload, "gender"),
+    content_theme_labels: juxing
+      ? listField(payload, "content_type_labels")
+      : listField(payload, "content_theme_labels"),
     followers: numberMetric(payload, "followers"),
-    monthly_deep_users: numberMetric(payload, "monthly_deep_users"),
-    monthly_connected_users: numberMetric(payload, "monthly_connected_users"),
+    monthly_deep_users: juxing ? emptyMetric() : numberMetric(payload, "monthly_deep_users"),
+    monthly_connected_users: juxing
+      ? emptyMetric()
+      : numberMetric(payload, "monthly_connected_users"),
     monthly_follower_growth_rate: numberMetric(payload, "monthly_follower_growth_rate"),
-    interaction_rate: memberMetric(payload, "interaction_rate", ["value"]),
-    completion_rate: memberMetric(payload, "completion_rate", ["value"]),
-    expected_cpm_21_60: memberMetric(payload, "expected_cpm", ["cpm_21_60"]),
-    expected_cpm_60_plus: memberMetric(payload, "expected_cpm", ["cpm_60"]),
-    expected_cpe_21_60: memberMetric(payload, "expected_cpe", ["cpe_21_60"]),
-    expected_cpe_60_plus: memberMetric(payload, "expected_cpe", ["cpe_60"]),
+    interaction_rate: juxing ? numberMetric(payload, "interaction_rate") : memberMetric(payload, "interaction_rate", ["value"]),
+    completion_rate: juxing ? numberMetric(payload, "completion_rate") : memberMetric(payload, "completion_rate", ["value"]),
+    play_median: juxing ? numberMetric(payload, "play_median") : emptyMetric(),
+    average_duration: juxing ? numberMetric(payload, "average_duration_seconds") : emptyMetric(),
+    average_likes: juxing ? numberMetric(payload, "average_like") : emptyMetric(),
+    average_comments: juxing ? numberMetric(payload, "average_comment") : emptyMetric(),
+    average_shares: juxing ? numberMetric(payload, "average_share") : emptyMetric(),
+    expected_cpm_21_60: juxing ? emptyMetric() : memberMetric(payload, "expected_cpm", ["cpm_21_60"]),
+    expected_cpm_60_plus: juxing ? emptyMetric() : memberMetric(payload, "expected_cpm", ["cpm_60"]),
+    expected_cpe_21_60: juxing ? emptyMetric() : memberMetric(payload, "expected_cpe", ["cpe_21_60"]),
+    expected_cpe_60_plus: juxing
+      ? emptyMetric()
+      : memberMetric(payload, "expected_cpe", ["cpe_60"]),
     profile_complete: Boolean(payload.profile_complete),
     pipeline_complete: Boolean(payload.pipeline_complete),
     data_updated_at: identity.observed_at,
