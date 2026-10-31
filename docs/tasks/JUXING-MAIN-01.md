@@ -111,7 +111,7 @@
 4. **主库星图 binding 的旧 `profile_ref`**：历史遗留展示值，运行时以单元配置为准；本轮未改不可变字段。
 5. **`test_migrations_020.py` schema 限定缺陷**：测试层问题，独立记录；全新空库通过。
 6. **4193 处于停止状态**：数据/配置/Profile/证据保留，可 `./.runtime/kjx-full/stack.sh up` 恢复。
-7. **未做 Windows、未做 Git 提交**。
+7. **未做 Windows**；本轮未做 Git 提交，代码已由 [JUXING-DELIVERY-01](JUXING-DELIVERY-01.md) 提交（`5795889`/`f992021`/`ab39b28`）并合并到 `main`（`24e3606`）。
 8. **2026-10-31 实测：长星图任务后的排队聚星任务 activity 启动延迟**。星图 `d34a665f` 于 03:03:46 完成并释放单元；聚星 `210b37c4` 的 activity 在 02:56:04 已调度，但 03:09:44 才启动（约 5m58s 额外等待），03:11:01 完成 3/3/3。Temporal history 显示不是租约占用；属 Worker activity 调度/轮询停顿，非阻塞但待定位修复。详见 [独立 QA 回归 §10](JUXING-MAIN-01-post-integration-regression.md)。
 
 ## 交接信息
@@ -126,3 +126,4 @@
 - 2026-10-31T02:35：P4–P6 完成；真实双平台 1/1/1、同单元串行、历史一致、Flag 回退、重启持久性通过；**GO**。
 - 2026-10-31T02:55：独立 QA 回归完成；69 用例 68 PASS/1 N/A/0 FAIL，MCP 37/37，自动回归通过；**GO（质量回归）**。
 - 2026-10-31T03:11：实测发现长任务后 activity 启动约 6 分钟延迟（非阻塞）；已记录为已知问题，待定位/修复。
+- 2026-10-31T14:31：代码由 [JUXING-DELIVERY-01](JUXING-DELIVERY-01.md) 交付：审查 GO（修复 2 P1/3 前端 P2）、回归 411/121+1/14/106 通过，提交并合并到 GitHub `main`（`24e3606`）。
