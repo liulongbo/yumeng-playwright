@@ -44,6 +44,8 @@ ERROR_CODES = frozenset(
         "SEARCH_CAPABILITY_LIMIT",
         "ACCOUNT_LOGIN_REQUIRED",
         "ACCOUNT_MISMATCH",
+        "ACCOUNT_SELECTION_REQUIRED",
+        "ACCOUNT_SELECTION_TIMEOUT",
         "SESSION_INDETERMINATE",
         "PLATFORM_SECURITY_CHALLENGE",
         "SECURITY_CHALLENGE_LIMIT",
@@ -106,6 +108,13 @@ class TaskKind(StrEnum):
     SCHEDULED_UPDATE = "scheduled_update"
 
 
+class PlatformId(StrEnum):
+    """Supported business platforms; every root task has exactly one."""
+
+    DOUYIN_XINGTU = "douyin_xingtu"
+    KUAISHOU_JUXING = "kuaishou_juxing"
+
+
 class NetworkMode(StrEnum):
     """Explicit network binding. A local development unit is never a production line unit."""
 
@@ -140,6 +149,7 @@ class ChallengeType(StrEnum):
     SLIDER_OR_INTERACTIVE = "SLIDER_OR_INTERACTIVE"
     LOGIN_REQUIRED = "LOGIN_REQUIRED"
     ACCOUNT_MISMATCH = "ACCOUNT_MISMATCH"
+    ACCOUNT_SELECTION = "ACCOUNT_SELECTION"
     UNKNOWN_SECURITY_CHALLENGE = "UNKNOWN_SECURITY_CHALLENGE"
 
 
@@ -249,11 +259,15 @@ class AudienceProfileCompound(Model):
 class Filter(Model):
     field: Literal[
         "keyword",
+        "content_type",
         "creator_type",
         "followers",
         "gender",
         "region",
         "quote",
+        "video_quote_1_20",
+        "video_quote_21_60",
+        "video_quote_60_plus",
         "education",
         "yellow_v",
         "connection_users",
@@ -280,8 +294,8 @@ class Sort(Model):
 
 
 class FilterPlan(Model):
-    schema_version: Literal["filter_plan.v1", "filter_plan.v2"] = "filter_plan.v2"
-    platform: Literal["douyin_xingtu"] = "douyin_xingtu"
+    schema_version: Literal["filter_plan.v1", "filter_plan.v2", "filter_plan.v3"] = "filter_plan.v2"
+    platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
     capability_version: str
     target_count: int = Field(default=20, ge=1, le=200, strict=True)
     filters: list[Filter] = Field(min_length=1)
@@ -310,9 +324,29 @@ class FilterPlan(Model):
             )
             if (f.operator == "compound") != compound:
                 raise ValueError("compound operator/value mismatch")
-            if f.field == "quote" and not (f.currency and f.cooperation_form and f.unit):
+            if f.field in {
+                "quote",
+                "video_quote_1_20",
+                "video_quote_21_60",
+                "video_quote_60_plus",
+            } and not (f.currency and f.cooperation_form and f.unit):
                 raise ValueError("quote requires currency, cooperation form and unit")
         fields = {f.field for f in self.filters}
+        if self.platform == "kuaishou_juxing":
+            if self.schema_version != "filter_plan.v3":
+                raise ValueError("kuaishou_juxing requires filter_plan.v3")
+            allowed = {
+                "keyword",
+                "content_type",
+                "followers",
+                "region",
+                "video_quote_1_20",
+                "video_quote_21_60",
+                "video_quote_60_plus",
+            }
+            if fields - allowed:
+                raise ValueError("unsupported kuaishou_juxing P0 field")
+            return self
         if self.schema_version == "filter_plan.v1":
             if fields - {"keyword", "creator_type", "followers", "gender", "region", "quote"}:
                 raise ValueError("v2 fields are not valid in filter_plan.v1")
@@ -425,7 +459,7 @@ class Capabilities(Model):
         if plan.sort.key not in self.sorts:
             raise CollectorError("UNSUPPORTED_FILTER", "sort")
         plan_fields = {item.field for item in plan.filters}
-        if plan.schema_version == "filter_plan.v2" and self.combination_policy:
+        if plan.schema_version in {"filter_plan.v2", "filter_plan.v3"} and self.combination_policy:
             if not plan_fields <= set(self.combination_policy.fields):
                 raise CollectorError("UNSUPPORTED_FILTER", "unverified combination")
             if any(set(pair) <= plan_fields for pair in self.combination_policy.incompatible):
@@ -445,7 +479,12 @@ class Capabilities(Model):
             if f.field == "followers" and isinstance(f.value, NumberRange) and f.unit == "count":
                 if any(v != v.to_integral() for v in (f.value.min, f.value.max) if v is not None):
                     raise CollectorError("INVALID_FORM", "fractional followers")
-            if f.field == "quote" and (
+            if f.field in {
+                "quote",
+                "video_quote_1_20",
+                "video_quote_21_60",
+                "video_quote_60_plus",
+            } and (
                 f.currency not in spec.currencies
                 or f.cooperation_form not in spec.cooperation_forms
             ):
@@ -505,7 +544,7 @@ class Capabilities(Model):
 
 
 class CreatorRef(Model):
-    platform: Literal["douyin_xingtu"] = "douyin_xingtu"
+    platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
     platform_creator_id: str = Field(min_length=1)
     verified_homepage: str
     first_position: int = Field(default=0, ge=0)
@@ -1067,6 +1106,15 @@ class TaskRecord(Model):
     # Complete only when the target is reached and every valid creator's F05 + F06 steps are done.
     pipeline_complete: bool = False
 
+    @property
+    def platform(self) -> PlatformId:
+        if self.plan is not None:
+            return PlatformId(self.plan.platform)
+        platforms = {PlatformId(target.platform) for target in self.update_targets}
+        if len(platforms) != 1:
+            raise ValueError("update task targets must belong to exactly one platform")
+        return next(iter(platforms))
+
     @model_validator(mode="after")
     def task_kind_contract(self) -> Self:
         if self.task_kind == TaskKind.COLLECTION:
@@ -1084,6 +1132,8 @@ class TaskRecord(Model):
         target_ids = [target.platform_creator_id for target in self.update_targets]
         if len(target_ids) != len(set(target_ids)):
             raise ValueError("update targets must be unique")
+        if len({target.platform for target in self.update_targets}) != 1:
+            raise ValueError("update targets must belong to exactly one platform")
         candidate_ids = [
             candidate.ref.platform_creator_id for candidate in self.checkpoint.candidates
         ]

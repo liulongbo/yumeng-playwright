@@ -252,6 +252,17 @@ def build_expected_plan(
                 source_fields=["keyword"],
             )
         )
+    if normalized.content_types:
+        filters.append(
+            Filter(
+                field="content_type",
+                operator="in",
+                value=normalized.content_types,
+                source_fields=[
+                    f"content_types.{index}" for index in range(len(normalized.content_types))
+                ],
+            )
+        )
     if normalized.schema_version == "requirement_form.v1" and normalized.creator_types:
         filters.append(
             Filter(
@@ -331,6 +342,31 @@ def build_expected_plan(
                 cooperation_form=normalized.quote.cooperation_form,
             )
         )
+    if normalized.juxing_video_quotes is not None:
+        for source_key, field, cooperation_form in (
+            ("seconds_1_20", "video_quote_1_20", "short_video_1_20s"),
+            ("seconds_21_60", "video_quote_21_60", "short_video_21_60s"),
+            ("seconds_60_plus", "video_quote_60_plus", "short_video_60s_plus"),
+        ):
+            value = getattr(normalized.juxing_video_quotes, source_key)
+            if value is None:
+                continue
+            source_fields = [
+                f"juxing_video_quotes.{source_key}.{bound}"
+                for bound in ("min", "max")
+                if getattr(value, bound) is not None
+            ]
+            filters.append(
+                Filter(
+                    field=cast(Any, field),
+                    operator="range",
+                    value=NumberRange(min=value.min, max=value.max),
+                    source_fields=source_fields,
+                    unit="yuan",
+                    currency="CNY",
+                    cooperation_form=cooperation_form,
+                )
+            )
     if normalized.creator_education is not None:
         filters.append(
             Filter(
@@ -405,8 +441,11 @@ def build_expected_plan(
         schema_version=(
             "filter_plan.v1"
             if normalized.schema_version == "requirement_form.v1"
+            else "filter_plan.v3"
+            if normalized.schema_version == "requirement_form.v3"
             else "filter_plan.v2"
         ),
+        platform=normalized.platform,
         capability_version=capability_version or capabilities.version,
         target_count=normalized.target_count,
         filters=filters,

@@ -3,7 +3,12 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 from xingtu.contracts import PlatformRegistry
-from xingtu.domain import CollectorError
+from xingtu.domain import (
+    Capabilities,
+    CollectorError,
+    CombinationPolicy,
+    FilterCapability,
+)
 from xingtu.intake import build_expected_plan
 from xingtu.product_models import CapabilityDTO, RequirementForm
 from xingtu.product_queries import ProductQueries
@@ -67,6 +72,85 @@ def test_expected_plan_is_exact_and_uses_fixed_platform_sort():
     assert plan.filters[0].field == "keyword"
     assert plan.filters[0].value == "宠物"
     assert plan.filters[0].source_fields == ["keyword"]
+
+
+def test_juxing_p0_form_maps_platform_specific_filters_without_touching_xingtu():
+    capabilities = Capabilities(
+        version="juxing-synthetic-v1",
+        status="VERIFIED",
+        sample_kind="live",
+        evidence_refs=["synthetic:test-only"],
+        fields=[
+            FilterCapability(field="keyword", operators=["eq"], keyword_mode="content"),
+            FilterCapability(field="content_type", operators=["in"], enum=["母婴亲子"]),
+            FilterCapability(field="followers", operators=["range"], unit="count"),
+            *[
+                FilterCapability(
+                    field=field,
+                    operators=["range"],
+                    unit="yuan",
+                    currencies=["CNY"],
+                    cooperation_forms=[form],
+                )
+                for field, form in (
+                    ("video_quote_1_20", "short_video_1_20s"),
+                    ("video_quote_21_60", "short_video_21_60s"),
+                    ("video_quote_60_plus", "short_video_60s_plus"),
+                )
+            ],
+        ],
+        sorts=["platform_default"],
+        combination_policy=CombinationPolicy(
+            fields=[
+                "keyword",
+                "content_type",
+                "followers",
+                "video_quote_1_20",
+                "video_quote_21_60",
+                "video_quote_60_plus",
+            ]
+        ),
+    )
+    form = RequirementForm(
+        schema_version="requirement_form.v3",
+        platform="kuaishou_juxing",
+        keyword=" 母婴 ",
+        content_types=["母婴亲子"],
+        followers={"min": 100000, "max": 1000000, "unit": "count"},
+        juxing_video_quotes={
+            "seconds_1_20": {"max": 5000, "unit": "yuan"},
+            "seconds_21_60": {"min": 3000, "max": 8000, "unit": "yuan"},
+        },
+        target_count=10,
+    )
+    plan = build_expected_plan(form, capabilities)
+    assert plan.platform == "kuaishou_juxing"
+    assert plan.schema_version == "filter_plan.v3"
+    assert plan.target_count == 10
+    assert [item.field for item in plan.filters] == [
+        "keyword",
+        "content_type",
+        "followers",
+        "video_quote_1_20",
+        "video_quote_21_60",
+    ]
+    quotes = {item.field: item for item in plan.filters if item.field.startswith("video_quote")}
+    assert quotes["video_quote_1_20"].cooperation_form == "short_video_1_20s"
+    assert quotes["video_quote_21_60"].currency == "CNY"
+
+
+def test_platform_specific_forms_reject_cross_platform_fields():
+    with pytest.raises(ValidationError, match="not valid"):
+        RequirementForm(keyword="宠物", content_types=["母婴亲子"])
+    with pytest.raises(ValidationError, match="requires requirement_form.v3"):
+        RequirementForm(platform="kuaishou_juxing", keyword="母婴")
+    with pytest.raises(ValidationError, match="unsupported kuaishou"):
+        RequirementForm(
+            schema_version="requirement_form.v3",
+            platform="kuaishou_juxing",
+            keyword="母婴",
+            creator_gender="female",
+        )
 
 
 def test_unverified_form_field_never_becomes_an_executable_plan():

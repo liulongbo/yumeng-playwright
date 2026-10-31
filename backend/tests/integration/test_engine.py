@@ -3,10 +3,13 @@ from threading import Event, Thread
 
 import pytest
 from xingtu.domain import (
+    Candidate,
     CandidateDiagnostic,
     CollectorError,
+    CreatorRef,
     ExecutionContext,
     ReleaseDisposition,
+    SearchPage,
     SegmentBudget,
     TaskStatus,
     uid,
@@ -894,3 +897,54 @@ async def test_target_24_with_22_available_stops_as_exhausted(repo, plan):
     assert task.failure_reason == "SEARCH_EXHAUSTED"
     assert len(adapter.visits) == 22
     assert adapter.searches == 2
+
+
+class ForeignPlatformAdapter(SyntheticAdapter):
+    """Returns a valid juxing identity while the task belongs to Xingtu."""
+
+    async def search(self, plan, cp, ctx):
+        del ctx
+        return SearchPage(
+            candidates=[
+                CreatorRef(
+                    platform="kuaishou_juxing",
+                    platform_creator_id="578000000001",
+                    verified_homepage="https://synthetic.invalid/juxing/578000000001",
+                )
+            ],
+            current_checkpoint=cp.cursor,
+            next_checkpoint=None,
+            conditions_digest=plan.digest(),
+            search_generation=cp.search_generation,
+            operation_id=uid(),
+            exhausted=True,
+            exhaustion_evidence_refs=["synthetic:end"],
+        )
+
+
+async def test_engine_rejects_a_foreign_platform_search_candidate(repo, started):
+    """An Adapter must never introduce another platform's identity into this task."""
+    with pytest.raises(CollectorError) as caught:
+        await Engine(repo, ForeignPlatformAdapter(["578000000001"]), started).run()
+    assert caught.value.code == "PLATFORM_PAGE_CHANGED"
+    assert caught.value.reason == "CANDIDATE_PLATFORM_MISMATCH"
+    task = repo.get(started.root_task_id)
+    assert task.checkpoint.candidates == []
+    with repo.connect() as conn:
+        assert conn.execute("SELECT count(*) AS n FROM platform_creators").fetchone()["n"] == 0
+
+
+async def test_engine_rejects_a_foreign_platform_resumed_checkpoint(repo, started):
+    """continue/backfill/update resume paths must re-check the stored platform."""
+    foreign = CreatorRef(
+        platform="kuaishou_juxing",
+        platform_creator_id="578000000002",
+        verified_homepage="https://synthetic.invalid/juxing/578000000002",
+    )
+    with repo.edit(started.root_task_id) as (task, _):
+        task.checkpoint.candidates = [Candidate(ref=foreign)]
+    with pytest.raises(CollectorError) as caught:
+        await Engine(repo, SyntheticAdapter(["578000000002"]), started).run()
+    assert caught.value.reason == "CANDIDATE_PLATFORM_MISMATCH"
+    with repo.connect() as conn:
+        assert conn.execute("SELECT count(*) AS n FROM platform_creators").fetchone()["n"] == 0

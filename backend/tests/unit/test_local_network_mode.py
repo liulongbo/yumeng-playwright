@@ -5,6 +5,7 @@ All data here is synthetic; no page is opened and no platform host is contacted.
 
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -78,6 +79,67 @@ def test_local_config_is_explicit_and_not_a_network_proof():
     # A local attestation deliberately carries none of the production line proof fields.
     proof_fields = {"dns_bound", "disconnect_blocks_direct", "worker_egress_enforced"}
     assert not proof_fields & set(attestation)
+
+
+def test_platform_bindings_keep_legacy_xingtu_and_isolate_juxing_profile():
+    config = UnitConfig.model_validate(
+        {
+            **LOCAL,
+            "platform_bindings": [
+                {
+                    "platform": "kuaishou_juxing",
+                    "account_ref": "ks-account",
+                    "expected_account_id": "ks-id",
+                    "profile_directory": "/tmp/kuaishou-profile",
+                    "registry_path": "/tmp/kuaishou-registry.json",
+                }
+            ],
+        }
+    )
+    legacy = config.for_platform("douyin_xingtu")
+    juxing = config.for_platform("kuaishou_juxing")
+    assert legacy.profile_directory.as_posix() == "/tmp/profile"
+    assert legacy.active_platform.value == "douyin_xingtu"
+    assert juxing.profile_directory.as_posix() == "/tmp/kuaishou-profile"
+    assert juxing.expected_account_id == "ks-id"
+    assert juxing.active_platform.value == "kuaishou_juxing"
+    assert juxing.line_id == legacy.line_id
+
+    private_root = Path("/tmp/runtime")
+    assert BrowserRuntime(legacy, private_root).session_snapshot_path == (
+        private_root.resolve() / "storage-state" / "unit-local.json"
+    )
+    assert BrowserRuntime(juxing, private_root).session_snapshot_path == (
+        private_root.resolve() / "storage-state" / "unit-local.kuaishou_juxing.json"
+    )
+
+
+def test_platform_bindings_fail_closed_for_missing_disabled_or_shared_profiles():
+    config = UnitConfig.model_validate(LOCAL)
+    with pytest.raises(CollectorError, match="PLATFORM_BINDING_NOT_CONFIGURED"):
+        config.for_platform("kuaishou_juxing")
+    with pytest.raises(ValidationError, match="distinct profile"):
+        UnitConfig.model_validate(
+            {
+                **LOCAL,
+                "platform_bindings": [
+                    {
+                        "platform": "douyin_xingtu",
+                        "account_ref": "a",
+                        "expected_account_id": "a",
+                        "profile_directory": "/tmp/shared",
+                        "registry_path": "/tmp/a.json",
+                    },
+                    {
+                        "platform": "kuaishou_juxing",
+                        "account_ref": "b",
+                        "expected_account_id": "b",
+                        "profile_directory": "/tmp/shared",
+                        "registry_path": "/tmp/b.json",
+                    },
+                ],
+            }
+        )
 
 
 async def test_ensure_line_local_needs_no_proof_but_rejects_a_proxy():

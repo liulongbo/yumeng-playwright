@@ -22,7 +22,7 @@ untouched; `docs/达人数据字段字典.md` records the discrepancy and the ev
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from .product_models import (
     ProfileFieldCatalog,
@@ -43,7 +43,10 @@ DISPLAY_NAME_CORRECTIONS: dict[tuple[str, str], str] = {
 }
 
 
-def build_profile_field_catalog(registry: PlatformRegistry) -> ProfileFieldCatalog:
+def build_profile_field_catalog(
+    registry: PlatformRegistry,
+    platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu",
+) -> ProfileFieldCatalog:
     modules: list[ProfileModuleCatalog] = []
     for module in registry.modules:
         entries: list[ProfileFieldCatalogEntry] = []
@@ -63,4 +66,8 @@ def build_profile_field_catalog(registry: PlatformRegistry) -> ProfileFieldCatal
                 )
             )
         modules.append(ProfileModuleCatalog(key=module.key, fields=entries))
-    return ProfileFieldCatalog(contract_version=registry.contract_version, modules=modules)
+    return ProfileFieldCatalog(
+        platform=platform,
+        contract_version=registry.contract_version,
+        modules=modules,
+    )

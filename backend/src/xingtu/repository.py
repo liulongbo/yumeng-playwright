@@ -25,8 +25,10 @@ from .domain import (
     FieldStatus,
     FilterPlan,
     NetworkMode,
+    PlatformId,
     ProfileRequirement,
     ReleaseDisposition,
+    SessionHealthStatus,
     TaskKind,
     TaskRecord,
     TaskStatus,
@@ -303,6 +305,13 @@ class Repository:
                 raise CollectorError("RESOURCE_UNAVAILABLE", "unit binding is immutable")
             if expected_account_id and row["expected_account_id"] != expected_account_id:
                 raise CollectorError("RESOURCE_UNAVAILABLE", "unit account identity is immutable")
+            conn.execute(
+                """INSERT INTO execution_unit_platform_bindings(
+                unit_id,platform,account_ref,expected_account_id,profile_ref,registry_ref)
+                VALUES(%s,'douyin_xingtu',%s,%s,%s,'contracts/douyin_xingtu.verified.json')
+                ON CONFLICT(unit_id,platform) DO NOTHING""",
+                (unit, account, expected_account_id or account, profile),
+            )
 
     def rebind_unit_account(
         self,
@@ -349,6 +358,13 @@ class Repository:
                 (account_id, unit),
             )
             conn.execute(
+                """UPDATE execution_unit_platform_bindings
+                SET expected_account_id=%s,last_observed_status='INDETERMINATE',
+                    last_observed_at=now(),last_observed_reason='ACCOUNT_BINDING_CHANGED'
+                WHERE unit_id=%s AND platform='douyin_xingtu'""",
+                (account_id, unit),
+            )
+            conn.execute(
                 """INSERT INTO unit_account_rebindings(
                 unit_id,previous_account_id,account_id,actor,reason,evidence_ref,
                 previous_config_account_id)
@@ -378,6 +394,65 @@ class Repository:
                 ),
             )
             return previous
+
+    def register_unit_platform_binding(
+        self,
+        unit: str,
+        platform: str,
+        account_ref: str,
+        expected_account_id: str,
+        profile_ref: str,
+        registry_ref: str,
+        *,
+        enabled: bool = True,
+    ) -> None:
+        """Register immutable platform identity from UnitConfig; observations remain mutable."""
+
+        with self.connect() as conn:
+            if not conn.execute(
+                "SELECT 1 FROM execution_units WHERE unit_id=%s", (unit,)
+            ).fetchone():
+                raise CollectorError("RESOURCE_UNAVAILABLE", "unit not registered")
+            conn.execute(
+                """INSERT INTO execution_unit_platform_bindings(
+                unit_id,platform,account_ref,expected_account_id,profile_ref,registry_ref,enabled)
+                VALUES(%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(unit_id,platform) DO UPDATE SET enabled=EXCLUDED.enabled""",
+                (
+                    unit,
+                    platform,
+                    account_ref,
+                    expected_account_id,
+                    profile_ref,
+                    registry_ref,
+                    enabled,
+                ),
+            )
+            row = conn.execute(
+                """SELECT account_ref,expected_account_id,profile_ref,registry_ref,enabled
+                FROM execution_unit_platform_bindings WHERE unit_id=%s AND platform=%s""",
+                (unit, platform),
+            ).fetchone()
+            actual = (
+                (
+                    row["account_ref"],
+                    row["expected_account_id"],
+                    row["profile_ref"],
+                    row["registry_ref"],
+                    row["enabled"],
+                )
+                if row
+                else None
+            )
+            expected = (
+                account_ref,
+                expected_account_id,
+                profile_ref,
+                registry_ref,
+                enabled,
+            )
+            if actual != expected:
+                raise CollectorError("RESOURCE_UNAVAILABLE", "platform binding is immutable")
 
     def recover_stopped_unit(self, unit: str, actor: str) -> None:
         # Caller must perform local profile lock + process isolation verification first.
@@ -535,16 +610,44 @@ class Repository:
                 (reason, worker_instance_id, unit, worker_generation),
             )
 
-    def select_execution_unit(self, task_kind: TaskKind) -> str | None:
-        """First non-quarantined unit that allows this task kind; no load balancing in MVP."""
+    def select_execution_unit(
+        self, task_kind: TaskKind, platform: str = "douyin_xingtu"
+    ) -> str | None:
+        """First unit eligible for both the task kind and platform; no load balancing in MVP."""
         with self.connect() as conn:
             row = conn.execute(
-                """SELECT unit_id FROM execution_units
-                WHERE %s = ANY(allowed_task_kinds) AND state <> 'QUARANTINED'
-                ORDER BY unit_id LIMIT 1""",
-                (task_kind.value,),
+                """SELECT u.unit_id FROM execution_units u
+                JOIN execution_unit_platform_bindings b ON b.unit_id=u.unit_id
+                WHERE %s = ANY(u.allowed_task_kinds) AND u.state <> 'QUARANTINED'
+                  AND b.platform=%s AND b.enabled=true
+                ORDER BY u.unit_id LIMIT 1""",
+                (task_kind.value, platform),
             ).fetchone()
             return str(row["unit_id"]) if row else None
+
+    def unit_supports_platform(self, unit: str, platform: str) -> bool:
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT 1 FROM execution_unit_platform_bindings
+                WHERE unit_id=%s AND platform=%s AND enabled=true""",
+                (unit, platform),
+            ).fetchone()
+            return row is not None
+
+    def observe_unit_platform_session(
+        self, unit: str, platform: str, status: SessionHealthStatus, reason: str
+    ) -> None:
+        """Persist an observation only; a future task still performs a live browser check."""
+
+        with self.connect() as conn:
+            updated = conn.execute(
+                """UPDATE execution_unit_platform_bindings
+                SET last_observed_status=%s,last_observed_at=now(),last_observed_reason=%s
+                WHERE unit_id=%s AND platform=%s RETURNING unit_id""",
+                (status.value, reason, unit, platform),
+            ).fetchone()
+            if not updated:
+                raise CollectorError("RESOURCE_UNAVAILABLE", "PLATFORM_BINDING_NOT_CONFIGURED")
 
     def set_unit_task_kinds(self, unit: str, kinds: list[TaskKind], actor: str, reason: str) -> int:
         """Replace one unit's allowed task kinds and requeue unstarted incompatible tasks.
@@ -615,6 +718,8 @@ class Repository:
                   SELECT r.root_task_id
                   FROM root_tasks r
                   JOIN execution_units u ON u.unit_id=%s
+                  JOIN execution_unit_platform_bindings b
+                    ON b.unit_id=u.unit_id AND b.platform=r.platform AND b.enabled=true
                   WHERE r.unit_id IS NULL
                     AND r.state='QUEUED'
                     AND r.task_kind = ANY(u.allowed_task_kinds)
@@ -648,7 +753,10 @@ class Repository:
             return str(row["root_task_id"]) if row else None
 
     def has_runnable_higher_priority_task(
-        self, unit: str, current_root: str, current_kind: TaskKind
+        self,
+        unit: str,
+        current_root: str,
+        current_kind: TaskKind,
     ) -> bool:
         """Whether a collection/manual task should get the browser before this update task."""
         priority = {
@@ -662,13 +770,15 @@ class Repository:
         runnable = ["QUEUED", "SEARCHING", "COLLECTING", "PERSISTING", "RETRY_WAIT"]
         with self.connect() as conn:
             row = conn.execute(
-                """SELECT 1 FROM root_tasks
-                WHERE root_task_id<>%s
-                  AND task_kind = ANY(%s)
-                  AND (unit_id=%s OR unit_id IS NULL)
-                  AND state = ANY(%s)
+                """SELECT 1 FROM root_tasks r
+                JOIN execution_unit_platform_bindings b
+                  ON b.unit_id=%s AND b.platform=r.platform AND b.enabled=true
+                WHERE r.root_task_id<>%s
+                  AND r.task_kind = ANY(%s)
+                  AND (r.unit_id=%s OR r.unit_id IS NULL)
+                  AND r.state = ANY(%s)
                 LIMIT 1""",
-                (current_root, higher, unit, runnable),
+                (unit, current_root, higher, unit, runnable),
             ).fetchone()
             return row is not None
 
@@ -1173,6 +1283,56 @@ class Repository:
                     (unit,),
                 )
 
+    def unit_has_open_verification_event(self, unit: str) -> bool:
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT 1 FROM verification_events
+                WHERE unit_id=%s AND state IN ('OPEN','ACKNOWLEDGED') LIMIT 1""",
+                (unit,),
+            ).fetchone()
+            return row is not None
+
+    def reconcile_stale_verification(self, unit: str, actor: str = "worker") -> bool:
+        """Clear an expired unit verification state that no open event still justifies.
+
+        The verification event is the operator-facing authority.  A unit left in
+        NEEDS_VERIFICATION after its event expired must not route the next task (especially a
+        task for the other platform) into security maintenance; the fresh browser check will
+        re-detect any real challenge.  ACCOUNT_MISMATCH and NEEDS_LOGIN are deliberately not
+        cleared here because those require an actual account/login observation.
+        """
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM execution_units WHERE unit_id=%s FOR UPDATE", (unit,)
+            ).fetchone()
+            if (
+                not row
+                or row["state"] != "NEEDS_VERIFICATION"
+                or row["owner"]
+                or not row["browser_stopped"]
+            ):
+                return False
+            open_event = conn.execute(
+                """SELECT 1 FROM verification_events
+                WHERE unit_id=%s AND state IN ('OPEN','ACKNOWLEDGED') LIMIT 1""",
+                (unit,),
+            ).fetchone()
+            if open_event:
+                return False
+            conn.execute(
+                """UPDATE execution_units SET state='READY',mode=NULL,failure_reason=NULL,
+                maintenance_deadline=NULL,last_session_status='INDETERMINATE',
+                last_session_checked_at=now(),
+                last_session_reason='STALE_VERIFICATION_EXPIRED'
+                WHERE unit_id=%s AND state='NEEDS_VERIFICATION' AND owner IS NULL""",
+                (unit,),
+            )
+            conn.execute(
+                "INSERT INTO audit_logs(root_task_id,actor,action) VALUES(NULL,%s,%s)",
+                (actor, "verification_event.stale_cleared:" + unit),
+            )
+            return True
+
     def promote_maintenance_to_collect(
         self,
         unit: str,
@@ -1234,6 +1394,13 @@ class Repository:
                 "INSERT INTO audit_logs(root_task_id,actor,action) VALUES(%s,%s,%s)",
                 (root, actor, "promote_maintenance_to_collect:" + unit),
             )
+            # The current operator-facing verification notification is complete once the
+            # account/protected page is verified; leaving it OPEN would show a stale warning.
+            conn.execute(
+                """UPDATE verification_events SET state='RESOLVED',resolved_at=now()
+                WHERE unit_id=%s AND root_task_id=%s AND state IN ('OPEN','ACKNOWLEDGED')""",
+                (unit, root),
+            )
             return int(promoted["session_version"])
 
     def transition_collect_to_maintenance(
@@ -1251,6 +1418,7 @@ class Repository:
             "ACCOUNT_LOGIN_REQUIRED",
             "ACCOUNT_MISMATCH",
             "PLATFORM_SECURITY_CHALLENGE",
+            "ACCOUNT_SELECTION_REQUIRED",
         }:
             raise CollectorError("INVALID_FORM", "NON_AUTH_FAILURE_CANNOT_ENTER_MAINTENANCE")
         with self.connect() as conn:
@@ -1412,13 +1580,14 @@ class Repository:
                 ),
             )
             conn.execute(
-                """INSERT INTO root_tasks(root_task_id,state,version,unit_id,payload)
-                VALUES(%s,%s,0,%s,%s)""",
+                """INSERT INTO root_tasks(root_task_id,state,version,unit_id,payload,platform)
+                VALUES(%s,%s,0,%s,%s,%s)""",
                 (
                     task.root_task_id,
                     task.state,
                     unit,
                     Jsonb(task.model_dump(mode="json", exclude={"checkpoint"})),
+                    task.platform.value,
                 ),
             )
             conn.execute(
@@ -1642,6 +1811,10 @@ class Repository:
             ):
                 continue
             ref = candidate.ref
+            # Defence in depth for the platform invariant: an identity from another platform must
+            # never be written into platform_creators/projection/snapshot for this task.
+            if ref.platform != task.platform:
+                raise CollectorError("PLATFORM_PAGE_CHANGED", "CREATOR_PLATFORM_MISMATCH")
             conn.execute(
                 """INSERT INTO platform_creators(creator_id,platform,platform_creator_id)
                 VALUES(%s,%s,%s) ON CONFLICT(platform,platform_creator_id) DO NOTHING""",
@@ -1902,8 +2075,16 @@ class Repository:
 
     @classmethod
     def pipeline_complete(cls, task: TaskRecord, creator: str) -> bool:
-        """F05 profile steps and both F06 default collections must all be complete."""
-        return cls.profile_complete(task, creator) and cls.featured_complete(task, creator)
+        """Require only the collection scopes registered for the task's platform contract."""
+
+        profile_complete = cls.profile_complete(task, creator)
+        if (
+            task.platform == PlatformId.KUAISHOU_JUXING
+            and not task.checkpoint.featured_collection_types
+        ):
+            return profile_complete
+        # Preserve the established Xingtu behaviour: both F06 default collections are required.
+        return profile_complete and cls.featured_complete(task, creator)
 
     @classmethod
     def profile_complete(cls, task: TaskRecord, creator: str) -> bool:

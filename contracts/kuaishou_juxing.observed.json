@@ -1,0 +1,93 @@
+{
+  "schema_version": "platform_capability_evidence.v1",
+  "platform": "kuaishou_juxing",
+  "contract_version": "juxing-observed-2026-10-27-v2",
+  "status": "observed",
+  "observed_at": "2026-10-27T19:52:00+08:00",
+  "account_role": "authenticated_business_account_role_not_exposed_on_observed_pages",
+  "permission_scope_observed": [
+    "short_video_creator_square",
+    "creator_detail_data",
+    "creator_works",
+    "audience_summary",
+    "performance_summary",
+    "commerce_summary"
+  ],
+  "entry": "#/star_plaza/video",
+  "scope": "short_video_creator_square",
+  "browser_profile_ref": "redacted",
+  "p0_filter_candidates": [
+    {
+      "field": "keyword",
+      "page_label": "内容关键词",
+      "state": "verified",
+      "operation": "母婴",
+      "readback": "搜索词：母婴；为您找到 1000+ 位达人"
+    },
+    {
+      "field": "content_type",
+      "page_label": "内容类型",
+      "state": "observed",
+      "operation": "母婴亲子",
+      "readback": "控件选中状态可回读；筛选摘要未单独显示该条件"
+    },
+    {
+      "field": "followers",
+      "page_label": "粉丝数量",
+      "state": "verified",
+      "operation": "10万-100万",
+      "readback": "粉丝数量-10万-100万；组合结果 585 位达人"
+    },
+    {
+      "field": "region",
+      "page_label": "达人地域",
+      "state": "verified",
+      "operation": "北京",
+      "readback": "达人地域-共1项；组合结果 5 位达人"
+    },
+    {
+      "field": "video_quote_1_20",
+      "page_label": "1-20秒视频报价",
+      "state": "verified",
+      "operation": "上限10000元",
+      "readback": "达人报价-1-20秒,1万以下"
+    },
+    {
+      "field": "video_quote_21_60",
+      "page_label": "21-60秒视频报价",
+      "state": "verified",
+      "operation": "上限10000元",
+      "readback": "达人报价-21-60秒,1万以下；组合结果 4 位达人"
+    },
+    {
+      "field": "video_quote_60_plus",
+      "page_label": "60秒以上视频报价",
+      "state": "verified",
+      "operation": "上限10000元",
+      "readback": "达人报价-60秒以上,1万以下"
+    }
+  ],
+  "verified_operations": [
+    {
+      "verified_at": "2026-10-27T19:52:00+08:00",
+      "browser": "Playwright MCP attached Chrome",
+      "profile_ref": "redacted",
+      "route": "#/star_plaza/video",
+      "evidence_ref": "docs/evidence/KJX-01-stage-a-implementation-2026-10-27.md#平台低风险验证"
+    }
+  ],
+  "detail_page_observations": {
+    "route_shape": "#/promotion/star/{platform_creator_id}",
+    "sections": ["看数据", "看作品", "看受众", "看履约", "看带货"],
+    "observed_windows": ["流量范围7天", "时间范围近30天"],
+    "state": "observed_only"
+  },
+  "coverage_gaps": [
+    "content_type has selected-state evidence but no independent filter-summary or result-delta evidence",
+    "the authenticated account role name is not exposed on the observed pages",
+    "metric formulas, raw response paths, empty states and permission variants require further evidence",
+    "search pagination and creator-detail extraction locators are intentionally not registered",
+    "repeated Network Error dialogs and console errors were observed, so availability and retry semantics are not verified",
+    "no real creator batch, persistence, update or end-to-end acceptance was executed"
+  ]
+}

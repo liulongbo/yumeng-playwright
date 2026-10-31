@@ -239,8 +239,8 @@ class CreatorUpdateService:
     ) -> None:
         conn.execute(
             """INSERT INTO root_tasks(
-            root_task_id,state,version,unit_id,payload,created_by,origin_root_task_id,task_kind)
-            VALUES(%s,%s,%s,NULL,%s,%s,%s,%s)""",
+            root_task_id,state,version,unit_id,payload,created_by,origin_root_task_id,task_kind,platform)
+            VALUES(%s,%s,%s,NULL,%s,%s,%s,%s,%s)""",
             (
                 task.root_task_id,
                 task.state.value,
@@ -249,6 +249,7 @@ class CreatorUpdateService:
                 created_by,
                 origin_root_task_id,
                 task.task_kind.value,
+                task.platform.value,
             ),
         )
         conn.execute(
@@ -377,12 +378,29 @@ class CreatorUpdateService:
 
     # -- manual update -------------------------------------------------------------------
 
+    def _require_xingtu_creator(self, creator_id: str) -> None:
+        """Creator updates are still the Xingtu-only update service (KJX-01 stage D scope).
+
+        A juxing creator must get an explicit "not supported" answer, never a misleading
+        CREATOR_NOT_FOUND from the Xingtu current-projection table.
+        """
+
+        with self.repository.connect() as conn:
+            row = conn.execute(
+                "SELECT platform FROM platform_creators WHERE creator_id=%s", (creator_id,)
+            ).fetchone()
+        if not row:
+            raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+        if row["platform"] != "douyin_xingtu":
+            raise CollectorError("UNSUPPORTED_FILTER", "KUAISHOU_JUXING_UPDATE_NOT_SUPPORTED")
+
     def create_manual_update(
         self, creator_id: str, *, user_id: str, idempotency_key: str
     ) -> CreatorUpdateResponse:
         creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
         if not idempotency_key.strip() or len(idempotency_key) > 200:
             raise CollectorError("INVALID_FORM", "INVALID_IDEMPOTENCY_KEY")
+        self._require_xingtu_creator(creator_id)
         actor = "product:" + user_id
         operation = "creator.update"
         digest = hashlib.sha256(f"{creator_id}:{operation}".encode()).hexdigest()
@@ -565,6 +583,7 @@ class CreatorUpdateService:
 
     def status(self, creator_id: str) -> CreatorUpdateStatus:
         creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
+        self._require_xingtu_creator(creator_id)
         with self.repository.connect() as conn:
             self._ensure_schedule_row(conn, creator_id)
         self.reconcile_creator(creator_id)

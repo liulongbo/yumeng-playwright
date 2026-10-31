@@ -167,6 +167,10 @@ class Engine:
             scanned = set(cp.scanned_ids)
             remaining = []
             for index, ref in enumerate(page.candidates):
+                # An Adapter for one platform must never introduce another platform's identity into
+                # this task.  Reject the whole page before any candidate is persisted.
+                if ref.platform != task.platform:
+                    raise CollectorError("PLATFORM_PAGE_CHANGED", "CANDIDATE_PLATFORM_MISMATCH")
                 identity = ref.platform_creator_id
                 if identity not in scanned:
                     if len(scanned) >= self.scan_budget:
@@ -444,6 +448,10 @@ class Engine:
             candidate.state = "collecting"
             task.state = TaskStatus.COLLECTING
             ref = candidate.ref.model_copy(deep=True)
+            # Checkpoints can be resumed (continue/backfill/update); re-check the platform here so a
+            # corrupted or foreign reference can never reach the profile/collect path.
+            if ref.platform != task.platform:
+                raise CollectorError("PLATFORM_PAGE_CHANGED", "CANDIDATE_PLATFORM_MISMATCH")
             already_complete = candidate.valid and self.repo.pipeline_complete(task, identity)
             if already_complete:
                 candidate.state = "done"

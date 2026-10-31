@@ -27,6 +27,7 @@ from .contracts import (
     RequestSpec,
     SearchSpec,
     SourceSpec,
+    account_id_from_url,
 )
 from .covers import FetchedCover
 from .domain import (
@@ -630,6 +631,13 @@ class BrowserAdapter:
             value = await locator.inner_text()
         if value is None:
             raise CollectorError("MODULE_COLLECTION_FAILED", f"UNREADABLE_VALUE:{spec.selector}")
+        if spec.capture_regex:
+            match = re.search(spec.capture_regex, value)
+            if not match:
+                raise CollectorError(
+                    "MODULE_COLLECTION_FAILED", f"UNREADABLE_VALUE:{spec.selector}"
+                )
+            value = match.group(1)
         if require_non_empty and not value.strip():
             # The node exists but carries no content yet.  The platform renders the identity node
             # blank for a few tens of milliseconds while the SPA hydrates after a same-URL reload,
@@ -898,8 +906,17 @@ class BrowserAdapter:
             locator = self.locator(page, spec.account)
             try:
                 if await locator.count() == 1 and await locator.is_visible():
-                    value = (await locator.inner_text()).strip()
-                    if value:
+                    try:
+                        value = await self.read_locator(
+                            page, spec.account, require_non_empty=True
+                        )
+                    except CollectorError:
+                        # The nav node can exist yet still be empty while the SPA hydrates, and a
+                        # contract-declared capture_regex can miss a re-rendered label.  Neither is
+                        # a session verdict: this bounded wait keeps polling and reports
+                        # ACCOUNT_LOGIN_REQUIRED at its deadline, as before.
+                        value = ""
+                    if isinstance(value, str) and value:
                         return value
             except BrowserError:
                 pass
@@ -954,12 +971,16 @@ class BrowserAdapter:
                 locator = self.locator(page, spec.account)
                 try:
                     if await locator.count() == 1 and await locator.is_visible():
-                        raw = (
-                            await locator.get_attribute(spec.account.attribute)
-                            if spec.account.attribute
-                            else await locator.inner_text()
-                        )
-                        observed = (raw or "").strip()
+                        try:
+                            observed_value = await self.read_locator(
+                                page, spec.account, require_non_empty=True
+                            )
+                        except CollectorError:
+                            # Empty/uncapturable DOM identity is "no DOM evidence yet", not a
+                            # verdict: fall through to the contract's URL identity (juxing) and,
+                            # failing that, keep waiting until the deadline reports INDETERMINATE.
+                            observed_value = ""
+                        observed = observed_value.strip() if isinstance(observed_value, str) else ""
                         if observed:
                             status = (
                                 SessionHealthStatus.VALID
@@ -981,6 +1002,26 @@ class BrowserAdapter:
                             )
                 except BrowserError:
                     pass
+                observed_from_url = account_id_from_url(page.url, spec.account_url_parameter)
+                if observed_from_url:
+                    status = (
+                        SessionHealthStatus.VALID
+                        if observed_from_url == self.account
+                        else SessionHealthStatus.ACCOUNT_MISMATCH
+                    )
+                    return self.publish_session_health(
+                        SessionHealth(
+                            status=status,
+                            expected_account_id=self.account,
+                            observed_account_id=observed_from_url,
+                            protected_page_verified=True,
+                            evidence_reason=(
+                                "PROTECTED_PAGE_AND_URL_ACCOUNT_VERIFIED"
+                                if status == SessionHealthStatus.VALID
+                                else "PROTECTED_PAGE_URL_WRONG_ACCOUNT"
+                            ),
+                        )
+                    )
             if asyncio.get_running_loop().time() >= deadline:
                 # The attestation is a last resort, never a fast path.  It is granted only after
                 # the bounded window has actually elapsed with the protected surface continuously

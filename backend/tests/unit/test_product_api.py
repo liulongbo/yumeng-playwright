@@ -4,14 +4,20 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from xingtu.contracts import PlatformRegistry
-from xingtu.domain import TaskStatus, uid, utcnow
-from xingtu.product_api import ProductServices, ProductSettings, create_app
+from xingtu.domain import CollectorError, PlatformId, TaskStatus, uid, utcnow
+from xingtu.product_api import (
+    ProductServices,
+    ProductSettings,
+    _juxing_max_target_count,
+    create_app,
+)
 from xingtu.product_auth import AuthService, MemoryLoginLimiter, PasswordService
 from xingtu.product_covers import ProductCoverConfig
 from xingtu.product_models import (
     CreateTaskResponse,
     CreatorUpdateResponse,
     CreatorUpdateStatus,
+    TaskPage,
 )
 
 
@@ -72,7 +78,12 @@ class FakeProducts:
 
 
 class FakeQueries:
-    pass
+    def __init__(self):
+        self.calls = []
+
+    def list_tasks(self, **kwargs):
+        self.calls.append(kwargs)
+        return TaskPage(items=[], next_cursor=None)
 
 
 class FakeCovers:
@@ -90,7 +101,12 @@ class FakeUpdates:
         return CreatorUpdateStatus(creator_id=creator_id)
 
 
-def client_fixture():
+def client_fixture(
+    *,
+    enable_juxing: bool = False,
+    juxing_contract_path: Path | None = None,
+    juxing_max_target: int = 3,
+):
     auth_store = MemoryAuthStore()
     products = FakeProducts()
     settings = ProductSettings(
@@ -103,6 +119,12 @@ def client_fixture():
         cover_config=ProductCoverConfig(
             kind="local", directory=Path(".runtime/covers"), allowed_root=Path(".runtime")
         ),
+        enable_kuaishou_juxing=enable_juxing,
+        juxing_observed_contract_path=(
+            juxing_contract_path or Path("contracts/kuaishou_juxing.observed.json")
+        ),
+        juxing_registry_path=Path("contracts/kuaishou_juxing.verified.json"),
+        kuaishou_juxing_max_target_count=juxing_max_target,
     )
     services = ProductServices(
         auth=AuthService(
@@ -116,6 +138,11 @@ def client_fixture():
         covers=FakeCovers(),
         settings=settings,
         updates=FakeUpdates(),
+        platform_registries={
+            "kuaishou_juxing": PlatformRegistry.model_validate_json(
+                settings.juxing_registry_path.read_text()
+            )
+        },
     )
     return TestClient(create_app(services), base_url="https://app.test"), products
 
@@ -197,6 +224,172 @@ def test_capabilities_and_task_submission_require_session_and_csrf():
     assert response.status_code == 202
     assert len(products.calls) == 1
     assert products.calls[0][0].schema_version == "requirement_form.v2"
+
+
+def test_task_list_platform_filter_is_forwarded_and_unknown_values_rejected():
+    client, _ = client_fixture()
+    login(client)
+    queries = client.app.state.services.queries  # type: ignore[attr-defined]
+
+    filtered = client.get("/api/tasks?platform=kuaishou_juxing&limit=5")
+    assert filtered.status_code == 200
+    assert filtered.json() == {"items": [], "next_cursor": None}
+    assert queries.calls[-1]["platform"] is PlatformId.KUAISHOU_JUXING
+    assert queries.calls[-1]["limit"] == 5
+
+    unfiltered = client.get("/api/tasks")
+    assert unfiltered.status_code == 200
+    assert queries.calls[-1]["platform"] is None
+
+    invalid = client.get("/api/tasks?platform=douyin_xingtu_typo")
+    assert invalid.status_code == 422
+
+
+def test_platform_catalog_keeps_juxing_closed_until_flag_and_verified_registry_are_present():
+    client, products = client_fixture()
+    csrf = login(client).json()["csrf_token"]
+    response = client.get("/api/platforms")
+    assert response.status_code == 200
+    platforms = {item["platform"]: item for item in response.json()}
+    assert platforms["douyin_xingtu"]["enabled"] is True
+    assert platforms["kuaishou_juxing"]["enabled"] is False
+    assert platforms["kuaishou_juxing"]["capability_status"] == "verified"
+    assert platforms["kuaishou_juxing"]["disabled_reason"] == "磁力聚星功能开关当前关闭"
+    creation = client.post(
+        "/api/tasks",
+        headers={
+            "Origin": "https://app.test",
+            "X-CSRF-Token": csrf,
+            "Idempotency-Key": "juxing-key",
+        },
+        json={
+            "schema_version": "requirement_form.v3",
+            "platform": "kuaishou_juxing",
+            "keyword": "母婴",
+            "target_count": 10,
+        },
+    )
+    assert creation.status_code == 422
+    assert creation.json()["message"] == "KUAISHOU_JUXING_FEATURE_DISABLED"
+    assert products.calls == []
+    flagged_client, flagged_products = client_fixture(enable_juxing=True)
+    flagged_csrf = login(flagged_client).json()["csrf_token"]
+    flagged_catalog = {
+        item["platform"]: item for item in flagged_client.get("/api/platforms").json()
+    }
+    assert flagged_catalog["kuaishou_juxing"]["enabled"] is True
+    assert flagged_catalog["kuaishou_juxing"]["capability_status"] == "verified"
+    capability = flagged_client.get("/api/platforms/kuaishou_juxing/capabilities")
+    assert capability.status_code == 200
+    assert capability.json()["platform"] == "kuaishou_juxing"
+    assert capability.json()["target_count_default"] == 3
+    assert capability.json()["target_count_max"] == 3
+    flagged = flagged_client.post(
+        "/api/tasks",
+        headers={
+            "Origin": "https://app.test",
+            "X-CSRF-Token": flagged_csrf,
+            "Idempotency-Key": "juxing-flagged-key",
+        },
+        json={
+            "schema_version": "requirement_form.v3",
+            "platform": "kuaishou_juxing",
+            "keyword": "母婴",
+            "content_types": ["maternal_child"],
+            "target_count": 3,
+        },
+    )
+    assert flagged.status_code == 202
+    assert flagged_products.calls[0][1]["capability_version"] == ("juxing-video-square-stage-c-v2")
+
+
+def test_juxing_target_ceiling_is_configurable_only_for_an_authorized_run():
+    default_client, _ = client_fixture(enable_juxing=True)
+    default_csrf = login(default_client).json()["csrf_token"]
+    too_many = default_client.post(
+        "/api/tasks",
+        headers={
+            "Origin": "https://app.test",
+            "X-CSRF-Token": default_csrf,
+            "Idempotency-Key": "juxing-over-default-key",
+        },
+        json={
+            "schema_version": "requirement_form.v3",
+            "platform": "kuaishou_juxing",
+            "keyword": "母婴",
+            "target_count": 4,
+        },
+    )
+    assert too_many.status_code == 422
+    assert too_many.json()["message"] == "KUAISHOU_JUXING_TARGET_ABOVE_LIMIT"
+    assert (
+        default_client.get("/api/platforms/kuaishou_juxing/capabilities").json()["target_count_max"]
+        == 3
+    )
+
+    raised_client, raised_products = client_fixture(enable_juxing=True, juxing_max_target=10)
+    raised_csrf = login(raised_client).json()["csrf_token"]
+    raised_capability = raised_client.get("/api/platforms/kuaishou_juxing/capabilities").json()
+    assert raised_capability["target_count_default"] == 3
+    assert raised_capability["target_count_max"] == 10
+    accepted = raised_client.post(
+        "/api/tasks",
+        headers={
+            "Origin": "https://app.test",
+            "X-CSRF-Token": raised_csrf,
+            "Idempotency-Key": "juxing-10-key",
+        },
+        json={
+            "schema_version": "requirement_form.v3",
+            "platform": "kuaishou_juxing",
+            "keyword": "母婴",
+            "content_types": ["maternal_child"],
+            "target_count": 10,
+        },
+    )
+    assert accepted.status_code == 202
+    assert raised_products.calls[0][1]["capability_version"] == ("juxing-video-square-stage-c-v2")
+    rejected = raised_client.post(
+        "/api/tasks",
+        headers={
+            "Origin": "https://app.test",
+            "X-CSRF-Token": raised_csrf,
+            "Idempotency-Key": "juxing-11-key",
+        },
+        json={
+            "schema_version": "requirement_form.v3",
+            "platform": "kuaishou_juxing",
+            "keyword": "母婴",
+            "target_count": 11,
+        },
+    )
+    assert rejected.status_code == 422
+    assert rejected.json()["message"] == "KUAISHOU_JUXING_TARGET_ABOVE_LIMIT"
+
+
+def test_juxing_max_target_environment_is_validated(monkeypatch):
+    monkeypatch.setenv("XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT", "10")
+    assert _juxing_max_target_count() == 10
+    monkeypatch.setenv("XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT", "0")
+    with pytest.raises(CollectorError):
+        _juxing_max_target_count()
+    monkeypatch.setenv("XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT", "not-a-number")
+    with pytest.raises(CollectorError):
+        _juxing_max_target_count()
+    monkeypatch.delenv("XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT")
+    assert _juxing_max_target_count() == 3
+
+
+def test_malformed_observed_metadata_cannot_disable_a_verified_executable_registry(tmp_path):
+    malformed = tmp_path / "juxing.json"
+    malformed.write_text("not-json")
+    client, _ = client_fixture(enable_juxing=True, juxing_contract_path=malformed)
+    login(client)
+    response = client.get("/api/platforms")
+    assert response.status_code == 200
+    juxing = next(item for item in response.json() if item["platform"] == "kuaishou_juxing")
+    assert juxing["enabled"] is True
+    assert juxing["capability_status"] == "verified"
 
 
 def test_api_validation_uses_unified_error_and_strict_target_count():
