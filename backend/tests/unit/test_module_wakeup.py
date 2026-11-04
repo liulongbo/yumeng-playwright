@@ -14,8 +14,10 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from xingtu.adapter import BrowserAdapter
 from xingtu.contracts import Action, LocatorSpec, PlatformRegistry, RequestSpec
+from xingtu.domain import CollectorError
 
 ROOT = Path(__file__).resolve().parents[3]
 REGISTRY = ROOT / "contracts" / "douyin_xingtu.verified.json"
@@ -44,22 +46,34 @@ def click(selector: str) -> Action:
 class WakeHarness:
     """Records which modules were woken and with which actions."""
 
-    def __init__(self, results: dict[str, object]) -> None:
+    def __init__(
+        self,
+        results: dict[str, object],
+        *,
+        action_error: Exception | None = None,
+        ready_error: Exception | None = None,
+    ) -> None:
         self.woken: list[list[str]] = []
         self.readied: list[str] = []
         self.adapter = BrowserAdapter.__new__(BrowserAdapter)
+        self.action_error = action_error
+        self.ready_error = ready_error
 
         async def actions(page: object, items: list[Action]) -> None:
+            if self.action_error is not None:
+                raise self.action_error
             self.woken.append([item.locator.selector for item in items])
 
         async def wait_ready(
             page: object, ready: LocatorSpec, hidden: list[LocatorSpec], **_: object
         ) -> None:
+            if self.ready_error is not None:
+                raise self.ready_error
             self.readied.append(ready.selector)
 
         self.adapter.actions = actions  # type: ignore[method-assign]
         self.adapter.wait_ready = wait_ready  # type: ignore[method-assign]
-        self.capture = SimpleNamespace(results=results)
+        self.capture = SimpleNamespace(results=results, failures={})
 
 
 def module(key: str, actions: list[Action], requests: list[RequestSpec]) -> SimpleNamespace:
@@ -155,8 +169,12 @@ async def test_shared_window_module_actions_are_not_run_twice() -> None:
     assert harness.woken == []
 
 
-async def test_two_modules_needing_the_same_interaction_each_run_it_once_if_still_missing() -> None:
-    """Each module is judged on its own required responses; the gate is per module."""
+async def test_two_modules_needing_the_same_interaction_share_one_wake_attempt() -> None:
+    """Both modules are judged independently, but the same tab is clicked only once.
+
+    If the first wake could not make the shared tab ready, retrying the identical click for the
+    second module only spends another 90 seconds on the same non-actionable locator.
+    """
 
     shared = module("basic", [], [request_spec("base")])
     seeding = module("seeding", [click(s) for s in TRIGGER_SELECTORS], [request_spec("seed_base")])
@@ -165,8 +183,49 @@ async def test_two_modules_needing_the_same_interaction_each_run_it_once_if_stil
     )
     harness = WakeHarness(results={"base": {}})
     await run(harness, [shared, seeding, conversion], shared)
-    assert harness.woken == [TRIGGER_SELECTORS, TRIGGER_SELECTORS]
-    assert harness.readied == ["#seeding", "#conversion"]
+    assert harness.woken == [TRIGGER_SELECTORS]
+    assert harness.readied == ["#seeding"]
+    assert harness.capture.failures["conversion"] == "WAKE_ACTION_SKIPPED"
+
+
+async def test_wake_action_timeout_is_localized_to_the_module() -> None:
+    """A 90s tab click must fail the module, never the whole task."""
+
+    shared = module("basic", [], [request_spec("base")])
+    seeding = module("seeding", [click(s) for s in TRIGGER_SELECTORS], [request_spec("seed_base")])
+    harness = WakeHarness(
+        results={"base": {}},
+        action_error=PlaywrightTimeoutError("Locator.click: Timeout 90000ms exceeded."),
+    )
+    await run(harness, [shared, seeding], shared)
+    assert harness.capture.failures["seed_base"] == "WAKE_ACTION_TIMEOUT"
+    assert harness.readied == []
+
+
+async def test_wake_ready_timeout_is_localized_to_the_module() -> None:
+    shared = module("basic", [], [request_spec("base")])
+    seeding = module("seeding", [click(s) for s in TRIGGER_SELECTORS], [request_spec("seed_base")])
+    harness = WakeHarness(
+        results={"base": {}},
+        ready_error=CollectorError("PLATFORM_PAGE_CHANGED", "PAGE_READY_TIMEOUT"),
+    )
+    await run(harness, [shared, seeding], shared)
+    assert harness.capture.failures["seed_base"] == "WAKE_READY_TIMEOUT"
+
+
+async def test_fatal_wake_error_still_aborts() -> None:
+    """Session/challenge/lease errors are not optional-module failures."""
+
+    import pytest
+
+    shared = module("basic", [], [request_spec("base")])
+    seeding = module("seeding", [click(s) for s in TRIGGER_SELECTORS], [request_spec("seed_base")])
+    harness = WakeHarness(
+        results={"base": {}},
+        action_error=CollectorError("ACCOUNT_LOGIN_REQUIRED", "REGISTERED_LOGIN_PAGE"),
+    )
+    with pytest.raises(CollectorError, match="ACCOUNT_LOGIN_REQUIRED"):
+        await run(harness, [shared, seeding], shared)
 
 
 # --------------------------------------------------------------------------------------

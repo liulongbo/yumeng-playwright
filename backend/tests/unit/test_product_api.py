@@ -105,7 +105,7 @@ def client_fixture(
     *,
     enable_juxing: bool = False,
     juxing_contract_path: Path | None = None,
-    juxing_max_target: int = 3,
+    juxing_max_target: int = 200,
 ):
     auth_store = MemoryAuthStore()
     products = FakeProducts()
@@ -282,8 +282,8 @@ def test_platform_catalog_keeps_juxing_closed_until_flag_and_verified_registry_a
     capability = flagged_client.get("/api/platforms/kuaishou_juxing/capabilities")
     assert capability.status_code == 200
     assert capability.json()["platform"] == "kuaishou_juxing"
-    assert capability.json()["target_count_default"] == 3
-    assert capability.json()["target_count_max"] == 3
+    assert capability.json()["target_count_default"] == 20
+    assert capability.json()["target_count_max"] == 200
     flagged = flagged_client.post(
         "/api/tasks",
         headers={
@@ -296,41 +296,59 @@ def test_platform_catalog_keeps_juxing_closed_until_flag_and_verified_registry_a
             "platform": "kuaishou_juxing",
             "keyword": "母婴",
             "content_types": ["maternal_child"],
-            "target_count": 3,
+            "target_count": 70,
         },
     )
     assert flagged.status_code == 202
+    assert flagged_products.calls[0][0].target_count == 70
     assert flagged_products.calls[0][1]["capability_version"] == ("juxing-video-square-stage-c-v2")
 
 
 def test_juxing_target_ceiling_is_configurable_only_for_an_authorized_run():
-    default_client, _ = client_fixture(enable_juxing=True)
+    default_client, default_products = client_fixture(enable_juxing=True)
     default_csrf = login(default_client).json()["csrf_token"]
-    too_many = default_client.post(
+    accepted_70 = default_client.post(
         "/api/tasks",
         headers={
             "Origin": "https://app.test",
             "X-CSRF-Token": default_csrf,
-            "Idempotency-Key": "juxing-over-default-key",
+            "Idempotency-Key": "juxing-70-default-key",
         },
         json={
             "schema_version": "requirement_form.v3",
             "platform": "kuaishou_juxing",
             "keyword": "母婴",
-            "target_count": 4,
+            "content_types": ["maternal_child"],
+            "target_count": 70,
         },
     )
-    assert too_many.status_code == 422
-    assert too_many.json()["message"] == "KUAISHOU_JUXING_TARGET_ABOVE_LIMIT"
+    assert accepted_70.status_code == 202
+    assert default_products.calls[0][0].target_count == 70
+    # The form itself is still bounded by the product contract (1..200).
+    over_contract = default_client.post(
+        "/api/tasks",
+        headers={
+            "Origin": "https://app.test",
+            "X-CSRF-Token": default_csrf,
+            "Idempotency-Key": "juxing-201-key",
+        },
+        json={
+            "schema_version": "requirement_form.v3",
+            "platform": "kuaishou_juxing",
+            "keyword": "母婴",
+            "target_count": 201,
+        },
+    )
+    assert over_contract.status_code == 422
     assert (
         default_client.get("/api/platforms/kuaishou_juxing/capabilities").json()["target_count_max"]
-        == 3
+        == 200
     )
 
     raised_client, raised_products = client_fixture(enable_juxing=True, juxing_max_target=10)
     raised_csrf = login(raised_client).json()["csrf_token"]
     raised_capability = raised_client.get("/api/platforms/kuaishou_juxing/capabilities").json()
-    assert raised_capability["target_count_default"] == 3
+    assert raised_capability["target_count_default"] == 10
     assert raised_capability["target_count_max"] == 10
     accepted = raised_client.post(
         "/api/tasks",
@@ -377,7 +395,7 @@ def test_juxing_max_target_environment_is_validated(monkeypatch):
     with pytest.raises(CollectorError):
         _juxing_max_target_count()
     monkeypatch.delenv("XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT")
-    assert _juxing_max_target_count() == 3
+    assert _juxing_max_target_count() == 200
 
 
 def test_malformed_observed_metadata_cannot_disable_a_verified_executable_registry(tmp_path):

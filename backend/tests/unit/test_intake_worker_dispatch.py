@@ -103,6 +103,9 @@ class FailingPromoteRepository:
     def __init__(self, error: CollectorError) -> None:
         self.error = error
         self.failure: tuple[str, list[FieldError]] | None = None
+        # Production ProductRepository exposes the low-level Repository; keep the fake shape
+        # compatible so promotion can resolve a platform-dedicated unit.
+        self.repository = SimpleNamespace(select_collection_unit=lambda platform: None)
 
     def promote_intake(self, *args: Any, **kwargs: Any) -> str:
         del args, kwargs
@@ -298,6 +301,42 @@ async def test_juxing_promotion_never_inherits_the_xingtu_profile_inventory(monk
 
     assert await processor.process("root-juxing") == TaskStatus.QUEUED
     assert repository.promotions == [("kuaishou_juxing", None)]
+
+
+class UnitCapturingRepository(FailingPromoteRepository):
+    def __init__(self, selected_unit: str | None) -> None:
+        super().__init__(CollectorError("INVALID_FORM", "unused"))
+        self.selected_unit = selected_unit
+        self.repository = SimpleNamespace(
+            select_collection_unit=lambda platform: self.selected_unit
+        )
+        self.unit_ids: list[str | None] = []
+
+    def promote_intake(self, *args: Any, **kwargs: Any) -> str:
+        del args
+        self.unit_ids.append(kwargs.get("unit_id"))
+        return "p2"
+
+
+async def test_promotion_uses_the_platform_dedicated_unit(monkeypatch):
+    """A Juxing plan must be assigned to the Juxing unit, not the intake worker's own unit."""
+    repository = UnitCapturingRepository("unit-local-mac-03-juxing")
+    state = _juxing_state()
+    processor = IntakeProcessor(
+        repository,  # type: ignore[arg-type]
+        SimpleNamespace(capabilities=SimpleNamespace(version="cap-v1")),  # type: ignore[arg-type]
+        SimpleNamespace(),  # type: ignore[arg-type]
+        execution_unit_id="unit-local-mac-02",
+        platform_registries={
+            "kuaishou_juxing": SimpleNamespace(capabilities=SimpleNamespace(version="cap-juxing"))
+        },  # type: ignore[dict-item]
+    )
+    monkeypatch.setattr(processor.repository, "load_intake", lambda root: state, raising=False)
+    monkeypatch.setattr(processor.repository, "save_intake", lambda *a, **k: None, raising=False)
+    monkeypatch.setattr("xingtu.intake_worker.IntakeGraph", lambda *a, **k: JuxingGraph(state))
+
+    assert await processor.process("root-juxing") == TaskStatus.QUEUED
+    assert repository.unit_ids == ["unit-local-mac-03-juxing"]
 
 
 async def test_intake_tick_survives_an_unexpected_listing_failure(monkeypatch):

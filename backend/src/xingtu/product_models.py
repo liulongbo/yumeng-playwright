@@ -389,10 +389,10 @@ class CapabilityDTO(Model):
             if capabilities.combination_policy
             else None,
             target_count_default=(
-                min(3, max(1, target_count_max or 3)) if platform == "kuaishou_juxing" else 20
+                min(20, max(1, target_count_max or 200)) if platform == "kuaishou_juxing" else 20
             ),
             target_count_max=(
-                max(1, target_count_max or 3) if platform == "kuaishou_juxing" else 200
+                max(1, target_count_max or 200) if platform == "kuaishou_juxing" else 200
             ),
             fixed_sort_key=capabilities.sorts[0],
         )

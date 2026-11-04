@@ -855,6 +855,12 @@ class ProductQueries:
                         ):
                             raise CollectorError("INVALID_FORM", "NO_RETRYABLE_FAILURE")
                     scope = decide_retry_scope(task)
+                    # A task created before dedicated execution units can still point at a unit
+                    # that no longer carries its platform binding. Re-resolve so the new segment
+                    # is dispatched to the unit that can actually execute it.
+                    capable_unit = self.repository.select_collection_unit(task.platform.value)
+                    if capable_unit:
+                        task.execution_unit_id = capable_unit
                     task.segment += 1
                     task.attempt_id = uid()
                     task.state = TaskStatus.QUEUED
@@ -878,13 +884,15 @@ class ProductQueries:
                 task.version += 1
                 task.checkpoint.revision += 1
                 conn.execute(
-                    """UPDATE root_tasks SET state=%s,version=%s,payload=%s,updated_at=now()"""
+                    """UPDATE root_tasks SET state=%s,version=%s,payload=%s,unit_id=%s,
+                    updated_at=now()"""
                     + TERMINAL_COMPLETED_AT_CLAUSE
                     + """ WHERE root_task_id=%s""",
                     (
                         task.state,
                         task.version,
                         Jsonb(task.model_dump(mode="json", exclude={"checkpoint"})),
+                        task.execution_unit_id,
                         task.state in TERMINAL_STATES,
                         root_task_id,
                     ),

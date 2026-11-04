@@ -75,6 +75,25 @@ Windows Profile 独占使用标准库 `msvcrt` 字节锁。浏览器关闭确认
 `lockfile` 的独占句柄：共享冲突视为仍运行，无法确认时 fail-closed 并隔离单元；不会删除锁或杀死
 无法确认的 Chrome。
 
+### Windows 星图会话持久化
+
+正式 CLI 与 Collection Worker 把 `.runtime\profiles` 作为 BrowserRuntime 私有根。因此星图除了
+`profile_directory` 外，还必须保留与 `unit_id` 精确对应的私有快照：
+
+```text
+<repo>\.runtime\profiles\storage-state\<unit_id>.json
+```
+
+该文件保存会话级 Cookie 和 Local Storage，只能由同一绑定的受控 BrowserContext 在账号精确
+匹配、受保护页可用后导出，并在下一次启动首次导航前恢复。阶段性工具或旧记录中的
+`.runtime\storage-state\` 不是正式 Worker 的读取位置。数据库中的历史 `READY`／`VALID` 也不是新 Chrome
+进程的会话证明。
+
+Windows 部署必须固定同一 OS 用户、同一 checkout、绝对 `--config` 路径、同一 `unit_id` 与专属 Profile；
+不得复制 macOS Profile、把其他单元快照改名、用个人 Chrome 登录后假定 Worker 会继承，或让服务管理器
+从另一工作目录加载第二套 `.runtime`。完整建立及双冷启动验收步骤见
+[DEPLOY-WIN-01 星图会话持久化审计](evidence/DEPLOY-WIN-01-xingtu-session-persistence-review-2026-10-31.md)。
+
 ## 状态、日志与故障恢复
 
 - 日志：`.runtime/logs/api.log`、`intake-worker.log`、`collection-worker.log`、`frontend.log`。

@@ -823,6 +823,82 @@ async def test_target_24_crosses_page_boundary(repo, plan):
     assert task.profile_complete_count == 24
 
 
+async def test_target_70_crosses_four_pages_and_persists_seventy(repo, plan):
+    """The 70 target is reached from page 4 of five twenty-row pages, with no early stop."""
+    ctx = start(repo, plan, 70)
+    adapter = CountingAdapter([str(i) for i in range(100)], page_size=20)
+    await Engine(repo, adapter, ctx).run()
+
+    task = repo.get(ctx.root_task_id)
+    assert task.valid_count == 70
+    assert len(adapter.visits) == 70
+    assert adapter.searches == 4
+    assert len(task.checkpoint.candidates) == 80
+    identities = {candidate.ref.platform_creator_id for candidate in task.checkpoint.candidates}
+    assert len(identities) == 80
+    assert task.checkpoint.visited_cursors == [None, "20", "40", "60"]
+    assert task.profile_complete_count == 70
+    assert snapshots(repo, ctx.root_task_id) == 70
+
+
+class SparseThirdPage(CountingAdapter):
+    """Returns only five candidates on page three while keeping a forward cursor."""
+
+    async def search(self, plan, cp, ctx):
+        page = await super().search(plan, cp, ctx)
+        if cp.cursor == "40":
+            page.candidates = page.candidates[:5]
+            page.next_checkpoint = "45"
+        return page
+
+
+async def test_sparse_page_does_not_end_the_task(repo, plan):
+    ctx = start(repo, plan, 70)
+    adapter = SparseThirdPage([str(i) for i in range(100)], page_size=20)
+    await Engine(repo, adapter, ctx).run()
+
+    task = repo.get(ctx.root_task_id)
+    assert task.valid_count == 70
+    assert adapter.searches >= 5
+    assert task.checkpoint.exhausted is False
+    assert task.checkpoint.search_stop_reason is None
+    assert snapshots(repo, ctx.root_task_id) == 70
+
+
+class FailOnPageFiveAfterSixtyValid(CountingAdapter):
+    """Page five fails after four pages produced sixty valid creators."""
+
+    async def search(self, plan, cp, ctx):
+        if cp.cursor == "80":
+            raise CollectorError("PLATFORM_PAGE_CHANGED", "SYNTHETIC_PAGE_FIVE_FAILED")
+        return await super().search(plan, cp, ctx)
+
+
+async def test_page_five_failure_keeps_already_persisted_creators(repo, plan):
+    invalid = {str(i) for i in range(80) if i % 20 < 5}
+    adapter = FailOnPageFiveAfterSixtyValid(
+        [str(i) for i in range(100)], page_size=20, invalid=invalid
+    )
+    ctx = start(repo, plan, 70)
+    engine = Engine(repo, adapter, ctx)
+    with pytest.raises(CollectorError, match="SYNTHETIC_PAGE_FIVE_FAILED"):
+        await engine.run()
+    engine.record_error(CollectorError("PLATFORM_PAGE_CHANGED", "SYNTHETIC_PAGE_FIVE_FAILED"))
+
+    task = repo.get(ctx.root_task_id)
+    assert task.valid_count == 60
+    assert task.state == TaskStatus.FAILED
+    assert task.failure_reason == "PLATFORM_PAGE_CHANGED:SYNTHETIC_PAGE_FIVE_FAILED"
+    assert len(task.checkpoint.candidates) == 80
+    assert snapshots(repo, ctx.root_task_id) == 60
+    with repo.connect() as conn:
+        rows = conn.execute(
+            "SELECT count(*) AS n FROM task_creators WHERE root_task_id=%s AND valid",
+            (ctx.root_task_id,),
+        ).fetchone()["n"]
+    assert rows == 60
+
+
 async def test_module_timeout_on_page_boundary_still_reaches_target(repo, plan):
     ctx = start(repo, plan, 24)
     adapter = TimeoutOnTwentiethFans([str(i) for i in range(30)], page_size=20)

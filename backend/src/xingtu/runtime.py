@@ -173,7 +173,14 @@ class UnitConfig(Model):
                 if not binding.enabled:
                     raise CollectorError("RESOURCE_UNAVAILABLE", "PLATFORM_BINDING_DISABLED")
                 return binding
-        if requested == PlatformId.DOUYIN_XINGTU:
+        # The legacy top-level fields are a Douyin Xingtu binding only. A dedicated
+        # single-platform unit (active_platform=kuaishou_juxing) must never silently borrow the
+        # juxing account/profile for a Xingtu task; the worker's DB binding check is the first
+        # fence, this is the second.
+        if (
+            requested == PlatformId.DOUYIN_XINGTU
+            and self.active_platform == PlatformId.DOUYIN_XINGTU
+        ):
             return PlatformBindingConfig(
                 platform=requested,
                 account_ref=self.account_ref,
@@ -198,6 +205,23 @@ class UnitConfig(Model):
             manual_identity_attestation=binding.manual_identity_attestation,
         )
         return UnitConfig.model_validate(data)
+
+    @property
+    def enabled_platforms(self) -> set[PlatformId]:
+        """Platforms this unit may actually execute for.
+
+        The legacy top-level identity is a Xingtu binding only when the unit is active on Xingtu;
+        it is not an implicit binding for a dedicated Juxing unit.
+        """
+
+        platforms = {binding.platform for binding in self.platform_bindings if binding.enabled}
+        if self.active_platform == PlatformId.DOUYIN_XINGTU:
+            platforms.add(PlatformId.DOUYIN_XINGTU)
+        return platforms
+
+    @property
+    def is_multi_platform(self) -> bool:
+        return len(self.enabled_platforms) > 1
 
     @property
     def is_local_development(self) -> bool:

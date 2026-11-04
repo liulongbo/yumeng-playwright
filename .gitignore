@@ -17,6 +17,8 @@ frontend/dist/
 .lazyweb/
 # Transient Playwright MCP session output (page snapshots, console logs, screenshots).
 .playwright-mcp/
+# Oil UI task workspace (process files: exploration mocks, screenshots, fixture payloads).
+.oil-ui/
 # TypeScript build artefacts emitted into the source tree by `tsc -b`.
 frontend/tsconfig.*.tsbuildinfo
 frontend/vite.config.js

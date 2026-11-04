@@ -1035,3 +1035,115 @@ def test_completed_at_only_moves_on_the_transition_into_a_terminal_state(repo, p
     assert reopened["state"] == TaskStatus.QUEUED
     assert reopened["completed_at"] == completed["completed_at"]
     assert reopened["updated_at"] > completed["completed_at"]
+
+
+def test_platform_dedicated_unit_has_no_implicit_xingtu_binding(repo):
+    repo.register_unit(
+        "unit-juxing",
+        "juxing-account",
+        "local-line",
+        "juxing-profile",
+        "local_development",
+        "60821564",
+        register_xingtu_binding=False,
+    )
+    repo.register_unit_platform_binding(
+        "unit-juxing",
+        "kuaishou_juxing",
+        "juxing-account",
+        "60821564",
+        "juxing-profile",
+        "contracts/kuaishou_juxing.verified.json",
+    )
+    with repo.connect() as conn:
+        rows = conn.execute(
+            "SELECT platform,enabled FROM execution_unit_platform_bindings "
+            "WHERE unit_id='unit-juxing' ORDER BY platform"
+        ).fetchall()
+    assert [(row["platform"], row["enabled"]) for row in rows] == [("kuaishou_juxing", True)]
+    from xingtu.domain import TaskKind
+
+    assert repo.select_collection_unit("kuaishou_juxing") == "unit-juxing"
+    # The dedicated Juxing unit must never be a Xingtu candidate.
+    assert repo.select_execution_unit(TaskKind.COLLECTION, "douyin_xingtu") != "unit-juxing"
+
+
+def test_select_collection_unit_prefers_a_healthy_unit_but_keeps_a_single_one(repo):
+    for unit in ("unit-juxing-a", "unit-juxing-b"):
+        repo.register_unit(
+            unit,
+            unit + "-account",
+            "local-line",
+            unit + "-profile",
+            "local_development",
+            "60821564",
+            register_xingtu_binding=False,
+        )
+        repo.register_unit_platform_binding(
+            unit,
+            "kuaishou_juxing",
+            unit + "-account",
+            "60821564",
+            unit + "-profile",
+            "contracts/kuaishou_juxing.verified.json",
+        )
+    assert repo.select_collection_unit("kuaishou_juxing") == "unit-juxing-a"
+    with repo.connect() as conn:
+        conn.execute("UPDATE execution_units SET state='QUARANTINED' WHERE unit_id='unit-juxing-a'")
+    assert repo.select_collection_unit("kuaishou_juxing") == "unit-juxing-b"
+
+
+def test_retry_re_resolves_a_historical_juxing_task_to_the_dedicated_unit(repo):
+    from xingtu.domain import Filter, FilterPlan
+
+    repo.register_unit(
+        "unit-juxing",
+        "juxing-account",
+        "local-line",
+        "juxing-profile",
+        "local_development",
+        "60821564",
+        register_xingtu_binding=False,
+    )
+    repo.register_unit_platform_binding(
+        "unit-juxing",
+        "kuaishou_juxing",
+        "juxing-account",
+        "60821564",
+        "juxing-profile",
+        "contracts/kuaishou_juxing.verified.json",
+    )
+    plan = FilterPlan(
+        schema_version="filter_plan.v3",
+        platform="kuaishou_juxing",
+        capability_version="synthetic-v1",
+        target_count=1,
+        filters=[Filter(field="keyword", operator="eq", value="母婴", source_fields=["keyword"])],
+    )
+    root = repo.create(
+        plan,
+        "unit",
+        uid(),
+        "test",
+        adapter_version="synthetic-v1",
+        contract_version="synthetic-v1",
+        modules=["basic"],
+    )
+    with repo.edit(root) as (task, _):
+        task.state = TaskStatus.FAILED
+        task.failure_reason = "SYNTHETIC"
+    failed = repo.get(root)
+    repo.command(root, "retry", failed.version, "test")
+    retried = repo.get(root)
+    assert retried.execution_unit_id == "unit-juxing"
+    with repo.connect() as conn:
+        column = conn.execute(
+            "SELECT unit_id FROM root_tasks WHERE root_task_id=%s", (root,)
+        ).fetchone()
+        dispatch = conn.execute(
+            "SELECT sent FROM task_dispatches WHERE root_task_id=%s "
+            "AND segment=(SELECT max(segment) FROM task_dispatches WHERE root_task_id=%s)",
+            (root, root),
+        ).fetchone()
+    assert column["unit_id"] == "unit-juxing"
+    assert dispatch["sent"] is False

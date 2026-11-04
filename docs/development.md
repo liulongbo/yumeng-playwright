@@ -86,7 +86,7 @@
 | `XINGTU_ENABLE_KUAISHOU_JUXING` | 磁力聚星入口 Feature Flag，默认 `0`；仅开关不足以绕过 verified 合同门禁 |
 | `XINGTU_JUXING_OBSERVED_CONTRACT_PATH` | 聚星阶段 A 能力证据元数据，默认 `contracts/kuaishou_juxing.observed.json`；不作为 live registry |
 | `XINGTU_JUXING_REGISTRY_PATH` | 聚星可执行能力合同，默认 `contracts/kuaishou_juxing.verified.json`；API、Intake Worker 与执行单元聚星绑定都读取它 |
-| `XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT` | 聚星单任务目标上限，默认 `3`（阶段 B 安全上限），取值 1–200；主站当前配置 `30`，超过返回 `KUAISHOU_JUXING_TARGET_ABOVE_LIMIT` |
+| `XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT` | 聚星单任务目标上限，默认 `200`（与星图一致），取值 1–200；主站当前配置 `200`；前端表单默认目标 `20`，超过返回 `KUAISHOU_JUXING_TARGET_ABOVE_LIMIT` |
 | `XINGTU_TEMPORAL_ADDRESS` | Temporal 地址，默认 `127.0.0.1:57233` |
 | `XINGTU_TEMPORAL_TEST_BINARY` | 固定本地测试服务器可执行文件，避免测试期下载 |
 | `PLAYWRIGHT_BROWSERS_PATH` | Chromium 安装目录，由 Makefile 固定为 `.runtime/browsers` |
@@ -318,8 +318,9 @@ npm --prefix frontend run dev        # http://127.0.0.1:5173
 
 | 项 | 值 |
 |---|---|
-| `.runtime/m3-app.env` | `XINGTU_ENABLE_KUAISHOU_JUXING=1`；`XINGTU_JUXING_REGISTRY_PATH=<repo>/contracts/kuaishou_juxing.verified.json`；`XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT=30` |
-| `.runtime/units/local-dev-mac-02.json` | 顶层星图绑定不变；`platform_bindings` 增加 `kuaishou_juxing`（账号 `60821564`、Profile `.runtime/profiles/unit-local-mac-02-juxing`、聚星 registry） |
+| `.runtime/m3-app.env` | `XINGTU_ENABLE_KUAISHOU_JUXING=1`；`XINGTU_JUXING_REGISTRY_PATH=<repo>/contracts/kuaishou_juxing.verified.json`；`XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT=200` |
+| `.runtime/units/local-dev-mac-02.json` | 星图专属单元；聚星 binding `enabled=false`（平台专属路由，聚星任务不再进入该单元） |
+| `.runtime/units/local-dev-mac-03-juxing.json` | 聚星专属单元；账号 `60821564`、Profile `.runtime/profiles/unit-local-mac-03-juxing`、聚星 registry |
 | 主库 `execution_unit_platform_bindings` | Collection Worker 启动时幂等注册；同单元双绑定 |
 | 数据库 | `xingtu_development`（PG 55432）；迁移 20；无新迁移 |
 | Temporal/Redis | `127.0.0.1:57233` / Redis 56379 DB0 |
@@ -357,3 +358,67 @@ curl -s -b <cookies> 'http://127.0.0.1:8000/api/tasks?platform=kuaishou_juxing&l
 - 不启动定时更新调度器；不读写主站 `8000/5173` 的业务数据
 - 启停脚本位于 `.runtime`（gitignored），长期入口需另立任务纳入版本控制
 - 详细记录：[OPS-05 证据](evidence/OPS-05-juxing-stack-2026-10-31.md)、[OPS-05 卡片](tasks/OPS-05.md)
+
+## 2026-11-03 双平台专属执行单元（DUAL-UNIT-01，实施中）
+
+> 自本轮起，5173 主站不再让巨量星图与磁力聚星共享同一个执行单元。每个平台一个专属单元、一个 Collection Worker、一条 Temporal 队列、并发 1；跨平台任务可并行，同平台任务仍串行。数据库无新迁移；旧 `unit-local-mac-02` 保留星图身份与历史数据。
+
+| 项 | 巨量星图 | 磁力聚星 |
+|---|---|---|
+| 执行单元 | `unit-local-mac-02` | `unit-local-mac-03-juxing` |
+| 单元配置 | `.runtime/units/local-dev-mac-02.json` | `.runtime/units/local-dev-mac-03-juxing.json` |
+| Temporal 队列 | `xingtu-unit-local-mac-02` | `xingtu-unit-local-mac-03-juxing` |
+| 账号 | `ID: 1807978499337419` | `60821564` |
+| Profile | `.runtime/profiles/unit-local-mac-02` | `.runtime/profiles/unit-local-mac-03-juxing` |
+| 快照 | `.runtime/profiles/storage-state/unit-local-mac-02.json` | `.runtime/profiles/storage-state/unit-local-mac-03-juxing.kuaishou_juxing.json` |
+| binding | 星图 `enabled=true`；聚星 `enabled=false`（仅保留合同声明） | 聚星 `enabled=true`；无星图 binding |
+| 网络 | `local_development`，共用本机出口 | `local_development`，共用本机出口 |
+
+启动（本机当前保持自动更新调度器关闭）：
+
+```bash
+SKIP_UPDATE_SCHEDULER=1 ./dev.sh up
+./dev.sh status
+./dev.sh logs collection-worker-juxing
+./dev.sh stop
+```
+
+- `UNIT_CONFIG` 可覆盖星图配置；`JUXING_UNIT_CONFIG` 可覆盖聚星配置。
+- `dev.sh` 会启动两个 Collection Worker：`collection-worker`（星图）与 `collection-worker-juxing`（聚星）；`status` 同时显示两 Worker 与三条队列（intake + 两 collection）。
+- `make m3-up` 也可用 `--extra-unit-config .runtime/units/local-dev-mac-03-juxing.json` 启动双单元；主单元仍要求 `READY`，额外单元允许 `NEEDS_LOGIN/SESSION_UNVERIFIED`（首次任务会打开有界维护窗口），但 `QUARANTINED` 阻止启动。
+- 一个 Collection Worker 退出不会终止另一个单元；API/Intake/前端退出仍会终止整个受管栈。
+
+首次切换（Gate B，需用户确认停机窗口/会话/Playwright MCP 后执行）：
+
+1. 只读预检：无在途任务、无 owner/lease/takeover；旧聚星 binding 字段与星图单元配置一致；新 `account_ref/profile_ref` 无唯一冲突。
+2. 备份业务库、`.runtime/units/local-dev-mac-02.json`、旧聚星 Profile 与快照。
+3. 复制旧聚星 Profile 到新路径（排除 `Singleton*`/`*.lock`），用 `session-diagnostics --config <聚星配置>` 核验会话并在 Worker 私有根导出新快照；无效时用 `scripts/juxing_login_maintenance.py --config <聚星配置> --private-root .runtime/profiles` 由人工完成登录/子账号选择。
+4. `xingtu register-unit --config .runtime/units/local-dev-mac-03-juxing.json`（不会再隐式创建星图 binding）。
+5. 启动星图 Collection Worker（把旧单元聚星 binding 置为 `enabled=false`）→ 启动聚星 Collection Worker（注册新聚星 binding）→ 校验 DB/两队列 → 启动 Intake/API/前端。
+6. 按 [DUAL-UNIT-01](tasks/DUAL-UNIT-01.md) 的测试用例做真实双平台并行/串行、路由、数据、异常隔离与历史回归验收。
+
+回滚：
+
+1. 停止两个 Collection Worker 与 Intake；确认没有非终态任务仍指向新聚星单元。
+2. 恢复 `.runtime/units/local-dev-mac-02.json` 备份（聚星 binding `enabled=true`）。
+3. 只启动一个 Collection Worker（星图配置），回到旧“单单元双平台串行”。
+4. 新单元行/Profile/快照保留，不删除；如不再使用，可用一次性审计数据更新把新聚星 binding 置为 `enabled=false`。
+
+验证要点：
+
+- 两单元各自 1 个新鲜 Worker、两条 collection 队列各有新鲜消费者。
+- 并行时两单元均 `LEASED/collect`、不同 `current_root_task_id`、不同 `browser_instance_id`；两 Profile 的 `.lock` 均 BUSY，`SingletonLock` PID 不同。
+- 同一单元任意时刻最多 1 个真实采集 activity；第二任务 activity start 晚于第一任务 complete。
+- 切换后新建星图任务只落 `unit-local-mac-02`，聚星任务只落 `unit-local-mac-03-juxing`；历史聚星任务 retry/continue 会重新解析到新单元。
+
+边界：两个单元仍共用本机网络出口、Temporal、PostgreSQL、Redis；这些共同依赖故障会同时影响两个平台，不属于执行单元隔离范围。本机自动更新调度器仍保持关闭；恢复启动不在本任务范围。
+
+参考：[DUAL-UNIT-01](tasks/DUAL-UNIT-01.md)、[DEC-020](decisions/DEC-020-two-platform-dedicated-execution-units.md)。
+
+### 2026-11-03 实施结果（核心 GO）
+
+- 已真实切换并通过双平台验收：13 条真实任务全部 `COMPLETED`、各 1/1；跨平台 activity 重叠 65.99s；同平台任务衔接 0.002/0.003s；每单元最大活动采集 1；两方向 Worker 离线/重启隔离；真实星图滑块/接管/恢复；全栈重启后两单元/两队列/两 Worker 恢复。
+- 证据：[DUAL-UNIT-01 真实验收](evidence/DUAL-UNIT-01-live-acceptance-2026-11-03.md)。
+- 已知既有问题：真实挑战恢复后出现一次 `WAITING_FOR_RESOURCE: LEASE_LOST` 并由 Workflow 30s 重试恢复；`dev.sh restart` 首次可能撞上上一代 Worker 45 秒心跳去重窗口（OPS-03 已记录），等待后再次 `up` 即可。
+- `dev.sh up` 是完整栈启动，主单元 `LEASED` 时会被 `EXECUTION_UNIT_READY` 拒绝；只重启另一个单元时需用 CLI 单独启动缺失 Worker（本轮已验证）。后续可增加单 Worker 启停入口。
+- 未执行：Chrome 强制关闭、会话失效、单任务取消、手动更新真实回归、完整回滚演练、精确资源 RSS。

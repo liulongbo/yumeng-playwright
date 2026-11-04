@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-from xingtu.domain import CollectorError, NetworkMode
+from xingtu.browser_host import release_disposition_for
+from xingtu.domain import CollectorError, NetworkMode, PlatformId, ReleaseDisposition
 from xingtu.evidence import EvidenceSummary
 from xingtu.runtime import (
     BrowserRuntime,
@@ -43,6 +44,28 @@ LOCAL = {
     "network_mode": "local_development",
     "browser_executable_path": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "research_allowed_hosts": ["www.xingtu.cn"],
+}
+
+JUXING_ONLY = {
+    "unit_id": "unit-local-mac-03-juxing",
+    "account_ref": "juxing-account-03",
+    "expected_account_id": "60821564",
+    "line_id": "local-dev",
+    "profile_directory": "/tmp/juxing-profile",
+    "registry_path": "/tmp/kuaishou-registry.json",
+    "active_platform": "kuaishou_juxing",
+    "network_mode": "local_development",
+    "browser_executable_path": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "research_allowed_hosts": ["k.kuaishou.com"],
+    "platform_bindings": [
+        {
+            "platform": "kuaishou_juxing",
+            "account_ref": "juxing-account-03",
+            "expected_account_id": "60821564",
+            "profile_directory": "/tmp/juxing-profile",
+            "registry_path": "/tmp/kuaishou-registry.json",
+        }
+    ],
 }
 
 
@@ -140,6 +163,37 @@ def test_platform_bindings_fail_closed_for_missing_disabled_or_shared_profiles()
                 ],
             }
         )
+
+
+def test_juxing_dedicated_unit_does_not_inherit_the_xingtu_identity():
+    config = UnitConfig.model_validate(JUXING_ONLY)
+    assert config.active_platform is PlatformId.KUAISHOU_JUXING
+    assert config.enabled_platforms == {PlatformId.KUAISHOU_JUXING}
+    assert not config.is_multi_platform
+    assert config.for_platform("kuaishou_juxing").profile_directory.as_posix() == (
+        "/tmp/juxing-profile"
+    )
+    with pytest.raises(CollectorError, match="PLATFORM_BINDING_NOT_CONFIGURED"):
+        config.for_platform("douyin_xingtu")
+
+
+def test_release_disposition_keeps_shared_units_available_to_xingtu():
+    assert (
+        release_disposition_for(PlatformId.DOUYIN_XINGTU, True, ReleaseDisposition.LOGIN_REQUIRED)
+        is ReleaseDisposition.LOGIN_REQUIRED
+    )
+    # Shared unit executing Juxing: the Xingtu binding still exists, so the unit stays READY.
+    assert (
+        release_disposition_for(PlatformId.KUAISHOU_JUXING, True, ReleaseDisposition.LOGIN_REQUIRED)
+        is ReleaseDisposition.VERIFIED_READY
+    )
+    # Dedicated Juxing unit: its own observation is the real unit state.
+    assert (
+        release_disposition_for(
+            PlatformId.KUAISHOU_JUXING, False, ReleaseDisposition.LOGIN_REQUIRED
+        )
+        is ReleaseDisposition.LOGIN_REQUIRED
+    )
 
 
 async def test_ensure_line_local_needs_no_proof_but_rejects_a_proxy():
