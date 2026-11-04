@@ -18,14 +18,16 @@
 #   2. 记录 PID，使 stop 能停掉 API 与前端（否则只能留后台游离进程）；
 #   3. 启动后给出中文就绪状态与登录地址。
 #
-# 配置不重复：环境仍读 .runtime/m3-app.env 与 .runtime/deepseek.env，单元仍读
-# .runtime/units/local-dev-mac-02.json。
+# 配置不重复：环境仍读 .runtime/m3-app.env 与 .runtime/deepseek.env；执行单元读
+# 星图/聚星两份私有配置（聚星为专属单元）。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 UNIT_CONFIG="${UNIT_CONFIG:-$ROOT/.runtime/units/local-dev-mac-02.json}"
+JUXING_UNIT_CONFIG="${JUXING_UNIT_CONFIG:-$ROOT/.runtime/units/local-dev-mac-03-juxing.json}"
+SKIP_UPDATE_SCHEDULER="${SKIP_UPDATE_SCHEDULER:-0}"
 M3_ENV="$ROOT/.runtime/m3-app.env"
 MODEL_ENV="$ROOT/.runtime/deepseek.env"
 LOG_DIR="$ROOT/.runtime/logs"
@@ -39,14 +41,17 @@ usage() {
   cat <<'EOF'
 用法：./dev.sh [up|stop|restart|status|logs [名称]|check|help]
 
-  up      启动依赖 → 前置自检 → API、Intake Worker、采集 Worker、前端页面
+  up      启动依赖 → 前置自检 → API、Intake Worker、两个采集 Worker、前端页面
   stop    停止本脚本启动的进程（保留数据库、对象、profile 与浏览器数据）
   restart 先 stop 再 up
   status  查看进程 / 端口 / API 健康 / 队列消费者新鲜度
-  logs    跟踪全部日志；logs api / intake-worker / collection-worker / update-scheduler / frontend 看单个
+  logs    跟踪全部日志；logs api / intake-worker / collection-worker / collection-worker-juxing / update-scheduler / frontend 看单个
   check   只做前置自检，不启动任何进程
 
-环境变量：UNIT_CONFIG 可覆盖执行单元配置（默认 .runtime/units/local-dev-mac-02.json）。
+环境变量：
+  UNIT_CONFIG           星图执行单元配置（默认 .runtime/units/local-dev-mac-02.json）
+  JUXING_UNIT_CONFIG    聚星专属执行单元配置（默认 .runtime/units/local-dev-mac-03-juxing.json）
+  SKIP_UPDATE_SCHEDULER 为 1 时不启动自动更新调度器（本机当前保持 1）
 EOF
 }
 
@@ -97,7 +102,9 @@ load_env() {
 preflight() {
   load_env
   "$ROOT/.venv/bin/python" "$ROOT/scripts/m3_up.py" --check \
-    --with-collection --with-frontend --unit-config "$UNIT_CONFIG"
+    --with-collection --with-frontend \
+    --unit-config "$UNIT_CONFIG" \
+    --extra-unit-config "$JUXING_UNIT_CONFIG"
 }
 
 wait_http() {
@@ -129,12 +136,23 @@ start_bg() {
 #   0 个 → 启动；1 个未记录 → 接管并记录 PID；被记录且存活 → 沿用；
 #   多个 → 只保留被记录（或最先存在的）一个，其余明确报告后结束。
 # 多栈并存时（例如聚星隔离栈 4192/4193），必须按单元配置区分，否则会把另一栈的
-# Worker 误判成本栈重复并结束它。
-worker_pattern() {
+# Worker 误判成本栈重复并结束它。星图与聚星主站是两个不同的专属单元，同样必须按配置
+# 路径区分；两份配置路径刻意不互为前缀。
+worker_config() {
   case "$1" in
-    intake-worker) printf 'xingtu-product intake-worker --unit-config %s' "$UNIT_CONFIG" ;;
-    collection-worker) printf 'xingtu worker --config %s' "$UNIT_CONFIG" ;;
-    update-scheduler) printf 'xingtu-product update-scheduler --unit-config %s' "$UNIT_CONFIG" ;;
+    collection-worker-juxing) printf '%s' "$JUXING_UNIT_CONFIG" ;;
+    *) printf '%s' "$UNIT_CONFIG" ;;
+  esac
+}
+
+worker_pattern() {
+  local config
+  config="$(worker_config "$1")"
+  case "$1" in
+    intake-worker) printf 'xingtu-product intake-worker --unit-config %s' "$config" ;;
+    collection-worker|collection-worker-juxing)
+      printf 'xingtu worker --config %s' "$config" ;;
+    update-scheduler) printf 'xingtu-product update-scheduler --unit-config %s' "$config" ;;
   esac
 }
 
@@ -162,6 +180,8 @@ reconcile_worker() {
         start_bg intake-worker "$ROOT/.venv/bin/xingtu-product" intake-worker --unit-config "$UNIT_CONFIG" ;;
       collection-worker)
         start_bg collection-worker "$ROOT/.venv/bin/xingtu" worker --config "$UNIT_CONFIG" ;;
+      collection-worker-juxing)
+        start_bg collection-worker-juxing "$ROOT/.venv/bin/xingtu" worker --config "$JUXING_UNIT_CONFIG" ;;
       update-scheduler)
         start_bg update-scheduler "$ROOT/.venv/bin/xingtu-product" update-scheduler --unit-config "$UNIT_CONFIG" ;;
     esac
@@ -216,10 +236,15 @@ cmd_up() {
 
   # 2) P1 需求转换 Worker（缺它任务会停在 RECEIVED）
   reconcile_worker intake-worker
-  # 3) P2 采集 Worker（缺它任务会停在 QUEUED；采集时会打开真实 Chrome）
+  # 3) 两个平台专属 P2 采集 Worker（各自独立队列/Profile/Chrome；采集时会打开真实 Chrome）
   reconcile_worker collection-worker
+  reconcile_worker collection-worker-juxing
   # 4) 定时更新调度器（只读写数据库；不运行则仅定时更新暂停，不影响采集）
-  reconcile_worker update-scheduler
+  if [ "$SKIP_UPDATE_SCHEDULER" = "1" ]; then
+    log "按 SKIP_UPDATE_SCHEDULER=1 跳过 update-scheduler"
+  else
+    reconcile_worker update-scheduler
+  fi
 
   # 5) 前端页面
   if port_open "$FRONTEND_PORT"; then
@@ -243,8 +268,8 @@ cmd_up() {
   后端： http://127.0.0.1:$API_PORT   （healthcheck：GET /api/auth/me -> 401）
   登录： media-a / media-b（口令见 .runtime/qa-credentials.env）
   日志： tail -f .runtime/logs/*.log     停止： ./dev.sh stop
-  说明： 「达人库」页数据来自已采集的抖音星图达人；新建采集任务会调用真实
-         星图（打开 Chrome，需已登录的执行单元账号）。
+  说明： 「达人库」页按平台展示已采集达人；新建采集任务会调用真实平台（打开对应
+         专属执行单元的 Chrome，需已登录的星图/聚星账号）。
 ============================================================
 EOF
 }
@@ -253,19 +278,28 @@ check_consumers() {
   local dsn addr
   dsn="$(awk -F= '/^XINGTU_DATABASE_URL=/{print substr($0,index($0,"=")+1)}' "$M3_ENV")"
   addr="$(awk -F= '/^XINGTU_TEMPORAL_ADDRESS=/{print substr($0,index($0,"=")+1)}' "$M3_ENV")"
-  XINGTU_DATABASE_URL="$dsn" "$ROOT/.venv/bin/python" - "$addr" <<'PY' || return 1
+  XINGTU_DATABASE_URL="$dsn" "$ROOT/.venv/bin/python" - \
+    "$addr" "$UNIT_CONFIG" "$JUXING_UNIT_CONFIG" <<'PY' || return 1
 import asyncio, sys
+from pathlib import Path
 sys.path.insert(0, "backend/src")
-from xingtu.worker_health import check_queues
+from xingtu.runtime import load_unit
+from xingtu.worker_health import check_queues, collection_queue
 
 async def main() -> int:
     addr = sys.argv[1]
-    queues = ["xingtu-intake", "xingtu-unit-local-mac-02"]
+    configs = [Path(value) for value in sys.argv[2:] if value]
+    missing = [str(path) for path in configs if not path.is_file()]
+    if missing:
+        print("  配置缺失：" + "、".join(missing))
+        return 1
+    units = [load_unit(path).unit_id for path in configs]
+    queues = ["xingtu-intake"] + [collection_queue(unit) for unit in units]
     results = await check_queues(addr, queues)
     ok = True
     for queue, health in results.items():
         state = "在线" if health.alive else "未就绪"
-        print(f"  队列 {queue:<28} {state}  新鲜消费者={health.fresh_pollers}  "
+        print(f"  队列 {queue:<34} {state}  新鲜消费者={health.fresh_pollers}  "
               f"最老刷新={health.freshest_age_seconds}s  {health.error or ''}")
         ok = ok and health.alive
     return 0 if ok else 1
@@ -309,6 +343,7 @@ cmd_status() {
   svc_line frontend "$FRONTEND_PORT"
   worker_line intake-worker
   worker_line collection-worker
+  worker_line collection-worker-juxing
   worker_line update-scheduler
 
   echo "== 端口 =="
@@ -366,6 +401,7 @@ cmd_stop() {
     # 先停消费者与前端，最后停 API，避免页面先断连。
     stop_pid intake-worker
     stop_pid collection-worker
+    stop_pid collection-worker-juxing
     stop_pid update-scheduler
     stop_pid frontend
     stop_pid api

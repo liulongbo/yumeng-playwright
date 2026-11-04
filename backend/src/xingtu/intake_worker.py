@@ -107,14 +107,17 @@ class IntakeProcessor:
             return TaskStatus.FAILED
         if result.outcome == "succeeded" and result.final_plan:
             try:
+                platform = state.requirement_form.platform
+                # Dedicated execution units: the platform, not the ingestion worker's own unit
+                # config, decides where the task may run. Falling back to the configured unit
+                # keeps single-unit and internal-tool behaviour unchanged.
+                platform_unit = self.repository.repository.select_collection_unit(platform)
                 self.repository.promote_intake(
                     result,
                     result.final_plan,
-                    unit_id=self.execution_unit_id,
+                    unit_id=platform_unit or self.execution_unit_id,
                     registry=registry,
-                    profile_requirement=self._profile_requirement_for(
-                        state.requirement_form.platform
-                    ),
+                    profile_requirement=self._profile_requirement_for(platform),
                 )
             except CollectorError as exc:
                 if exc.code == "TASK_CANCELLED":

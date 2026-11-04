@@ -1,5 +1,23 @@
 # 开发任务索引
 
+# 2026-11-03 DUAL-70-01：巨量星图与磁力聚星单任务 70 位真实采集能力（已完成：两平台 70/70；星图 PARTIAL、聚星 COMPLETED）
+
+[DUAL-70-01](DUAL-70-01.md) 定位并最小修复两平台阻止单任务 70 位有效达人采集的真实限制：聚星表单默认 3、运行时上限 30、星图契约分页 page 3、聚星契约分页 page 2。真实验证两平台 page 1—5（各 20 位、跨页 0 重复、page 6 fail closed），契约边界提升到 5；聚星产品上限/运行时对齐 200、表单默认 20。两平台各 5 位小样本通过；随后严格顺序完成两个 70 位真实 UI 任务：**星图 `51dfca56…` 70/70 有效、70 distinct 入库、81 候选、page 1—4、终态 `PARTIAL_COMPLETED / PROFILE_SCOPE_INCOMPLETE`（资料完整 22/70）；聚星 `f7a8f087…` 70/70 有效、70 distinct、70 快照、80 候选、page 1—4、终态 `COMPLETED`**。星图曾因 `_wake_unresolved_modules`/featured 的“商业能力”90s 动作超时两次失败（32/70、33/70），已做 P0 局部化+同 tab 去重，5 位回归通过后对同一任务两次前端“继续采集”补足；未新建重复任务、未重采已入库达人。最终 unit **383 passed**、contract **43**、integration **128/1 skipped**、E2E **14**、前端 **106**+build、Mypy/Ruff 通过。数量/入库/前端：两平台 PASS；严格 `COMPLETED` 口径：星图部分完成，补采 48 位待授权。未提交 Git。
+
+# 2026-11-03 DUAL-UNIT-01：双平台专属执行单元拆分（待验收，核心目标 GO）
+
+[DUAL-UNIT-01](DUAL-UNIT-01.md) 将共享单元 `unit-local-mac-02` 拆为巨量星图专属（保留原单元）与磁力聚星专属 `unit-local-mac-03-juxing`：两个 Collection Worker、两条 `xingtu-<unit_id>` 队列、各自并发 1、各自账号/Profile/Chrome/租约。已完成真实切换：新单元注册、聚星 Profile 复制与 VALID 核验、旧聚星 binding 禁用、双 Worker/三队列就绪。13 条真实 UI 任务全部 `COMPLETED`、各 1/1、平台字段正确；新星图任务全部旧 unit、新聚星任务全部新 unit。干净并行对星图 `c847f162` 与聚星 `c68f54ff` 真实 activity 重叠 **65.99s**，66 个 1 秒采样点两 unit 同时 collecting；双平台各两任务 A/B 串行（B 在 A 完成后 0.002s），C/D 串行（D 在 C 完成后 0.003s），每 unit 最大活动采集 1。两方向 Worker 离线/重启隔离、真实星图滑块/接管/恢复、全栈重启均通过。已验证：离线单元 **375 passed**、合同 **43 passed**、隔离集成 **122 passed / 4 skipped**、E2E **14 passed**、前端 **106 passed**+tsc+build、Mypy 38 files。已知：挑战恢复出现一次既有 `LEASE_LOST`+30s 重试；首次 restart 撞既有 45s Worker 去重窗口。未执行 Chrome 强制关闭/会话失效/取消/手动更新/完整回滚/资源 RSS。真实报告：[DUAL-UNIT-01 真实切换与验收证据](../evidence/DUAL-UNIT-01-live-acceptance-2026-11-03.md)；回归测试：[DUAL-UNIT-01 回归测试用例与结果](../evidence/DUAL-UNIT-01-regression-test-2026-11-03.md)（UI R1—R9 全 PASS、动态 4 任务并行/串行 PASS、历史未重写；未发现产品缺陷）；决策：[DEC-020](../decisions/DEC-020-two-platform-dedicated-execution-units.md)。
+
+# 2026-10-31 DEPLOY-WIN-01：Windows 星图账号持久化审计（进行中，当前 NO-GO）
+
+[DEPLOY-WIN-01](DEPLOY-WIN-01.md) 已根据 Windows 实际部署和星图冷启动登录失效证据重新打开。审计确认：
+浏览器实际绑定来自 Collection Worker 的 `--config` JSON；数据库历史 `READY/VALID` 不是新 Chrome 进程证明；
+星图采用专属持久 Profile + `.runtime/profiles/storage-state/<unit_id>.json` 两层持久化，快照只可在同一
+绑定的受控 BrowserContext 内、账号精确匹配且受保护页可用后生成。已补 Windows 配置、快照元数据核对、
+同一上下文重新登录和双冷启动验收步骤；定向离线测试 **32 passed**。未连接 Windows、未登录／重启／采集；
+必须两次冷启动均 `VALID`、账号一致、`restored_before_navigation=true` 后，才可重跑星图第 4—8 页。
+报告：[Windows 星图账号绑定与会话持久化审计](../evidence/DEPLOY-WIN-01-xingtu-session-persistence-review-2026-10-31.md)。
+
 # 2026-10-31 JUXING-DELIVERY-01：双平台代码交付至 GitHub main（已完成）
 
 [JUXING-DELIVERY-01](JUXING-DELIVERY-01.md) 审查并交付巨量星图 + 磁力聚星双平台最新代码。审查结论 **GO**：修复 2 个 P1（`inspect_session`/`read_account` 空账号节点会让共享会话校验从有界轮询退化为 `MODULE_COLLECTION_FAILED`；聚星 `prepare` 把 `max_verified+1` 正常哨兵判为超限导致重试 FAILED）、3 个前端 P2（子账号接管链接指向不存在的 `/units`、星图达人库行丢失「达人类型」、聚星报价档位切换后控件复位）与 1 处加固（释放前的平台会话观测失败不再跳过 `repo.release`）。自动回归：后端单元+合同 **411 passed**、隔离 PostgreSQL 集成 **121 passed / 1 skipped**、Temporal E2E **14 passed**、前端 **106 passed**+tsc+build、Mypy 38 files、Ruff 仅既有 11 个 `scripts/acceptance` UP031、`git diff --check` 通过。提交 `5795889`（后端/合同/迁移 020，41 文件）、`f992021`（前端，13 文件）、`ab39b28`（证据/文档/QA 工具，52 文件），推送 `快手_1026`，在独立 worktree 中 `--no-ff` 合并为 **`24e3606`** 并推送 `main`（非 force）；远程 `main` SHA、提交祖先关系、文件一致性与 5173/8000 运行状态均已复核。`gh` 未登录，无 PR，按仓库既有直接合并做法执行。`.runtime`、Cookie、Profile、dump、私有 env 未提交。

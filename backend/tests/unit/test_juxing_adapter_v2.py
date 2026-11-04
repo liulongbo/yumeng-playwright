@@ -147,10 +147,10 @@ def search_payload(page_number: int, total: int, count: int, start: int = 0) -> 
     }
 
 
-def test_contract_registers_page_two_and_the_filter_surface():
+def test_contract_registers_pages_one_to_five_and_the_filter_surface():
     parsed = registry()
     assert parsed.search is not None
-    assert parsed.search.page_fetch_max_verified == 2
+    assert parsed.search.page_fetch_max_verified == 5
     assert parsed.search.single_page_only is False
     assert parsed.search.resume_supported is True
     capabilities = {field.field: field for field in parsed.capabilities.fields}
@@ -253,13 +253,35 @@ async def test_page_two_search_rebuilds_filters_and_advances_checkpoint():
     assert body["userName"] == "母婴"
 
 
+async def test_page_five_search_rebuilds_filters_and_keeps_advancing():
+    subject = adapter()
+    subject.search_page = page()
+    subject.check_session = AsyncMock()
+    subject._post_json = AsyncMock(return_value=search_payload(5, total=101, count=20, start=80))
+    current = cp(plan([keyword(), content(["maternal_child"])]))
+    current.cursor = "5"
+    result = await subject.search(
+        plan([keyword(), content(["maternal_child"])]), current, context()
+    )
+    assert [candidate.platform_creator_id for candidate in result.candidates] == [
+        str(80 + index) for index in range(20)
+    ]
+    assert result.current_checkpoint == "5"
+    assert result.next_checkpoint == "6"
+    assert result.exhausted is False
+    body = subject._post_json.await_args.args[2]
+    assert body["currentPage"] == 5
+    assert body["contentTagIdList"][0]["id"] == "676"
+    assert body["userName"] == "母婴"
+
+
 async def test_cursor_above_the_verified_bound_fails_closed():
     subject = adapter()
     subject.search_page = page()
     subject.check_session = AsyncMock()
     subject._post_json = AsyncMock()
     current = cp(plan([keyword()]))
-    current.cursor = "3"
+    current.cursor = "6"
     with pytest.raises(CollectorError, match="JUXING_PAGE_LIMIT"):
         await subject.search(plan([keyword()]), current, context())
     subject._post_json.assert_not_awaited()
@@ -296,7 +318,7 @@ async def test_prepare_resumes_page_two_without_refetching_page_one():
 
 
 async def test_prepare_resumes_the_sentinel_cursor_after_the_last_verified_page():
-    """After page 2 the engine stores "3" while page-2 candidates are still being collected.
+    """After page 5 the engine stores "6" while page-5 candidates are still being collected.
 
     A retry in that state must resume, not fail: the capability boundary is enforced by
     ``search()`` (which the engine turns into a partial completion), not by ``prepare``.
@@ -312,9 +334,9 @@ async def test_prepare_resumes_the_sentinel_cursor_after_the_last_verified_page(
     subject.check_session = AsyncMock()
     subject._post_json = AsyncMock()
     assert subject.registry.search is not None
-    assert subject.registry.search.page_fetch_max_verified == 2
+    assert subject.registry.search.page_fetch_max_verified == 5
     current = cp(plan([keyword()]))
-    current.cursor = "3"
+    current.cursor = "6"
     assert await subject.prepare(plan([keyword()]), current, context()) is True
     subject._post_json.assert_not_awaited()
 
@@ -329,7 +351,7 @@ async def test_prepare_still_rejects_a_cursor_beyond_the_verified_sentinel():
     subject.browser = browser
     subject.check_session = AsyncMock()
     current = cp(plan([keyword()]))
-    current.cursor = "4"
+    current.cursor = "7"
     with pytest.raises(CollectorError) as excinfo:
         await subject.prepare(plan([keyword()]), current, context())
     assert excinfo.value.code == "SEARCH_CAPABILITY_LIMIT"

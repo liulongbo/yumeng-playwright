@@ -907,9 +907,7 @@ class BrowserAdapter:
             try:
                 if await locator.count() == 1 and await locator.is_visible():
                     try:
-                        value = await self.read_locator(
-                            page, spec.account, require_non_empty=True
-                        )
+                        value = await self.read_locator(page, spec.account, require_non_empty=True)
                     except CollectorError:
                         # The nav node can exist yet still be empty while the SPA hydrates, and a
                         # contract-declared capture_regex can miss a re-rendered label.  Neither is
@@ -1480,17 +1478,59 @@ class BrowserAdapter:
         left untouched, so a creator whose homepage prefetches the endpoint gets no extra click and
         no duplicated request. Readiness stays evidence-based - ``wait_ready`` re-asserts the
         module's registered ready selector and ``read`` still performs the bounded settle wait.
+
+        A wake action is optional module work.  Its Playwright action timeout and its registered
+        readiness timeout are therefore scoped to that module, exactly like ``collect_module``:
+        the module is recorded as failed and the remaining modules/creator continue.  Without this,
+        one unresponsive tab (observed 2026-11-04: the "商业能力" click on creator 32) escalated a
+        90-second optional action timeout into a task-level ``BROWSER_ACTION_FAILED`` failure.  The
+        same tab is also shared by seeding and conversion, so an action selector that was already
+        attempted is not clicked again; the second module's missing responses are failed explicitly
+        instead of paying another 90-second timeout for the same tab.
         """
 
+        attempted_clicks: set[str] = set()
         for module in modules:
             if module is shared or not module.actions:
                 continue
-            if not any(
-                spec.required and spec.key not in capture.results for spec in module.requests
-            ):
+            missing = [
+                spec
+                for spec in module.requests
+                if spec.required and spec.key not in capture.results
+            ]
+            if not missing:
                 continue
-            await self.actions(page, module.actions)
-            await self.wait_ready(page, module.ready, module.ready_hidden)
+            actions: list[Action] = []
+            for action in module.actions:
+                if action.kind == "click":
+                    selector = action.locator.selector
+                    if selector in attempted_clicks:
+                        continue
+                    attempted_clicks.add(selector)
+                actions.append(action)
+            if not actions:
+                # The same tab interaction was already attempted for an earlier module.  Do not
+                # spend another action timeout on it; fail only the still-missing responses.
+                self._fail_wake(capture, module, "WAKE_ACTION_SKIPPED")
+                continue
+            try:
+                await self.actions(page, actions)
+                await self.wait_ready(page, module.ready, module.ready_hidden)
+            except PlaywrightTimeoutError:
+                self._fail_wake(capture, module, "WAKE_ACTION_TIMEOUT")
+            except CollectorError as exc:
+                if exc.code != "PLATFORM_PAGE_CHANGED" or exc.reason != "PAGE_READY_TIMEOUT":
+                    # Session, challenge, identity and lease errors remain fatal.
+                    raise
+                self._fail_wake(capture, module, "WAKE_READY_TIMEOUT")
+
+    @staticmethod
+    def _fail_wake(capture: ResponseCollector, module: ProfileModuleSpec, reason: str) -> None:
+        """Mark only this module's still-missing required responses as failed."""
+
+        for spec in module.requests:
+            if spec.required and spec.key not in capture.results:
+                capture.failures.setdefault(spec.key, reason)
 
     async def verify_identity(self, page: Page, creator: CreatorRef) -> None:
         """Require the page's identity to be a non-empty, confirmed value. Bounded, fail closed.
@@ -1748,6 +1788,32 @@ class BrowserAdapter:
             failure_reason=reason,
         )
 
+    async def _run_featured_interaction(self, page: Page, spec: FeaturedCollectionSpec) -> None:
+        """Scope a featured tab action/readiness timeout to this collection.
+
+        Profile modules already localize an optional tab timeout; the featured collections use
+        the same shared tab (e.g. "商业能力") and must not escalate a slow click into a task-level
+        ``BROWSER_ACTION_FAILED``.  The converted ``MODULE_COLLECTION_FAILED`` is recognized by
+        ``featured_spec_local_reason`` and becomes a failed collection observation for this
+        collection only; session/challenge/identity/lease errors still propagate.
+        """
+
+        try:
+            await self.actions(page, spec.actions)
+            await self.wait_ready(page, spec.ready, spec.ready_hidden)
+        except PlaywrightTimeoutError as exc:
+            raise CollectorError(
+                "MODULE_COLLECTION_FAILED",
+                f"FEATURED_ACTION_TIMEOUT:{spec.key.value}",
+            ) from exc
+        except CollectorError as exc:
+            if exc.code != "PLATFORM_PAGE_CHANGED" or exc.reason != "PAGE_READY_TIMEOUT":
+                raise
+            raise CollectorError(
+                "MODULE_COLLECTION_FAILED",
+                f"FEATURED_READY_TIMEOUT:{spec.key.value}",
+            ) from exc
+
     async def _collect_featured(
         self,
         page: Page,
@@ -1782,8 +1848,7 @@ class BrowserAdapter:
                 await self.navigate(page, entry)
                 self.registry.validate_platform_url(page.url)
                 await self.check_session(page)
-            await self.actions(page, spec.actions)
-            await self.wait_ready(page, spec.ready, spec.ready_hidden)
+            await self._run_featured_interaction(page, spec)
             await self.check_session(page)
             if spec.response_settle_seconds:
                 await asyncio.sleep(spec.response_settle_seconds)

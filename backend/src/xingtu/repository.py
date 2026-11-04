@@ -281,6 +281,8 @@ class Repository:
         profile: str,
         network_mode: str = NetworkMode.PRODUCTION_LINE.value,
         expected_account_id: str | None = None,
+        *,
+        register_xingtu_binding: bool = True,
     ) -> None:
         with self.connect() as conn:
             conn.execute(
@@ -305,13 +307,18 @@ class Repository:
                 raise CollectorError("RESOURCE_UNAVAILABLE", "unit binding is immutable")
             if expected_account_id and row["expected_account_id"] != expected_account_id:
                 raise CollectorError("RESOURCE_UNAVAILABLE", "unit account identity is immutable")
-            conn.execute(
-                """INSERT INTO execution_unit_platform_bindings(
-                unit_id,platform,account_ref,expected_account_id,profile_ref,registry_ref)
-                VALUES(%s,'douyin_xingtu',%s,%s,%s,'contracts/douyin_xingtu.verified.json')
-                ON CONFLICT(unit_id,platform) DO NOTHING""",
-                (unit, account, expected_account_id or account, profile),
-            )
+            if register_xingtu_binding:
+                # Legacy Xingtu units keep the implicit Xingtu binding. A platform-dedicated
+                # unit (for example Juxing) must not acquire a Xingtu binding here, otherwise
+                # Xingtu promotion/dispatch could route to a browser that only owns the other
+                # platform's account and profile.
+                conn.execute(
+                    """INSERT INTO execution_unit_platform_bindings(
+                    unit_id,platform,account_ref,expected_account_id,profile_ref,registry_ref)
+                    VALUES(%s,'douyin_xingtu',%s,%s,%s,'contracts/douyin_xingtu.verified.json')
+                    ON CONFLICT(unit_id,platform) DO NOTHING""",
+                    (unit, account, expected_account_id or account, profile),
+                )
 
     def rebind_unit_account(
         self,
@@ -622,6 +629,25 @@ class Repository:
                   AND b.platform=%s AND b.enabled=true
                 ORDER BY u.unit_id LIMIT 1""",
                 (task_kind.value, platform),
+            ).fetchone()
+            return str(row["unit_id"]) if row else None
+
+    def select_collection_unit(self, platform: str) -> str | None:
+        """First unit eligible to execute a collection task for this platform.
+
+        A quarantined unit is still returned when it is the only binding: promotion must stay
+        durable and let the existing unit recovery path handle it, exactly like the single-unit
+        assignment did before dedicated units existed. When several units are eligible, a healthy
+        unit is preferred; there is no load balancing in the MVP.
+        """
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT u.unit_id FROM execution_units u
+                JOIN execution_unit_platform_bindings b ON b.unit_id=u.unit_id
+                WHERE 'collection' = ANY(u.allowed_task_kinds)
+                  AND b.platform=%s AND b.enabled=true
+                ORDER BY (u.state='QUARANTINED'), u.unit_id LIMIT 1""",
+                (platform,),
             ).fetchone()
             return str(row["unit_id"]) if row else None
 
@@ -1652,13 +1678,14 @@ class Repository:
         # transition into a terminal state, and never overwritten afterwards (a retried task that
         # reaches a terminal state again keeps its first completion moment).
         conn.execute(
-            "UPDATE root_tasks SET state=%s,version=%s,payload=%s,updated_at=now()"
+            "UPDATE root_tasks SET state=%s,version=%s,payload=%s,unit_id=%s,updated_at=now()"
             + TERMINAL_COMPLETED_AT_CLAUSE
             + " WHERE root_task_id=%s",
             (
                 task.state,
                 task.version,
                 Jsonb(task.model_dump(mode="json", exclude={"checkpoint"})),
+                task.execution_unit_id,
                 task.state in TERMINAL_TASK_STATES,
                 task.root_task_id,
             ),
@@ -1757,6 +1784,12 @@ class Repository:
                 task.failure_reason = None
                 task.checkpoint.active_seconds = 0
                 task.checkpoint.scanned_ids = []
+                # A task created before dedicated execution units may still point at a unit that
+                # no longer carries its platform binding. Re-resolve on every retry/continue so
+                # the new segment is dispatched to the unit that can actually execute it.
+                task.execution_unit_id = (
+                    self.select_collection_unit(task.platform.value) or task.execution_unit_id
+                )
                 requeue_for_retry(task, scope)
                 conn.execute(
                     "INSERT INTO task_attempts(attempt_id,root_task_id,segment) VALUES(%s,%s,%s)",

@@ -15,6 +15,7 @@ from .challenge import ChallengeHandler
 from .contracts import PlatformRegistry, account_id_from_url
 from .domain import (
     CollectorError,
+    PlatformId,
     ReleaseDisposition,
     SessionHealth,
     SessionHealthStatus,
@@ -24,6 +25,28 @@ from .repository import Repository
 from .runtime import BrowserRuntime, UnitConfig, ensure_line
 
 logger = logging.getLogger(__name__)
+
+
+def release_disposition_for(
+    active_platform: PlatformId,
+    other_platform_enabled: bool,
+    observed: ReleaseDisposition,
+) -> ReleaseDisposition:
+    """Map a platform-specific observation to the release state of the unit.
+
+    A shared multi-platform unit keeps the historical behaviour: a Juxing login problem must not
+    make the same logical unit unavailable to Xingtu. A dedicated single-platform unit has no
+    other platform to protect, so its own observation is the unit's real state (and therefore its
+    next task opens the bounded maintenance window when needed).
+
+    ``other_platform_enabled`` comes from the durable platform-binding table, not from the
+    ``for_platform`` view: that view rewrites ``active_platform`` and cannot tell a dedicated
+    Juxing unit from the Juxing half of a shared unit.
+    """
+
+    if active_platform == PlatformId.DOUYIN_XINGTU or not other_platform_enabled:
+        return observed
+    return ReleaseDisposition.VERIFIED_READY
 
 
 async def wait_for_manual_clearance(
@@ -185,13 +208,25 @@ class BrowserHost:
                         config.unit_id,
                         config.active_platform.value,
                     )
-            # A platform-specific login problem must not make the shared logical unit unavailable
-            # to another platform. Browser/lease/Profile-lock failures are still unit-wide because
-            # `stopped=false` is handled by Repository.release independently of this disposition.
-            unit_disposition = (
-                host.release_disposition
-                if config.active_platform.value == "douyin_xingtu"
-                else ReleaseDisposition.VERIFIED_READY
+            # A platform-specific login problem must not make a shared logical unit unavailable
+            # to another platform. A dedicated single-platform unit, however, reports its own
+            # state so the next task can open the bounded maintenance window.
+            other_platform = (
+                PlatformId.KUAISHOU_JUXING
+                if config.active_platform == PlatformId.DOUYIN_XINGTU
+                else PlatformId.DOUYIN_XINGTU
+            )
+            try:
+                other_platform_enabled = (
+                    config.active_platform != PlatformId.DOUYIN_XINGTU
+                    and repo.unit_supports_platform(config.unit_id, other_platform.value)
+                )
+            except Exception:  # noqa: BLE001 - bookkeeping must never skip the release
+                other_platform_enabled = False
+            unit_disposition = release_disposition_for(
+                config.active_platform,
+                other_platform_enabled,
+                host.release_disposition,
             )
             repo.release(
                 config.unit_id,

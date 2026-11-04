@@ -20,6 +20,7 @@ from .domain import (
     CollectorError,
     FilterPlan,
     NetworkMode,
+    PlatformId,
     ProfileRequirement,
     SegmentBudget,
     TaskKind,
@@ -215,6 +216,9 @@ def main() -> None:
                 str(config.profile_directory.resolve()),
                 config.network_mode.value,
                 config.expected_account_id,
+                # A platform-dedicated unit must not acquire an implicit Xingtu binding; its
+                # declared platform binding is registered idempotently by its Collection Worker.
+                register_xingtu_binding=(config.active_platform == PlatformId.DOUYIN_XINGTU),
             )
             print(
                 json.dumps(

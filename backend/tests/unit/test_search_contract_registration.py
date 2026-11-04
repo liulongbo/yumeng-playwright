@@ -152,14 +152,14 @@ def test_single_page_contract_requires_a_coverage_gap():
     ).require_enabled(live=False)
 
 
-def test_published_contract_verifies_page_three_but_stays_bounded():
+def test_published_contract_verifies_pages_three_to_five_but_stays_bounded():
     current = PlatformRegistry.model_validate_json(
         Path("contracts/douyin_xingtu.verified.json").read_text()
     )
     assert current.search is not None
-    assert current.search.page_fetch_max_verified == 3
+    assert current.search.page_fetch_max_verified == 5
     assert current.search.page_fetch_continuous_verified is False
-    assert any("page=3" in gap for gap in current.search.coverage_gaps)
+    assert any("page=1..5" in gap for gap in current.search.coverage_gaps)
 
 
 def test_page_fetch_contract_requires_live_bounded_or_continuous_evidence():

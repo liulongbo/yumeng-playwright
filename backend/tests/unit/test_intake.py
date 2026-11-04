@@ -70,6 +70,14 @@ def expected_payload(target=20, *, keyword="宠物"):
     ).model_dump(mode="json")
 
 
+def test_target_70_survives_filter_plan_conversion():
+    """P1 must not truncate or re-default a 70-creator target."""
+    plan = build_expected_plan(
+        RequirementForm(keyword="宠物", target_count=70), live_capabilities()
+    )
+    assert plan.target_count == 70
+
+
 async def test_state_graph_accepts_only_exact_plan():
     adapter = SequenceAdapter([expected_payload()])
     runs = MemoryRuns()

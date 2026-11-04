@@ -9,6 +9,7 @@
   "evidence_refs": [
     "docs/design/KJX-01-platform-gap-analysis.md",
     "docs/evidence/KJX-01-full-regression.md",
+    "docs/evidence/DUAL-70-01-acceptance-2026-11-03.md",
     ".runtime/kjx-full/t2-diagnosis/probe/account-page.png",
     ".runtime/kjx-full/t2-diagnosis/probe/dom.json"
   ],
@@ -2933,11 +2934,11 @@
     "fixed_sort": true,
     "single_page_only": false,
     "coverage_gaps": [
-      "第 1/2 页已用真实账号与真实筛选体核验；第 3 页仅在只读调查中观察，未进入可执行合同；达到第 2 页边界以 SEARCH_CAPABILITY_LIMIT 停止，不报告平台耗尽",
+      "2026-11-03 已用真实账号与真实筛选体核验 page=1..5：每页 20 位、currentPage 与请求页码一致、五页 100 个身份集合互不重复（0 重复/0 未识别）；第 6 页及以后未进入可执行合同；达到第 5 页边界以 SEARCH_CAPABILITY_LIMIT 停止，不报告平台耗尽",
       "平台页面自身点击分页会丢失关键词/筛选；Adapter 必须每页重建完整筛选体（真实请求体已核验）",
       "响应无 has_more 字段，耗尽按 currentPage*20>=total 计算；空页但 total 未到终点会显式失败"
     ],
-    "page_fetch_max_verified": 2
+    "page_fetch_max_verified": 5
   },
   "modules": [
     {
@@ -3654,7 +3655,7 @@
   "raw_har_trace_enabled": false,
   "coverage_gaps": [
     "仅关键词、内容类型（38 一级类目）、粉丝量级、地域（省/市）和三档报价（单档）进入 live 能力；其余筛选只记录不启用",
-    "搜索第 1/2 页已核验；第 3 页及以后 fail closed；平台页面自身分页会丢筛选，Adapter 每页重建筛选体",
+    "搜索第 1—5 页已核验（2026-11-03，真实 Adapter，100 个跨页身份无重复）；第 6 页及以后 fail closed；平台页面自身分页会丢筛选，Adapter 每页重建筛选体",
     "履约/带货/直播/电商深层与联系方式不在本轮采集范围；履约与带货字段已在差距文档登记，后续模块化实现",
     "详情只在既有 basic/spread/works/audience 四模块内扩展；新增字段缺失发 NO_DATA，不改变完整性判定"
   ]

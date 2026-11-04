@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 
 import uvicorn
+from pydantic import ValidationError
 
 from .contracts import PlatformRegistry
 from .creator_update import CreatorUpdateService
@@ -20,6 +21,7 @@ from .repository import Repository
 from .runtime import load_unit
 
 ROOT = Path(__file__).resolve().parents[3]
+logger = logging.getLogger(__name__)
 
 
 def repository() -> ProductRepository:
@@ -99,10 +101,22 @@ async def _run_intake(unit_config: Path, profile_requirement: Path | None) -> No
     registry.require_enabled(live=True)
     platform_registries: dict[str, PlatformRegistry] = {}
     for binding in config.platform_bindings:
-        if not binding.enabled:
+        # `enabled` gates whether THIS unit may execute a platform task; it does not make the
+        # platform contract untranslatable. A dedicated Xingtu unit keeps the Juxing contract
+        # declared (enabled=false) so the intake worker can still convert a Juxing requirement
+        # before the dedicated Juxing collection unit executes it.
+        try:
+            bound_registry = PlatformRegistry.model_validate_json(binding.registry_path.read_text())
+            bound_registry.require_enabled(live=True)
+        except (OSError, ValidationError) as exc:
+            if binding.enabled:
+                raise
+            logger.warning(
+                "disabled platform registry unavailable: %s (%s)",
+                binding.platform.value,
+                type(exc).__name__,
+            )
             continue
-        bound_registry = PlatformRegistry.model_validate_json(binding.registry_path.read_text())
-        bound_registry.require_enabled(live=True)
         platform_registries[binding.platform.value] = bound_registry
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:

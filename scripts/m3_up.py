@@ -42,11 +42,7 @@ RUNTIME = ROOT / ".runtime"
 LOG_DIR = RUNTIME / "logs"
 M3_ENV = RUNTIME / "m3-app.env"
 MODEL_ENV = RUNTIME / "deepseek.env"
-DEFAULT_UNIT_CONFIG = (
-    RUNTIME / "local-main" / "units" / "unit-local-mac-02.json"
-    if (RUNTIME / "local-main" / "units" / "unit-local-mac-02.json").exists()
-    else RUNTIME / "units" / "local-dev-mac-02.json"
-)
+DEFAULT_UNIT_CONFIG = RUNTIME / "units" / "local-dev-mac-02.json"
 DEFAULT_UNIT_ID = "unit-local-mac-02"
 API_PORT = 8000
 FRONTEND_PORT = 5173
@@ -70,6 +66,8 @@ class Preflight:
     env: dict[str, str] = field(default_factory=dict)
     unit_id: str = DEFAULT_UNIT_ID
     queues: list[str] = field(default_factory=list)
+    # Extra platform-dedicated units (config path, unit_id) started alongside the primary one.
+    extra_units: list[tuple[Path, str]] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -139,7 +137,22 @@ def latest_migration() -> int:
     return max(versions) if versions else 0
 
 
-def run_preflight(unit_config: Path, *, with_collection: bool) -> Preflight:
+def _registered_unit_state(dsn: str, unit_id: str) -> str | None:
+    import psycopg
+
+    with psycopg.connect(dsn) as conn:
+        row = conn.execute(
+            "SELECT state FROM execution_units WHERE unit_id=%s", (unit_id,)
+        ).fetchone()
+    return str(row[0]) if row is not None else None
+
+
+def run_preflight(
+    unit_config: Path,
+    *,
+    with_collection: bool,
+    extra_unit_configs: list[Path] | None = None,
+) -> Preflight:
     from xingtu.contracts import PlatformRegistry
     from xingtu.runtime import load_unit
 
@@ -219,23 +232,50 @@ def run_preflight(unit_config: Path, *, with_collection: bool) -> Preflight:
         return pre
 
     try:
-        import psycopg
-
-        with psycopg.connect(dsn) as conn:
-            row = conn.execute(
-                "SELECT state FROM execution_units WHERE unit_id=%s", (pre.unit_id,)
-            ).fetchone()
-        if row is None:
+        state = _registered_unit_state(dsn, pre.unit_id)
+        if state is None:
             pre.add("EXECUTION_UNIT_REGISTERED", False, f"{pre.unit_id} not registered")
         else:
-            pre.add("EXECUTION_UNIT_REGISTERED", True, f"{pre.unit_id} state={row[0]}")
+            pre.add("EXECUTION_UNIT_REGISTERED", True, f"{pre.unit_id} state={state}")
             pre.add(
                 "EXECUTION_UNIT_READY",
-                row[0] == "READY",
-                "READY" if row[0] == "READY" else f"state={row[0]} blocks promotion",
+                state == "READY",
+                "READY" if state == "READY" else f"state={state} blocks promotion",
             )
     except Exception as exc:  # noqa: BLE001
         pre.add("EXECUTION_UNIT_REGISTERED", False, f"{type(exc).__name__}: {str(exc)[:90]}")
+
+    # Extra platform-dedicated units: they may legitimately start in NEEDS_LOGIN /
+    # SESSION_UNVERIFIED (the first task opens a bounded maintenance window), but they must be
+    # registered and must not be quarantined. Each extra unit contributes its own task queue.
+    for extra_path in extra_unit_configs or []:
+        try:
+            extra_unit = load_unit(extra_path)
+        except Exception as exc:  # noqa: BLE001
+            pre.add(
+                f"EXTRA_UNIT_CONFIG:{extra_path.name}",
+                False,
+                f"{type(exc).__name__}: {str(exc)[:90]}",
+            )
+            continue
+        code = f"EXTRA_UNIT:{extra_unit.unit_id}"
+        try:
+            state = _registered_unit_state(dsn, extra_unit.unit_id)
+        except Exception as exc:  # noqa: BLE001
+            pre.add(code, False, f"{type(exc).__name__}: {str(exc)[:90]}")
+            continue
+        if state is None:
+            pre.add(code, False, f"{extra_unit.unit_id} not registered")
+            continue
+        pre.add(
+            code,
+            state != "QUARANTINED",
+            "READY"
+            if state == "READY"
+            else f"state={state}; first task may open a bounded maintenance window",
+        )
+        if state != "QUARANTINED":
+            pre.extra_units.append((extra_path, extra_unit.unit_id))
 
     api_key = env.get("DEEPSEEK_API_KEY", "")
     if not pre.add(
@@ -252,7 +292,10 @@ def run_preflight(unit_config: Path, *, with_collection: bool) -> Preflight:
     except Exception as exc:  # noqa: BLE001
         pre.add("MODEL_AVAILABLE", False, f"{type(exc).__name__}: {str(exc)[:90]}")
 
-    pre.queues = ["xingtu-intake"] + ([f"xingtu-{pre.unit_id}"] if with_collection else [])
+    collection_units = [pre.unit_id] + [unit_id for _, unit_id in pre.extra_units]
+    pre.queues = ["xingtu-intake"] + (
+        [f"xingtu-{unit_id}" for unit_id in collection_units] if with_collection else []
+    )
     return pre
 
 
@@ -372,6 +415,12 @@ def python_module(module: str, *args: str) -> list[str]:
     return [sys.executable, "-m", module, *args]
 
 
+def optional_collection_workers(extra_unit_ids: list[str]) -> set[str]:
+    """Collection workers are per-unit; one unit's exit must not stop the other unit."""
+
+    return {"collection-worker"} | {f"collection-worker-{unit_id}" for unit_id in extra_unit_ids}
+
+
 def frontend_command() -> list[str]:
     if sys.platform == "win32":
         command = os.environ.get("COMSPEC", "cmd.exe")
@@ -395,10 +444,21 @@ def main() -> int:
     parser.add_argument("--with-collection", action="store_true", help="also start the P2 worker")
     parser.add_argument("--with-frontend", action="store_true", help="also start the Vite UI")
     parser.add_argument("--unit-config", type=Path, default=DEFAULT_UNIT_CONFIG)
+    parser.add_argument(
+        "--extra-unit-config",
+        type=Path,
+        action="append",
+        default=[],
+        help="additional platform-dedicated collection unit config (repeatable)",
+    )
     parser.add_argument("--timeout", type=float, default=READINESS_TIMEOUT_SECONDS)
     args = parser.parse_args()
 
-    pre = run_preflight(args.unit_config, with_collection=args.with_collection)
+    pre = run_preflight(
+        args.unit_config,
+        with_collection=args.with_collection,
+        extra_unit_configs=args.extra_unit_config,
+    )
     print("=== M3 preflight ===")
     for check in pre.checks:
         print("  " + check.render())
@@ -481,6 +541,19 @@ def main() -> int:
                 env,
             )
             started.append("collection-worker")
+            for extra_path, extra_unit_id in pre.extra_units:
+                name = f"collection-worker-{extra_unit_id}"
+                supervisor.start(
+                    name,
+                    [
+                        *python_module("xingtu.cli"),
+                        "worker",
+                        "--config",
+                        str(extra_path),
+                    ],
+                    env,
+                )
+                started.append(name)
         if args.with_frontend and not frontend_running:
             supervisor.start("frontend", frontend_command(), env, cwd=ROOT / "frontend")
             started.append("frontend")
@@ -504,10 +577,22 @@ def main() -> int:
             "\nREADY: " + ", ".join(started) + f". Logs in {LOG_DIR.relative_to(ROOT)}/. "
             "Press Ctrl-C to stop the processes started here."
         )
+        # Collection workers are one per execution unit. A dedicated unit's worker failure must
+        # not stop the other unit's worker (or its in-flight collection); only shared
+        # API/intake/frontend exits terminate the stack. The execution-unit page and Temporal
+        # queue freshness expose the dead consumer for recovery.
+        optional_workers = optional_collection_workers([unit_id for _, unit_id in pre.extra_units])
         while supervisor.alive():
             time.sleep(2)
             for name in supervisor.dead():
                 print(f"PROCESS_EXITED: {name}\n{supervisor.tail(name)}")
+                if name in optional_workers:
+                    print(
+                        f"  [continue] {name} is a per-unit collection worker; "
+                        "the other execution unit keeps running."
+                    )
+                    supervisor.children.pop(name, None)
+                    continue
                 return 4
         return 0
     except KeyboardInterrupt:

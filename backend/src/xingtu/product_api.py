@@ -57,9 +57,14 @@ CSRF_HEADER = "X-CSRF-Token"
 
 
 def _juxing_max_target_count() -> int:
-    """Configured juxing target ceiling; the default keeps the stage-B safety limit."""
+    """Configured juxing target ceiling; the default follows the product contract (200).
 
-    raw = os.environ.get("XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT", "3")
+    The stage-B safety default of 3 was removed once the product contract and the verified
+    page-fetch boundary allowed a real 70-creator acceptance.  A deployment that needs a lower
+    ceiling must set ``XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT`` explicitly.
+    """
+
+    raw = os.environ.get("XINGTU_KUAISHOU_JUXING_MAX_TARGET_COUNT", "200")
     try:
         value = int(raw)
     except ValueError:
@@ -89,9 +94,9 @@ class ProductSettings:
     enable_kuaishou_juxing: bool = False
     juxing_observed_contract_path: Path = Path("contracts/kuaishou_juxing.observed.json")
     juxing_registry_path: Path = Path("contracts/kuaishou_juxing.verified.json")
-    # Stage-B safety limit, explicitly overridable for a separately authorized acceptance run.
-    # The default stays 3 so production behaviour is not widened by a test environment variable.
-    kuaishou_juxing_max_target_count: int = 3
+    # Product ceiling shared with Xingtu. The previous stage-B default of 3 was a safety limit,
+    # not a product decision; keeping it here would silently cap a deployment without the env var.
+    kuaishou_juxing_max_target_count: int = 200
 
     @classmethod
     def from_environment(cls) -> "ProductSettings":

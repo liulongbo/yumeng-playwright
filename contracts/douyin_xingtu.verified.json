@@ -17,6 +17,7 @@
     "docs/evidence/QA-01-page3-verification-2026-10-22.md",
     "docs/evidence/QA-01-round2-connection-max-region-2026-10-23.md",
     "docs/evidence/QA-01-positive-filters-2026-10-23.md",
+    "docs/evidence/DUAL-70-01-acceptance-2026-11-03.md",
     "docs/tasks/CD-08.md"
   ],
   "capabilities": {
@@ -3391,7 +3392,7 @@
     "exhausted_value": "false",
     "pagination": "page",
     "next_page_mode": "page_fetch",
-    "page_fetch_max_verified": 3,
+    "page_fetch_max_verified": 5,
     "resume_supported": false,
     "initial_cursor": "1",
     "fixed_sort": true,
@@ -3402,7 +3403,7 @@
       }
     },
     "coverage_gaps": [
-      "页面 UI 滚动到底不产生下一页请求；已核验同一页面上下文复用原生请求头与请求体可取得 page=2 和 page=3（page=3 实测 20 位、pagination.page=3、has_more=true）。当前 page_fetch_max_verified=3，page=4 及以后和真实终点尚未核验，达到边界会以 SEARCH_CAPABILITY_LIMIT 停止而不报告平台耗尽",
+      "页面 UI 滚动到底不产生下一页请求；2026-11-03 已用真实账号在同一页面上下文通过生产 Adapter 的 page_fetch 取得 page=1..5：每页 20 位、pagination.page 与请求页码一致、has_more=true、五页 100 个身份集合互不重复（0 重复/0 未识别）。当前 page_fetch_max_verified=5；page=6 及以后和真实终点尚未核验，达到边界会以 SEARCH_CAPABILITY_LIMIT 停止而不报告平台耗尽",
       "response_match 为空：平台搜索响应不回显关键词/页码，请求归属只由方法/主机/路径+请求体绑定判定",
       "访问节奏未实测：action_interval_seconds=2.0 为保守值，平台限流阈值尚未核验",
       "本能力版本只发布背景信息与受众画像中已实测的八个控件；合作诉求/匹配度/性价比/主题推荐等其他筛选仍未核验，不对产品开放",

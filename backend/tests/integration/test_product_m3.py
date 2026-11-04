@@ -1002,3 +1002,64 @@ def test_product_retry_rejects_security_challenge_terminal(repo, plan):
         )
     assert error.value.code == "INVALID_FORM"
     assert error.value.reason == "ACTION_NOT_ALLOWED"
+
+
+def test_product_retry_re_resolves_a_historical_juxing_task(repo):
+    from xingtu.domain import Filter, FilterPlan
+
+    products = ProductRepository(repo)
+    user_id = product_user(products)
+    repo.register_unit(
+        "unit-juxing",
+        "juxing-account",
+        "local-line",
+        "juxing-profile",
+        "local_development",
+        "60821564",
+        register_xingtu_binding=False,
+    )
+    repo.register_unit_platform_binding(
+        "unit-juxing",
+        "kuaishou_juxing",
+        "juxing-account",
+        "60821564",
+        "juxing-profile",
+        "contracts/kuaishou_juxing.verified.json",
+    )
+    plan = FilterPlan(
+        schema_version="filter_plan.v3",
+        platform="kuaishou_juxing",
+        capability_version="synthetic-v1",
+        target_count=1,
+        filters=[Filter(field="keyword", operator="eq", value="母婴", source_fields=["keyword"])],
+    )
+    root = repo.create(
+        plan,
+        "unit",
+        "historical-juxing",
+        "test",
+        adapter_version="synthetic-v1",
+        contract_version="synthetic-v1",
+        modules=["basic"],
+    )
+    with repo.edit(root) as (task, _):
+        task.state = TaskStatus.FAILED
+        task.failure_reason = "SYNTHETIC"
+    failed = repo.get(root)
+    queries = ProductQueries(repo)
+    detail = queries.command(
+        root,
+        "retry",
+        expected_version=failed.version,
+        user_id=user_id,
+        idempotency_key="historical-juxing-retry",
+    )
+    assert detail.status == TaskStatus.QUEUED
+    retried = repo.get(root)
+    assert retried.execution_unit_id == "unit-juxing"
+    with repo.connect() as conn:
+        row = conn.execute(
+            "SELECT unit_id,payload FROM root_tasks WHERE root_task_id=%s", (root,)
+        ).fetchone()
+    assert row["unit_id"] == "unit-juxing"
+    assert row["payload"]["execution_unit_id"] == "unit-juxing"
