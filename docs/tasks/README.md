@@ -1,5 +1,9 @@
 # 开发任务索引
 
+# 2026-11-04 LIVE-02：双平台直播广场达人采集扩展（第二阶段开发中；D1—D7 已裁决，直播上限 70）
+
+[LIVE-02](LIVE-02.md) 在不改业务代码/DB/执行单元/运行配置的前提下完成阶段一：用 Playwright MCP + 系统 Chrome（隔离 storage_state）真实验证两平台直播入口、列表请求、第 2 页、详情与身份。星图 `/ad/creator/market/live` 使用 `POST /gw/api/gsearch/search_for_author_square`（`search_scene=2`），响应 `authors[].star_id`，第 2 页 20 条/0 重复/total=977；聚星 `#/star_plaza/live` 使用 `POST /rest/web/star/list`（`taskType=4`、`pathSource=no_filter_live|search_live`），响应 `starList[].userId`，第 2 页 20 条/0 重复/total=5000；详情分别为 `author/douyin/{star_id}` 与 `#/live-promotion/star/{starId}`。定向检索证明同一达人可同时出现在两场景（星图同 `star_id`、聚星同 `userId`）。产出一份 85 条测试用例、PRD、技术方案、影响分析和两份 `*.live.observed.json`。阶段一**未改代码/未迁移/未建任务/未提交 Git**。2026-11-04 用户正式批准进入第二阶段并裁决 D1—D7：D6 调整为直播默认 20、**单任务最大 70**（两平台统一），取消直播 200 位上限；短视频上限/行为不变。测试用例已增至 85 条（含 8 条 70 专项）。当前进入第二阶段开发，后续按阶段三做两平台真实 70 位直播采集与短视频回归。证据：[调查](../evidence/LIVE-02-live-square-investigation.md)、[PRD](../prd/LIVE-02-live-square-collection.md)、[技术方案](../design/LIVE-02-live-square-technical-design.md)、[测试用例](../evidence/LIVE-02-test-cases.md)、[影响分析](../design/LIVE-02-compatibility-impact.md)。
+
 # 2026-11-03 DUAL-70-01：巨量星图与磁力聚星单任务 70 位真实采集能力（已完成：两平台 70/70；星图 PARTIAL、聚星 COMPLETED）
 
 [DUAL-70-01](DUAL-70-01.md) 定位并最小修复两平台阻止单任务 70 位有效达人采集的真实限制：聚星表单默认 3、运行时上限 30、星图契约分页 page 3、聚星契约分页 page 2。真实验证两平台 page 1—5（各 20 位、跨页 0 重复、page 6 fail closed），契约边界提升到 5；聚星产品上限/运行时对齐 200、表单默认 20。两平台各 5 位小样本通过；随后严格顺序完成两个 70 位真实 UI 任务：**星图 `51dfca56…` 70/70 有效、70 distinct 入库、81 候选、page 1—4、终态 `PARTIAL_COMPLETED / PROFILE_SCOPE_INCOMPLETE`（资料完整 22/70）；聚星 `f7a8f087…` 70/70 有效、70 distinct、70 快照、80 候选、page 1—4、终态 `COMPLETED`**。星图曾因 `_wake_unresolved_modules`/featured 的“商业能力”90s 动作超时两次失败（32/70、33/70），已做 P0 局部化+同 tab 去重，5 位回归通过后对同一任务两次前端“继续采集”补足；未新建重复任务、未重采已入库达人。最终 unit **383 passed**、contract **43**、integration **128/1 skipped**、E2E **14**、前端 **106**+build、Mypy/Ruff 通过。数量/入库/前端：两平台 PASS；严格 `COMPLETED` 口径：星图部分完成，补采 48 位待授权。未提交 Git。

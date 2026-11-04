@@ -1,0 +1,199 @@
+{
+  "schema_version": "platform_capability_evidence.v1",
+  "platform": "douyin_xingtu",
+  "contract_version": "xingtu-live-square-observed-2026-11-04",
+  "status": "observed",
+  "observed_at": "2026-11-04T20:45:00+08:00",
+  "scope": "live_creator_square",
+  "entry": "https://www.xingtu.cn/ad/creator/market/live",
+  "entry_discovery": "顶部『找达人』菜单 →『直播广场』；真实 DOM anchor href=/ad/creator/market/live，短视频广场为 /ad/creator/market",
+  "account": "巨量星图广告主账号（星图ID 1807978499337419）",
+  "browser": "Playwright MCP stdio 客户端 + 本机 Chrome；隔离上下文使用 unit-local-mac-02 导出的会话快照（2026-11-04T11:38Z）",
+  "evidence_refs": [
+    "docs/evidence/LIVE-02-live-square-investigation.md",
+    ".runtime/live02/xingtu-live/live-page.json",
+    ".runtime/live02/xingtu-search/01-net.json",
+    ".runtime/live02/xingtu-click/03-detail.json",
+    ".runtime/live02/xingtu-detail-data/summary.json",
+    ".runtime/live02/xingtu-page2-ui/results.json",
+    ".runtime/live02/xingtu-overlap/ids.json"
+  ],
+  "request_contract": {
+    "method": "POST",
+    "host": "www.xingtu.cn",
+    "path": "/gw/api/gsearch/search_for_author_square",
+    "content_type": "application/json",
+    "body_shape": {
+      "scene_param": {
+        "platform_source": 1,
+        "search_scene": 2,
+        "display_scene": 5,
+        "marketing_target": 3,
+        "task_category": 6
+      },
+      "search_param": {"keyword": "string", "seach_type": 2},
+      "sort_param": {"sort_type": 2, "sort_field": {"field_name": "score"}},
+      "page_param": {"page": "int(1-based)", "limit": 20},
+      "attribute_filter": [
+        {"field": {"field_name": "string", "rel_id": "string"}, "field_value": "string"}
+      ]
+    },
+    "default_conditions_observed": [
+      "达人报价：品牌营销专场(按小时)",
+      "默认 attribute_filter[0].field.field_name=price_by_video_type__ge, rel_id=9, field_value=0"
+    ],
+    "response_paths": {
+      "authors": "authors[]",
+      "identity": "authors[].star_id",
+      "basic": {
+        "nickname": "authors[].attribute_datas.nick_name",
+        "avatar": "authors[].attribute_datas.avatar_uri",
+        "gender": "authors[].attribute_datas.gender",
+        "province": "authors[].attribute_datas.province",
+        "city": "authors[].attribute_datas.city",
+        "followers": "authors[].attribute_datas.follower",
+        "main_category": "authors[].attribute_datas.main_category",
+        "content_tags": "authors[].attribute_datas.live_tag_content_v2"
+      },
+      "live_metrics_all": {
+        "room_cnt_30d": "authors[].attribute_datas.live_room_cnt_30d",
+        "watch_ucnt_avg_30d": "authors[].attribute_datas.live_watch_ucnt_avg_30d",
+        "watch_cnt_avg_30d": "authors[].attribute_datas.live_watch_cnt_avg_30d",
+        "acu": "authors[].attribute_datas.acu",
+        "pcu_30d": "authors[].attribute_datas.live_pcu_30d",
+        "comment_rate_avg_30d": "authors[].attribute_datas.live_comment_rate_avg_30d",
+        "like_rate_avg_30d": "authors[].attribute_datas.live_like_rate_avg_30d",
+        "watch_duration_avg_30d": "authors[].attribute_datas.live_avg_watch_duration_30d",
+        "interact_rate_avg_30d": "authors[].attribute_datas.live_interact_rate_avg_30d",
+        "interaction_rate_medium_30d": "authors[].attribute_datas.live_interaction_rate_medium_30d",
+        "interact_rate": "authors[].attribute_datas.live_interate_rate"
+      },
+      "live_metrics_star_order": {
+        "fans_watch_rate_30d": "authors[].attribute_datas.live_sn_fans_watch_rate_30d",
+        "follow_ucnt_avg_30d": "authors[].attribute_datas.live_sn_follow_ucnt_avg_30d",
+        "comment_rate_avg_30d": "authors[].attribute_datas.live_sn_comment_rate_avg_30d",
+        "like_rate_avg_30d": "authors[].attribute_datas.live_sn_like_rate_avg_30d"
+      },
+      "ecom": {
+        "product_num_30d": "authors[].attribute_datas.ecom_live_product_num_30d",
+        "avg_sale_amount_30d": "authors[].attribute_datas.ecom_amt_avg_30d",
+        "gpm_range_30d": "authors[].attribute_datas.ecom_gpm_30days_range",
+        "main_price_range_30d": "authors[].attribute_datas.ecom_main_price_30days_range",
+        "ecom_score": "authors[].attribute_datas.ecom_score",
+        "avg_sale_amount_range": "authors[].attribute_datas.avg_sale_amount_range"
+      },
+      "orders": {
+        "star_live_order_cnt": "authors[].attribute_datas.star_live_order_cnt",
+        "order_complete_cnt": "authors[].attribute_datas.order_complete_cnt"
+      },
+      "quotes": "authors[].task_infos[].price_infos[]",
+      "representative_live_items": "authors[].items[]",
+      "pagination": {
+        "page": "pagination.page",
+        "limit": "pagination.limit",
+        "total_count": "pagination.total_count",
+        "has_more": "pagination.has_more"
+      }
+    }
+  },
+  "filters": {
+    "state": "labels/controls observed; most request mappings not verified",
+    "groups": [
+      {"group": "直播内容", "fields": ["昵称/抖音号/星图ID（文本）", "直播间内容（抖音）"]},
+      {"group": "商业能力", "fields": ["营销目标：不限/游戏下载/应用与线索/电商带货"]},
+      {"group": "匹配度", "fields": ["内容类型（多选/更多）", "商单类型（多选/更多）", "达人性别", "所在地域", "粉丝量级", "个人认证", "受众画像", "直播间观众画像", "粉丝画像"]},
+      {"group": "性价比", "fields": ["达人报价·1（默认 品牌营销专场(按小时)）", "进行中的直播任务数", "近期合作直播任务数", "带货商品数", "平均销售额", "带货商品价格", "GPM", "带货等级", "近30天最多带货品类", "带货品类", "近期直播场次", "平均观看人数", "平均观看人次", "ACU", "PCU", "粉丝观看占比", "场均涨粉数", "场均评论率", "场均点赞率", "平均看播时长", "场均CTR", "小手柄场均CTR", "小雪花场均CTR", "小风车场均CTR", "小手柄场均CVR"]},
+      {"group": "推荐清单", "fields": ["达人清单"]}
+    ]
+  },
+  "list_columns_observed": [
+    "达人信息",
+    "代表直播",
+    "近期直播场次",
+    "平均观看人次",
+    "ACU",
+    "PCU",
+    "场均评论率",
+    "场均点赞率",
+    "报价",
+    "操作"
+  ],
+  "default_page": {
+    "result_summary": "找到 10000+ 个达人",
+    "selected_condition": "达人报价：品牌营销专场(按小时)",
+    "page_1_size": 20,
+    "pagination": "底部 Element Plus 分页（页码 + 跳转）",
+    "page_2_verification": {
+      "method": "真实 UI 点击第 2 页（el-pager li=2）",
+      "page": 2,
+      "count": 20,
+      "duplicates_with_page_1": 0,
+      "has_more": true,
+      "total_count": 977,
+      "keyword": "美食"
+    }
+  },
+  "detail": {
+    "route": "https://www.xingtu.cn/ad/creator/author/douyin/{star_id}/{video_type}",
+    "title": "抖音直播主页",
+    "tabs": ["数据概览", "直播分析", "受众画像"],
+    "filters": ["直播类型：不限/游戏直播/电商带货/其它直播", "只看星图商单", "数据筛选：时间（近30天）", "排除营销流量"],
+    "identity": "页面路径中的 douyin/{star_id} 与搜索响应的 authors[].star_id 一致；页面显示『星图ID』",
+    "verified_fields": {
+      "basic": ["昵称", "性别", "地域（可空）", "粉丝数", "内容类型", "商单类型", "抖音号", "星图ID", "介绍（本项目不采集联系方式）"],
+      "quotes": ["品牌营销专场（按小时）", "电商带货专场（按小时）", "电商带货拼场（按商品）"],
+      "overview": ["近30天累计开播场次", "ACU", "同粉段 ACU 排名", "近期直播场次", "平均观看人数", "平均观看人次", "PCU", "粉丝观看占比", "场均涨粉数", "场均评论率", "场均点赞率", "平均看播时长", "带货商品数", "场均GMV", "带货商品客单价", "GPM", "场均CTR", "小手柄场均CTR", "小雪花场均CTR", "小风车场均CTR", "小手柄场均CVR"]
+    },
+    "endpoint_contract_observed": {
+      "GET /gw/api/aggregator/get_author_live_statistics": {
+        "query_keys": ["o_author_id", "live_type", "period", "only_star_order", "flow_type"],
+        "response_paths": {
+          "room_cnt": "live_room_statistics.room_cnt",
+          "watch_ucnt_avg": "live_room_statistics.watch_ucnt_avg",
+          "watch_cnt_avg": "live_room_statistics.watch_cnt_avg",
+          "acu": "live_room_statistics.acu",
+          "pcu": "live_room_statistics.pcu",
+          "fans_watch_rate": "live_room_statistics.fans_watch_rate",
+          "follow_ucnt_avg": "live_room_statistics.follow_ucnt_avg",
+          "comment_rate_avg": "live_room_statistics.comment_rate_avg",
+          "like_rate_avg": "live_room_statistics.like_rate_avg",
+          "watch_duration_avg": "live_room_statistics.watch_duration_avg",
+          "interact_rate_avg": "live_room_statistics.interact_rate_avg",
+          "acu_precede_percent": "live_room_statistics.acu_precede_percent",
+          "ecom_product_num": "live_ecom_statistics.ecom_live_product_num",
+          "ecom_avg_gmv_range": "live_ecom_statistics.avg_gmv_range",
+          "ecom_avg_price_range": "live_ecom_statistics.avg_ecom_product_price_range",
+          "ecom_avg_gpm_range": "live_ecom_statistics.avg_gpm_range",
+          "convert": "live_convert_statistics（样本为空对象，页面显示 -）",
+          "audience": "live_aa_statistics（样本为空对象）"
+        },
+        "sample_units": "比率字段为 0-1 小数；金额区间为平台原始字符串；watch_duration_avg 单位为秒；room_cnt/pcu/acu 为字符串数字"
+      },
+      "GET /gw/api/aggregator/get_author_live_statistics_candidates": {
+        "response_paths": ["candidates_30d.*", "candidates_90d.*"]
+      },
+      "GET /gw/api/author/get_author_platform_channel_info_v2": {
+        "response_paths": ["club_follower", "self_intro"]
+      },
+      "GET /gw/api/gauthor/author_get_business_card_info": {
+        "note": "含 email/phone/wechat 等联系方式；本项目明确不采集、不存储、不展示"
+      }
+    }
+  },
+  "identity": {
+    "platform_creator_id_path": "authors[].star_id",
+    "detail_path_parameter": "star_id",
+    "cross_check": "真实短视频达人 6769198961371643915 在直播广场按星图ID检索返回同 star_id；证明同一平台身份可同时具有短视频与直播数据"
+  },
+  "permission_notes": [
+    "当前账号可访问直播广场与直播详情，未见直播权限拒绝",
+    "详情页介绍可能含联系方式，采集时必须脱敏且不写入业务字段"
+  ],
+  "coverage_gaps": [
+    "直播筛选器的请求映射大多未逐项验证；阶段一仅验证默认条件与关键词/ID检索",
+    "直播分析/受众画像标签页的字段未完整核验",
+    "page 3+ 与真实终点未验证",
+    "不同 creator 的转化/带货字段可能为空对象或 0，需区分 NO_DATA 与真实零值",
+    "列表 live_sn_*（星图商单口径）与详情『不限直播类型』口径不同，不能混用"
+  ]
+}

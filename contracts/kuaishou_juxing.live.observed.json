@@ -1,0 +1,192 @@
+{
+  "schema_version": "platform_capability_evidence.v1",
+  "platform": "kuaishou_juxing",
+  "contract_version": "juxing-live-square-observed-2026-11-04",
+  "status": "observed",
+  "observed_at": "2026-11-04T20:45:00+08:00",
+  "scope": "live_creator_square",
+  "entry": "https://k.kuaishou.com/?__accountId__=60821564#/star_plaza/live",
+  "entry_discovery": "顶部『找达人』菜单 →『直播广场』；真实 menuitem 点击后 hash=#/star_plaza/live，父级 query 带 __accountId__=60821564",
+  "account": "磁力聚星渠道户子账号 cpg果汁（ID 60821564）",
+  "browser": "Playwright MCP stdio 客户端 + 本机 Chrome；隔离上下文使用 unit-local-mac-03-juxing 导出的会话快照（2026-11-03T12:39Z）；首次进入需在账户选择页点击该子账号『进入』",
+  "evidence_refs": [
+    "docs/evidence/LIVE-02-live-square-investigation.md",
+    ".runtime/live02/juxing-live/04-live-page.json",
+    ".runtime/live02/juxing-live-net/star_list_128_request-body.txt",
+    ".runtime/live02/juxing-live-net/star_list_128_response-body.txt",
+    ".runtime/live02/juxing-detail/02-detail.json",
+    ".runtime/live02/juxing-detail-data/summary.json",
+    ".runtime/live02/juxing-page2-ui/results.json",
+    ".runtime/live02/juxing-overlap/star_list_request-body.txt"
+  ],
+  "request_contract": {
+    "method": "POST",
+    "host": "k.kuaishou.com",
+    "path": "/rest/web/star/list",
+    "content_type": "application/json",
+    "body_shape": {
+      "currentPage": "int(1-based)",
+      "pageSize": 20,
+      "starOrderTag": 3,
+      "starOrderType": 0,
+      "taskType": 4,
+      "userName": "string(optional; 昵称/快手ID search)",
+      "viewerCityPercentage": [],
+      "fansCityPercentage": [],
+      "starTagIds": [],
+      "pickList": [],
+      "advertiserPickList": [],
+      "pathSource": "no_filter_live | search_live"
+    },
+    "verified_variants": [
+      {"case": "默认浏览", "body": {"currentPage": 1, "taskType": 4, "pathSource": "no_filter_live"}, "total": 5000},
+      {"case": "按快手ID检索", "body": {"currentPage": 1, "taskType": 4, "userName": "841292065", "pathSource": "search_live"}, "total": 1}
+    ],
+    "response_paths": {
+      "rows": "starList[]",
+      "identity": "starList[].userId",
+      "detail_key": "starList[].starId",
+      "basic": {
+        "nickname": "starList[].name",
+        "kwai_id": "starList[].kwaiId",
+        "avatar": "starList[].headUrl",
+        "gender": "starList[].gender",
+        "followers": "starList[].fansNumber",
+        "province_code": "starList[].provinceCode",
+        "city_code": "starList[].cityCode",
+        "star_tag": "starList[].starTagStr",
+        "industry_tags": "starList[].industryTagStr",
+        "mcn_name": "starList[].mcnName",
+        "public_settlement": "starList[].publicSettlement"
+      },
+      "live_metrics_list": {
+        "live_quoted_price": "starList[].liveQuotedPrice",
+        "live_expect_cpm": "starList[].liveExpectCpm",
+        "live_expect_viewer": "starList[].liveExpectViewer",
+        "live_max_viewer": "starList[].liveMaxViewer",
+        "live_interaction_rate": "starList[].liveInteractionRate",
+        "live_avg_people_num": "starList[].liveAvgPeopleNum",
+        "live_status": "starList[].liveStatus",
+        "live_active": "starList[].liveActive"
+      },
+      "quotes": "starList[].priceShowInfo[] (businessLine=2 为直播报价；priceTypeName=直播按小时/按天/按商品数；price 为 1/1000 元)",
+      "pagination": {
+        "current_page": "currentPage",
+        "total": "total"
+      }
+    }
+  },
+  "filters": {
+    "state": "labels/controls observed; request mappings not verified",
+    "groups": [
+      {"group": "内容分类", "fields": ["不限 + 美妆/游戏/颜值达人/.../自拍（多项，含更多）"]},
+      {"group": "所属行业", "fields": ["不限 + 传媒资讯/工具类软件/.../旅游（多项，含更多）"]},
+      {"group": "星标推荐", "fields": ["不限/近30日粉丝数上升/涨粉黑马/支持对公/机构达人/小麦优质达人/支持CPS带货/星选达人/榜上有名/领域先锋/经验丰富/有商单经验/历史合作过/新芽优质达人/30天内有视频商单经验/90天内有视频商单经验/视频限时价/直播限时价/更多"]},
+      {"group": "达人信息", "fields": ["粉丝数量", "达人报价", "达人性别", "达人地域", "达人指数"]},
+      {"group": "受众人群", "fields": ["粉丝画像", "观众画像"]},
+      {"group": "内容表现", "fields": ["预期观看人数", "最高在线人数", "预期CPM", "限时折扣"]},
+      {"group": "推荐清单", "fields": ["达人清单", "新游旅程：次元穿越记", "聚星闪光达人", "26年1月沙龙主推达人", "12月CNY主题沙龙达人"]}
+    ]
+  },
+  "list_columns_observed": [
+    "达人信息",
+    "粉丝数",
+    "预期观看人数",
+    "最高在线人数",
+    "预期CPM",
+    "粉丝增长量",
+    "粉丝增长率",
+    "报价",
+    "操作"
+  ],
+  "default_page": {
+    "result_summary": "为您推荐 1000+ 位达人",
+    "default_conditions": "无默认已选条件（未出现已选条件条）",
+    "page_1_size": 20,
+    "pagination": "底部 ant-pagination：1 2 3 4 5 … 250",
+    "page_2_verification": {
+      "method": "真实 UI 点击第 2 页（ant-pagination-item-2）",
+      "page": 2,
+      "count": 20,
+      "duplicates_with_page_1": 0,
+      "total": 5000
+    }
+  },
+  "detail": {
+    "route": "https://k.kuaishou.com/?__accountId__=60821564#/live-promotion/star/{starId}?openBy=user",
+    "title": "达人主页-磁力聚星",
+    "page_heading": "达人直播主页",
+    "tabs": ["数据概览", "达人指数", "代表作品", "受众分析", "带货数据", "合作情况"],
+    "identity": "列表 userId=1633604095 / starId=451066；详情路径使用 starId；页面显示快手 ID=userId",
+    "verified_fields": {
+      "basic": ["昵称", "快手ID（userId）", "地域", "达人类型", "内容形式（vlog）", "粉丝数", "所属行业", "所属机构"],
+      "quotes": ["按小时/1小时", "按天/1天", "按商品/1个商品（拼场直播）"],
+      "overview": ["粉丝数", "预期观看人数", "最高在线人数", "预期CPM", "周均直播场次", "近30天信用分", "商业数据/预期最高在线人数", "历史合作行业", "观众画像", "达人指数", "同行业/同粉丝段排名"],
+      "audience": ["观众性别", "观众年龄", "观众设备", "设备价格", "观众城市等级", "观众地域", "粉丝画像", "观众画像"],
+      "content": ["代表作品（个人作品/聚星作品）", "直播频次分布", "粉丝趋势", "观看量/最高在线人数/评论数/分享数"],
+      "commerce": ["带货直播场次", "观看人数中位数", "最高在线人数中位数", "带货商品数量", "带货分析"]
+    },
+    "endpoint_contract_observed": {
+      "GET /rest/web/star/starProfile": {
+        "query_keys": ["starId", "userId", "platform_source/related"],
+        "response_paths": {
+          "userId": "starProfile.userId",
+          "starId": "starProfile.starId",
+          "name": "starProfile.name",
+          "gender": "starProfile.gender",
+          "fansNumber": "starProfile.fansNumber",
+          "address": "starProfile.address",
+          "introduction": "starProfile.introduction",
+          "liveAvgPeopleNum": "starProfile.liveAvgPeopleNum",
+          "liveAvgLikeCnt": "starProfile.liveAvgLikeCnt",
+          "liveAvgLikeRate": "starProfile.liveAvgLikeRate",
+          "dailyLiveTime": "starProfile.dailyLiveTime",
+          "liveQuotedPrice": "starProfile.liveQuotedPrice",
+          "liveCpmExpectancy": "starProfile.liveCpmExpectancy",
+          "livePlayCntExpectancy": "starProfile.livePlayCntExpectancy",
+          "livePcuCnt": "starProfile.livePcuCnt",
+          "liveWeeklyTimesCnt": "starProfile.liveWeeklyTimesCnt",
+          "priceShowInfo": "starProfile.priceShowInfo[]",
+          "liveQuotedInfo": "starProfile.liveQuotedInfo"
+        },
+        "sample_units": "price 为 1/1000 元；fansNumber/livePlayCntExpectancy/livePcuCnt 为整数；liveCpmExpectancy 为数值；liveAvgLikeRate 可为 null"
+      },
+      "GET /rest/web/commerce/live": {
+        "response_paths": ["data.liveCnt", "data.liveWatchCntMedian", "data.liveMaxOnlineCntMedian", "data.goodsCnt", "data.goodsGraph", "data.duration"],
+        "sample": "样本 liveCnt=0、goodsCnt=0，页面显示 -；零值必须按『无数据』处理，不能展示为真实 0"
+      },
+      "GET /rest/web/star/starWorksInfo": {
+        "response_paths": {
+          "live": ["starWorkReport.liveExpectViewer", "starWorkReport.liveMaxViewer", "starWorkReport.liveExpectCpm", "starWorkReport.liveInteractionRate", "starWorkReport.liveWeekRelease", "recentLiveWorks[]", "personLiveWorks[]"],
+          "live_work_item": ["streamId", "coverUrl", "likeCnt", "viewCnt", "peakCnt", "url", "releaseTimeMillis", "durationTimeMillis", "caption", "commentCnt", "forwardCnt"]
+        }
+      },
+      "GET /rest/web/star/listPortrait": {
+        "response_paths": ["data.fansPortrait.*", "data.viewerPortrait.*"],
+        "dimensions": ["sexPercentage", "agePercentage", "activityPercentage", "areaPercentage", "cityLevelPercentage", "cityPercentage", "mobileBrandPercentage", "mobilePricePercentage", "interestPercentage", "nineMajorGroupsPercentage"],
+        "sample_units": "比例字段为 0-1 小数；tgi 为整数"
+      },
+      "GET /rest/web/starIndex/info": {"response_paths": ["starIndexPowerModel.*", "developPowerModel.*", "spreadingPowerModel.*", "appealPowerModel.*", "businessPowerModel.*", "costEffectiveModel.*"]},
+      "GET /rest/web/starIndex/starRadarGraph": {"response_paths": ["starRadarGraphVO.starIndexCurrent[]", "starRadarGraphVO.starIndexAvg[]"]},
+      "GET /rest/web/starIndex/starTrendGraph": {"response_paths": ["starTrendGraphVO.starIndexHistory[]", "starTrendGraphVO.starIndexRank[]", "starTrendGraphVO.starIndexPercent[]"]},
+      "GET /rest/web/evaluation/star/score": {"response_paths": ["data.contentQualityScore", "data.cooperation", "data.credit", "data.comprehensive"]},
+      "GET /rest/web/star/queryCommerceInfo": {"note": "视频带货口径（videoCnt/videoGpm/...），不是直播带货，不得混用"}
+    }
+  },
+  "identity": {
+    "platform_creator_id_path": "starList[].userId",
+    "detail_path_parameter": "starId",
+    "cross_check": "真实短视频达人 userId=841292065 在直播广场按快手ID检索返回同 userId（starId=2576496）；证明同一平台身份可同时具有短视频与直播数据"
+  },
+  "permission_notes": [
+    "当前子账号可访问直播广场与直播详情，未见直播权限拒绝",
+    "首次进入需在账户选择页选择 cpg果汁(60821564)，否则落在选择账户页"
+  ],
+  "coverage_gaps": [
+    "直播筛选器的请求映射未逐项验证；阶段一仅验证默认浏览与按快手ID检索",
+    "列表 liveAvgPeopleNum 在样本中为 0，与详情 starProfile.liveAvgPeopleNum 不同；不得据此推断字段相等",
+    "代表直播/直播频次分布等标签页数据未完整核验",
+    "page 3+ 与真实终点未验证",
+    "达人指数/信用分等字段可能为空或来自其他标签页，需在阶段二逐项确认"
+  ]
+}
