@@ -1,5 +1,9 @@
 # 开发任务索引
 
+# 2026-11-05 LIVE-02F：直播广场筛选能力扩展（LIVE-02 增量；核心闭环通过，CONDITIONAL GO）
+
+[LIVE-02F](LIVE-02F.md) 在 LIVE-02 直播采集之上实现两平台直播筛选：前端可选择/清除/提交，后端计划与契约校验，星图 Adapter 真实 UI 应用并逐请求校验，聚星 Adapter 构造真实列表请求体。真实产品 UI 完成巨量星图「时尚」`593cd747…` 2/2、磁力聚星「时尚」`472e7739…` 2/2；源平台候选身份与任务达人一致。其他已真实验证：星图女性/100w-300w/个人/广东省组合、深圳市、观众画像 18-23、场次/平均观看/ACU/PCU；聚星粉丝年龄/性别/设备、九大人群、预期观看/CPM、美妆/美食映射。直播允许仅筛选创建（关键词可选），全空拒绝，短视频规则不变。遗留：聚星粉丝/观众地域（两级占比面板）未实现且不展示；真实 Worker 恢复 BLOCKED；target 25 多页任务到第 2 页后取消；自定义区间未真实任务验证。证据：[调查](../evidence/LIVE-02-live-filter-investigation.md)、[验收](../evidence/LIVE-02-live-filter-acceptance.md)、[测试用例](../evidence/LIVE-02-test-cases.md)。
+
 # 2026-11-04 LIVE-02：双平台直播广场达人采集扩展（已完成，CONDITIONAL GO；直播上限 70）
 
 [LIVE-02](LIVE-02.md) 在不改业务代码/DB/执行单元/运行配置的前提下完成阶段一：用 Playwright MCP + 系统 Chrome（隔离 storage_state）真实验证两平台直播入口、列表请求、第 2 页、详情与身份。星图 `/ad/creator/market/live` 使用 `POST /gw/api/gsearch/search_for_author_square`（`search_scene=2`），响应 `authors[].star_id`，第 2 页 20 条/0 重复/total=977；聚星 `#/star_plaza/live` 使用 `POST /rest/web/star/list`（`taskType=4`、`pathSource=no_filter_live|search_live`），响应 `starList[].userId`，第 2 页 20 条/0 重复/total=5000；详情分别为 `author/douyin/{star_id}` 与 `#/live-promotion/star/{starId}`。定向检索证明同一达人可同时出现在两场景（星图同 `star_id`、聚星同 `userId`）。产出一份 85 条测试用例、PRD、技术方案、影响分析和两份 `*.live.observed.json`。阶段一**未改代码/未迁移/未建任务/未提交 Git**。2026-11-04 用户正式批准进入第二阶段并裁决 D1—D7：D6 调整为直播默认 20、**单任务最大 70**（两平台统一），取消直播 200 位上限；短视频上限/行为不变。测试用例已增至 85 条（含 8 条 70 专项）。第三阶段已完成：星图 `065d36d8-8988-4882-948b-54d1dd864cdf` 与聚星 `f6003e46-9463-48bd-b87e-91b96bd3736c` 均 70/70 COMPLETED，71 位两平台 422 拒绝，跨页 0 重复，短视频小样本回归通过；最终判定 **CONDITIONAL GO**（6 BLOCKED / 12 NOT_RUN，详见测试用例与残余风险）。证据：[调查](../evidence/LIVE-02-live-square-investigation.md)、[PRD](../prd/LIVE-02-live-square-collection.md)、[技术方案](../design/LIVE-02-live-square-technical-design.md)、[测试用例](../evidence/LIVE-02-test-cases.md)、[影响分析](../design/LIVE-02-compatibility-impact.md)、[第三阶段结果](../evidence/LIVE-02-phase3-results.md)。

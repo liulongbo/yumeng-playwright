@@ -452,3 +452,38 @@ else:
 7. 证据/卡片/索引/报告。
 
 > 阶段二开始前必须由用户确认 PRD 的待裁决项（筛选范围、目标/分页、更新入口、详情形态、身份策略等）。
+---
+
+## 附录 C：LIVE-02F 直播筛选扩展设计（2026-11-05）
+
+### C.1 数据模型
+
+- `RequirementForm.live_filters: list[LiveFilterRequirement]`：固定字段 Literal + 值形态（options / range / regions / profile）。仅 `live_square` 允许。
+- `Filter.field` 增加 16 个直播字段；新增 `LiveProfileCompound`（维度键 + 值列表）。
+- `FilterPlan` 增加 live_square 分支：拒绝短视频字段；校验画像 kind、地域 Compound、区间 NumberRange、选项文本/列表。
+- 无数据库迁移：新字段进入既有 JSONB payload；旧任务缺省为空。
+
+### C.2 契约
+
+- 两份直播契约升级为 v2：`xingtu-live-square-capability-v2` / `juxing-live-square-capability-v2`；contract/adapter 同步 v2。
+- `FilterCapability` 新增 `disabled_reason`，控制类型新增 `multi-select`；`request_mapping` / `automation` 保存已验证参数与 UI 定位元数据。
+- 星图 `request_match` 只绑定页码；`attribute_filter_match` 期望由 Adapter 按计划构建并逐字段比对。
+- 聚星请求体由 Adapter 按真实 UI 捕获的字段构造（`contentTagIdList`、`liveExpectViewer`、`liveMaxViewer*`、`expectCpm*`、`fansAgeList`、`fansGender`、`fansMobile`、`fansNineMajorGroupsList` 等）。
+
+### C.3 执行
+
+- 星图直播 Adapter：清空默认条件 → UI 应用筛选 → 已选 chip 回读 → 先注册响应监听再操作 → 校验关键词/页码/attribute_filter 多重集（画像按字段族 + 性别精确值）→ 每页重复校验；resume 时重新应用条件后翻页。
+- 聚星直播 Adapter：每页重新构造完整 body；所有计划字段必须映射，未知字段 fail closed；`pathSource=has_filter_live`（有筛选）。
+- 失败分类：`PLATFORM_CONDITION_MISMATCH`、`UNSUPPORTED_FILTER`、`PLATFORM_PAGE_CHANGED`、`SEARCH_CAPABILITY_LIMIT`。
+
+### C.4 前端
+
+- 直播场景按 capability 渲染通用筛选控件：分组、单选/多选、range（预设+自定义）、region（省/市）、profile（维度）。
+- 客户端校验「关键词或至少一项筛选」、1—70、组合策略、禁用项、区间边界；服务端仍为最终校验。
+- 任务详情展示直播筛选摘要；短视频页面不渲染 `live_filters`。
+
+### C.5 兼容性
+
+- 短视频契约/Adapter/请求映射/前端表单未改；契约版本只影响直播。
+- 既有直播历史任务只读；当前无运行中直播任务，升级不中断。
+- 70 上限、分页、去重、有效判定、checkpoint 字段未改。

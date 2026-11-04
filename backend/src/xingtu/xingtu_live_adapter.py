@@ -20,17 +20,25 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from .adapter import BrowserAdapter
 from .domain import (
+    LIVE_OPTION_FIELDS,
+    LIVE_PROFILE_FIELDS,
+    LIVE_RANGE_FIELDS,
     CandidateDiagnostic,
     CollectorError,
     CreatorRef,
     ExecutionContext,
     FieldObservation,
     FieldStatus,
+    Filter,
     FilterPlan,
+    LiveProfileCompound,
+    NumberRange,
+    RegionCompound,
     SearchPage,
     uid,
     utcnow,
 )
+from .live_filters import expected_xingtu_live_request, validate_xingtu_live_request
 from .normalize import number
 
 logger = logging.getLogger(__name__)
@@ -47,6 +55,198 @@ BASIC_JS = r"""
   images: [...document.querySelectorAll('img')]
     .map(i => i.getAttribute('src')).filter(Boolean).slice(0, 20)
 }))()
+"""
+
+
+CLEAR_JS = r"""
+() => {
+  const clean = (v) => (v || '').replace(/\s+/g, ' ').trim();
+  const button = [...document.querySelectorAll('button')].find(
+    (el) => clean(el.innerText) === '清空' && el.getBoundingClientRect().width > 0
+  );
+  if (!button) return false;
+  button.click();
+  return true;
+}
+"""
+
+OPEN_CONTROL_JS = r"""
+(label) => {
+  const clean = (v) => (v || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  const items = [
+    ...document.querySelectorAll('.market-filters .filter-item, .market-filters .xt-dropdown')
+  ]
+    .filter(visible)
+    .filter((el) => clean(el.innerText).startsWith(label))
+    .sort((a, b) => clean(a.innerText).length - clean(b.innerText).length);
+  if (!items.length) return false;
+  const item = items[0];
+  const button = item.querySelector('[role=button], .el-dropdown-selfdefine') || item;
+  button.click();
+  return true;
+}
+"""
+
+CLICK_MENU_OPTION_JS = r"""
+(label) => {
+  const clean = (v) => (v || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).display !== 'none';
+  };
+  const menus = [...document.querySelectorAll('ul.el-dropdown-menu')].filter(visible);
+  for (const menu of menus) {
+    const items = [...menu.querySelectorAll('li,button,span,label')].filter(
+      (el) => clean(el.innerText) === label && visible(el)
+    );
+    if (!items.length) continue;
+    const target = items[0].closest('li,button,label') || items[0];
+    target.click();
+    return true;
+  }
+  return false;
+}
+"""
+
+CLICK_REGION_JS = r"""
+(args) => {
+  const [province, city] = args;
+  const clean = (v) => (v || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  const panels = [...document.querySelectorAll('.xt-cascader-panel')].filter(visible);
+  for (const panel of panels) {
+    const rows = [...panel.querySelectorAll('li.xt-cascader-option')];
+    const row = rows.find((el) => clean(el.innerText) === province);
+    if (!row) continue;
+    if (city) {
+      const suffix = row.querySelector('.xt-cascader-option__suffix');
+      if (suffix) suffix.click();
+      return true;
+    }
+    const box =
+      row.querySelector('input[type=checkbox]') ||
+      row.querySelector('.el-checkbox') ||
+      row;
+    box.click();
+    return true;
+  }
+  return false;
+}
+"""
+
+CLICK_REGION_CITY_JS = r"""
+(args) => {
+  const [province, city] = args;
+  const clean = (v) => (v || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  const panels = [...document.querySelectorAll('.xt-cascader-panel')].filter(visible);
+  for (const panel of panels) {
+    const rows = [...panel.querySelectorAll('li.xt-cascader-option')];
+    const row = rows.find((el) => clean(el.innerText) === city);
+    if (!row) continue;
+    const box =
+      row.querySelector('input[type=checkbox]') ||
+      row.querySelector('.el-checkbox') ||
+      row;
+    box.click();
+    return true;
+  }
+  return false;
+}
+"""
+
+SELECTED_CONDITIONS_JS = r"""
+() => {
+  const clean = (v) => (v || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  const candidates = [...document.querySelectorAll('div')].filter(
+    (el) => visible(el) && clean(el.innerText).startsWith('已选条件')
+  );
+  if (!candidates.length) return '';
+  candidates.sort((a, b) => clean(a.innerText).length - clean(b.innerText).length);
+  return clean(candidates[0].innerText);
+}
+"""
+
+CLICK_PROFILE_DIMENSION_JS = r"""
+(key) => {
+  const clean = (v) => (v || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).display !== 'none';
+  };
+  const menus = [...document.querySelectorAll('ul.el-dropdown-menu')].filter(visible);
+  const popup = menus.find(
+    (menu) => clean(menu.innerText).includes('确定') && menu.querySelector('.panel-content')
+  );
+  if (!popup) return false;
+  const labels = {age: '年龄', gender: '性别', device_brand: '设备', city_level: '地域'};
+  const suffix = labels[key];
+  if (!suffix) return false;
+  const panels = [...popup.querySelectorAll('.panel-content')];
+  const panel = panels.find((item) =>
+    clean(item.querySelector('.label')?.innerText || '').includes(suffix)
+  );
+  if (!panel) return false;
+  const input = panel.querySelector('.el-select input');
+  if (!input) return false;
+  input.click();
+  return true;
+}
+"""
+
+CLICK_PROFILE_OPTION_JS = r"""
+(label) => {
+  const clean = (v) => (v || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).display !== 'none';
+  };
+  const dropdowns = [...document.querySelectorAll('.el-select-dropdown')].filter(visible);
+  for (const dropdown of dropdowns) {
+    const options = [...dropdown.querySelectorAll('.el-select-dropdown__item')].filter(
+      (el) => clean(el.innerText) === label && visible(el)
+    );
+    if (!options.length) continue;
+    options[0].click();
+    return true;
+  }
+  return false;
+}
+"""
+
+CONFIRM_PROFILE_JS = r"""
+() => {
+  const clean = (v) => (v || '').replace(/\s+/g, ' ').trim();
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).display !== 'none';
+  };
+  const menus = [...document.querySelectorAll('ul.el-dropdown-menu')].filter(visible);
+  const popup = menus.find(
+    (menu) => clean(menu.innerText).includes('确定') && menu.querySelector('.panel-content')
+  );
+  if (!popup) return false;
+  const buttons = [...popup.querySelectorAll('button,span,div')].filter(
+    (el) => clean(el.innerText) === '确定' && visible(el)
+  );
+  if (!buttons.length) return false;
+  (buttons[0].closest('button') || buttons[0]).click();
+  return true;
+}
 """
 
 
@@ -74,23 +274,8 @@ class XingtuLiveAdapter(BrowserAdapter):
     def _detail_url(self, star_id: str) -> str:
         return f"https://www.xingtu.cn/ad/creator/author/douyin/{star_id}/10"
 
-    async def _expect_search(self, page: Page, action: Any) -> dict[str, Any]:
-        try:
-            async with page.expect_response(
-                lambda r: SEARCH_PATH in r.url and r.request.method == "POST",
-                timeout=self.timeout_seconds() * 1000,
-            ) as info:
-                await action()
-            response = await info.value
-        except PlaywrightTimeoutError as exc:
-            raise CollectorError("PLATFORM_PAGE_CHANGED", "LIVE_SEARCH_RESPONSE_TIMEOUT") from exc
-        if response.status != 200:
-            raise CollectorError("MODULE_COLLECTION_FAILED", "LIVE_SEARCH_HTTP")
-        try:
-            payload = await response.json()
-        except Exception as exc:  # noqa: BLE001 - response schema is the contract
-            raise CollectorError("PLATFORM_PAGE_CHANGED", "LIVE_SEARCH_SCHEMA") from exc
-        return payload if isinstance(payload, dict) else {}
+    def _expectation(self, plan: FilterPlan) -> Any:
+        return expected_xingtu_live_request(plan, self.registry.capabilities)
 
     def _page_from_payload(
         self, plan: FilterPlan, checkpoint: Any, payload: dict[str, Any], page_number: int
@@ -136,12 +321,291 @@ class XingtuLiveAdapter(BrowserAdapter):
             unidentified=unidentified,
         )
 
+    async def _clear_conditions(self, page: Page) -> None:
+        clicked = await page.evaluate(CLEAR_JS)
+        if clicked:
+            await asyncio.sleep(1.0)
+
+    async def _open_control(self, page: Page, label: str) -> None:
+        opened = await page.evaluate(OPEN_CONTROL_JS, label)
+        if not opened:
+            raise CollectorError("PLATFORM_PAGE_CHANGED", f"LIVE_FILTER_OPENER:{label}")
+        await asyncio.sleep(self.registry.action_interval_seconds or 0)
+
+    async def _click_menu_option(self, page: Page, label: str) -> None:
+        clicked = await page.evaluate(CLICK_MENU_OPTION_JS, label)
+        if not clicked:
+            raise CollectorError("PLATFORM_PAGE_CHANGED", f"LIVE_FILTER_OPTION:{label}")
+        await asyncio.sleep(self.registry.action_interval_seconds or 0)
+
+    async def _apply_option_filter(self, page: Page, field: str, values: list[str]) -> None:
+        spec = next(item for item in self.registry.capabilities.fields if item.field == field)
+        labels = {option.value: option.label for option in spec.options}
+        if field == "live_content_type":
+            for value in values:
+                label = labels.get(value)
+                if not label:
+                    raise CollectorError("UNSUPPORTED_FILTER", f"{field}.{value}")
+                await self._open_control(page, label)
+                await self._click_menu_option(page, "全选")
+            return
+        if len(values) != 1:
+            raise CollectorError("INVALID_FORM", f"{field} requires one value")
+        label = labels.get(values[0])
+        if not label:
+            raise CollectorError("UNSUPPORTED_FILTER", f"{field}.{values[0]}")
+        await self._open_control(page, spec.label or field)
+        await self._click_menu_option(page, label)
+
+    async def _apply_region_filter(self, page: Page, item: Filter) -> None:
+        value = item.value
+        assert isinstance(value, RegionCompound)
+        spec = next(
+            field for field in self.registry.capabilities.fields if field.field == "live_region"
+        )
+        provinces = {node.value: node for node in spec.region_tree}
+        await self._open_control(page, spec.label or "所在地域")
+        for selection in value.selections:
+            province = provinces.get(selection.province_code)
+            if province is None:
+                raise CollectorError("INVALID_FORM", "unknown province")
+            clicked = await page.evaluate(CLICK_REGION_JS, [province.label, selection.city])
+            if not clicked:
+                raise CollectorError(
+                    "PLATFORM_PAGE_CHANGED",
+                    f"LIVE_FILTER_REGION:{province.label}/{selection.city or ''}",
+                )
+            if selection.city is not None:
+                await asyncio.sleep(self.registry.action_interval_seconds or 0)
+                clicked = await page.evaluate(
+                    CLICK_REGION_CITY_JS, [province.label, selection.city]
+                )
+                if not clicked:
+                    raise CollectorError(
+                        "PLATFORM_PAGE_CHANGED",
+                        f"LIVE_FILTER_REGION_CITY:{province.label}/{selection.city}",
+                    )
+            await asyncio.sleep(self.registry.action_interval_seconds or 0)
+        try:
+            await page.keyboard.press("Escape")
+        except Exception:  # noqa: BLE001 - closing an already closed popover is not data loss
+            pass
+
+    async def _apply_range_filter(self, page: Page, item: Filter) -> None:
+        assert isinstance(item.value, NumberRange)
+        spec = next(
+            field for field in self.registry.capabilities.fields if field.field == item.field
+        )
+        preset = next(
+            (
+                option
+                for option in spec.options
+                if option.range
+                and option.range.min == item.value.min
+                and option.range.max == item.value.max
+            ),
+            None,
+        )
+        await self._open_control(page, spec.label or item.field)
+        if preset is not None:
+            await self._click_menu_option(page, preset.label)
+            return
+        # The live range menu renders its custom inputs only after opening.  The unit shown by the
+        # control is the capability unit; the plan already stores that unit.
+        menus = page.locator("ul.el-dropdown-menu:visible")
+        if await menus.count() == 0:
+            raise CollectorError("PLATFORM_PAGE_CHANGED", "LIVE_RANGE_MENU_MISSING")
+        menu = menus.last
+        inputs = menu.locator("input")
+        if await inputs.count() < 2:
+            raise CollectorError("PLATFORM_PAGE_CHANGED", "LIVE_RANGE_INPUTS_MISSING")
+        await inputs.nth(0).fill(str(item.value.min) if item.value.min is not None else "")
+        await inputs.nth(1).fill(str(item.value.max) if item.value.max is not None else "")
+        confirm = menu.locator("button").filter(has_text="确定")
+        if await confirm.count() == 0:
+            raise CollectorError("PLATFORM_PAGE_CHANGED", "LIVE_RANGE_CONFIRM_MISSING")
+        await confirm.first.click()
+        await asyncio.sleep(self.registry.action_interval_seconds or 0)
+
+    async def _apply_profile_filter(self, page: Page, item: Filter) -> None:
+        assert isinstance(item.value, LiveProfileCompound)
+        spec = next(
+            field for field in self.registry.capabilities.fields if field.field == item.field
+        )
+        dimensions = {dimension.key: dimension for dimension in spec.dimensions}
+        labels = {
+            key: {option.value: option.label for option in dimension.options}
+            for key, dimension in dimensions.items()
+        }
+        await self._open_control(page, spec.label or item.field)
+        for selection in item.value.dimensions:
+            dimension = dimensions.get(selection.key)
+            if dimension is None:
+                raise CollectorError("UNSUPPORTED_FILTER", f"{item.field}.{selection.key}")
+            panel_labels = labels[selection.key]
+            selected_labels = []
+            for value in selection.values:
+                label = panel_labels.get(value)
+                if label is None:
+                    raise CollectorError("UNSUPPORTED_FILTER", f"{item.field}.{selection.key}")
+                selected_labels.append(label)
+            clicked = await page.evaluate(CLICK_PROFILE_DIMENSION_JS, selection.key)
+            if not clicked:
+                raise CollectorError(
+                    "PLATFORM_PAGE_CHANGED", f"LIVE_PROFILE_DIMENSION:{selection.key}"
+                )
+            await asyncio.sleep(0.5)
+            for label in selected_labels:
+                option_clicked = False
+                for _ in range(10):
+                    option_clicked = await page.evaluate(CLICK_PROFILE_OPTION_JS, label)
+                    if option_clicked:
+                        break
+                    await asyncio.sleep(0.2)
+                if not option_clicked:
+                    raise CollectorError("PLATFORM_PAGE_CHANGED", f"LIVE_PROFILE_OPTION:{label}")
+            await asyncio.sleep(self.registry.action_interval_seconds or 0)
+        confirmed = await page.evaluate(CONFIRM_PROFILE_JS)
+        if not confirmed:
+            raise CollectorError("PLATFORM_PAGE_CHANGED", "LIVE_PROFILE_CONFIRM_MISSING")
+        await asyncio.sleep(self.registry.action_interval_seconds or 0)
+
+    async def _apply_live_filters(self, page: Page, plan: FilterPlan) -> None:
+        for item in plan.filters:
+            if item.field == "keyword":
+                continue
+            if item.field in LIVE_OPTION_FIELDS:
+                values = item.value if isinstance(item.value, list) else [str(item.value)]
+                await self._apply_option_filter(page, item.field, [str(value) for value in values])
+            elif item.field == "live_region":
+                await self._apply_region_filter(page, item)
+            elif item.field in LIVE_RANGE_FIELDS:
+                await self._apply_range_filter(page, item)
+            elif item.field in LIVE_PROFILE_FIELDS:
+                await self._apply_profile_filter(page, item)
+            else:
+                raise CollectorError("UNSUPPORTED_FILTER", item.field)
+
+    async def _readback_live_conditions(self, page: Page, plan: FilterPlan) -> None:
+        text = await page.evaluate(SELECTED_CONDITIONS_JS)
+        if not isinstance(text, str):
+            raise CollectorError("PLATFORM_CONDITION_MISMATCH", "LIVE_SELECTED_CONDITIONS_MISSING")
+        specs = {field.field: field for field in self.registry.capabilities.fields}
+        for item in plan.filters:
+            if item.field == "keyword":
+                continue
+            spec = specs[item.field]
+            if item.field in LIVE_OPTION_FIELDS:
+                values = item.value if isinstance(item.value, list) else [str(item.value)]
+                for value in values:
+                    option = next(
+                        (option for option in spec.options if option.value == value), None
+                    )
+                    if option is None or option.label not in text:
+                        raise CollectorError(
+                            "PLATFORM_CONDITION_MISMATCH", f"LIVE_SELECTED_MISSING:{value}"
+                        )
+            elif item.field == "live_region":
+                if "所在地域" not in text:
+                    raise CollectorError(
+                        "PLATFORM_CONDITION_MISMATCH", "LIVE_SELECTED_MISSING:live_region"
+                    )
+            elif item.field in LIVE_PROFILE_FIELDS:
+                assert isinstance(item.value, LiveProfileCompound)
+                for selection in item.value.dimensions:
+                    dimension = next(
+                        dimension for dimension in spec.dimensions if dimension.key == selection.key
+                    )
+                    for value in selection.values:
+                        option = next(
+                            (option for option in dimension.options if option.value == value), None
+                        )
+                        if option is None or option.label not in text:
+                            raise CollectorError(
+                                "PLATFORM_CONDITION_MISMATCH",
+                                f"LIVE_SELECTED_MISSING:{item.field}.{value}",
+                            )
+            elif item.field in LIVE_RANGE_FIELDS:
+                label = spec.label or item.field
+                if label not in text and not (
+                    item.field == "live_followers" and "粉丝数量" in text
+                ):
+                    raise CollectorError(
+                        "PLATFORM_CONDITION_MISMATCH", f"LIVE_SELECTED_MISSING:{item.field}"
+                    )
+
+    async def _collect_search(
+        self,
+        page: Page,
+        action: Any,
+        plan: FilterPlan,
+        page_number: int,
+        expectation: Any,
+    ) -> dict[str, Any]:
+        loop = asyncio.get_running_loop()
+        waiter: asyncio.Future[dict[str, Any]] = loop.create_future()
+        last_error: list[str] = []
+
+        async def on_response(response: Any) -> None:
+            if waiter.done():
+                return
+            if SEARCH_PATH not in response.url or response.request.method != "POST":
+                return
+            try:
+                request_payload = response.request.post_data_json
+            except Exception:  # noqa: BLE001 - a malformed request body is not an applied plan
+                last_error.append("LIVE_SEARCH_REQUEST_SCHEMA")
+                return
+            try:
+                page_param = (
+                    request_payload.get("page_param") if isinstance(request_payload, dict) else None
+                )
+                if not isinstance(page_param, dict) or page_param.get("page") != page_number:
+                    return
+                if expectation.keyword is not None:
+                    search_param = request_payload.get("search_param") or {}
+                    if search_param.get("keyword") != expectation.keyword:
+                        return
+                elif (request_payload.get("search_param") or {}).get("keyword"):
+                    return
+                validate_xingtu_live_request(request_payload, expectation)
+                if response.status != 200:
+                    last_error.append(f"LIVE_SEARCH_HTTP:{response.status}")
+                    return
+                payload = await response.json()
+                if not isinstance(payload, dict):
+                    last_error.append("LIVE_SEARCH_SCHEMA")
+                    return
+                waiter.set_result(payload)
+            except CollectorError as exc:
+                last_error.append(f"{exc.code}:{exc.reason}")
+            except Exception as exc:  # noqa: BLE001 - response parsing is a contract boundary
+                last_error.append(type(exc).__name__)
+
+        page.on("response", on_response)
+        try:
+            await action()
+            try:
+                return await asyncio.wait_for(waiter, self.timeout_seconds())
+            except TimeoutError as exc:
+                reason = last_error[-1] if last_error else "LIVE_FILTER_RESPONSE_TIMEOUT"
+                raise CollectorError("PLATFORM_CONDITION_MISMATCH", reason) from exc
+        finally:
+            page.remove_listener("response", on_response)
+
+    async def _apply_filters_and_trigger(
+        self, page: Page, plan: FilterPlan, keyword: str | None
+    ) -> None:
+        await self._apply_live_filters(page, plan)
+        if keyword is not None:
+            search_input = page.locator(SEARCH_INPUT).first
+            await search_input.wait_for(state="visible", timeout=self.timeout_seconds() * 1000)
+            await search_input.fill(keyword)
+            await search_input.press("Enter")
+
     async def prepare(self, plan: FilterPlan, cp: Any, ctx: ExecutionContext) -> bool:
-        del ctx
         self.registry.capabilities.validate_plan(plan, live=self.live)
         keyword = next((str(item.value) for item in plan.filters if item.field == "keyword"), None)
-        if not keyword:
-            raise CollectorError("INVALID_FORM", "LIVE_KEYWORD_REQUIRED")
         self._search_keyword = keyword
         spec = self.registry.search
         session = self.registry.session
@@ -150,26 +614,32 @@ class XingtuLiveAdapter(BrowserAdapter):
             self.search_page = await self.browser.new_page()
         page = self.search_page
         page.set_default_timeout(self.timeout_seconds() * 1000)
-        if cp.cursor is not None:
-            # A retry after page 1 must not re-scan page 1: doing so would report next_checkpoint
-            # "2" while the checkpoint is already "2" and the engine would reject a cursor loop.
-            self.prepared_result = None
-            if not page.url.startswith(spec.entry_url):
-                await self._bootstrap_session(page, spec.entry_url, session.entry_url)
-            await self.check_session(page)
-            return True
         await self._bootstrap_session(page, spec.entry_url, session.entry_url)
         await self.check_session(page)
-        # The live square pre-applies a platform quote condition.  Clear it so a keyword task is
-        # not silently restricted by a condition the user never chose.
-        clear = page.locator("button").filter(has_text="清空")
-        if await clear.count() and await clear.first.is_visible():
-            await clear.first.click()
-            await asyncio.sleep(1.0)
-        search_input = page.locator(SEARCH_INPUT).first
-        await search_input.wait_for(state="visible", timeout=self.timeout_seconds() * 1000)
-        await search_input.fill(keyword)
-        payload = await self._expect_search(page, lambda: search_input.press("Enter"))
+        await self._clear_conditions(page)
+        expectation = self._expectation(plan)
+        if cp.cursor is not None:
+            # Rebuild the original conditions on every retry.  The previous browser page may have
+            # been lost or replaced, and silently starting on page N without the user's filters
+            # would return a different population than the first page.
+            self.prepared_result = None
+            await self._collect_search(
+                page,
+                lambda: self._apply_filters_and_trigger(page, plan, keyword),
+                plan,
+                1,
+                expectation,
+            )
+            await self._readback_live_conditions(page, plan)
+            return True
+        payload = await self._collect_search(
+            page,
+            lambda: self._apply_filters_and_trigger(page, plan, keyword),
+            plan,
+            1,
+            expectation,
+        )
+        await self._readback_live_conditions(page, plan)
         self.prepared_result = self._page_from_payload(plan, cp, payload, 1)
         return True
 
@@ -192,8 +662,13 @@ class XingtuLiveAdapter(BrowserAdapter):
             raise CollectorError("SEARCH_CAPABILITY_LIMIT", "LIVE_PAGE_LIMIT")
         await self.check_session(page)
         pager = page.locator(".el-pager li").filter(has_text=re.compile(rf"^{page_number}$")).first
+        if await pager.count() == 0:
+            raise CollectorError("PLATFORM_PAGE_CHANGED", "LIVE_PAGE_NOT_AVAILABLE")
         await pager.scroll_into_view_if_needed()
-        payload = await self._expect_search(page, lambda: pager.click())
+        expectation = self._expectation(plan)
+        payload = await self._collect_search(
+            page, lambda: pager.click(), plan, page_number, expectation
+        )
         return self._page_from_payload(plan, cp, payload, page_number)
 
     # -- profile ------------------------------------------------------------------------

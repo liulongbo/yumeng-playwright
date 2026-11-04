@@ -11,12 +11,16 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import ValidationError
 
 from .domain import (
+    LIVE_OPTION_FIELDS,
     AudienceProfileCompound,
     Capabilities,
     CollectorError,
     ConnectionUsersCompound,
+    CreatorScene,
     Filter,
     FilterPlan,
+    LiveProfileCompound,
+    LiveProfileSelection,
     NumberRange,
     RegionCompound,
     RegionFilterSelection,
@@ -252,6 +256,86 @@ def build_expected_plan(
                 source_fields=["keyword"],
             )
         )
+    specs = {spec.field: spec for spec in capabilities.fields}
+    for index, selection in enumerate(normalized.live_filters):
+        if normalized.creator_scene != CreatorScene.LIVE_SQUARE:
+            raise CollectorError("INVALID_FORM", "live filters require live_square")
+        spec = specs.get(selection.field)
+        if spec is None:
+            raise CollectorError("UNSUPPORTED_FILTER", selection.field)
+        source = [f"live_filters.{index}.{selection.field}"]
+        if selection.field in LIVE_OPTION_FIELDS:
+            option_values = sorted(selection.values)
+            if not option_values:
+                raise CollectorError("INVALID_FORM", f"{selection.field} requires values")
+            if len(option_values) == 1 and "eq" in spec.operators:
+                filters.append(
+                    Filter(
+                        field=selection.field,
+                        operator="eq",
+                        value=option_values[0],
+                        source_fields=source,
+                    )
+                )
+            else:
+                filters.append(
+                    Filter(
+                        field=selection.field,
+                        operator="in",
+                        value=option_values,
+                        source_fields=source,
+                    )
+                )
+        elif selection.field == "live_region":
+            filters.append(
+                Filter(
+                    field=selection.field,
+                    operator="compound",
+                    value=RegionCompound(
+                        selections=[
+                            RegionFilterSelection(
+                                province_code=region.province_code,
+                                city=region.city,
+                            )
+                            for region in selection.regions
+                        ]
+                    ),
+                    source_fields=source,
+                )
+            )
+        elif selection.range is not None:
+            filters.append(
+                Filter(
+                    field=selection.field,
+                    operator="range",
+                    value=NumberRange(
+                        min=selection.range.min,
+                        max=selection.range.max,
+                    ),
+                    source_fields=source,
+                    unit=selection.range.unit,
+                )
+            )
+        elif selection.profile:
+            filters.append(
+                Filter(
+                    field=selection.field,
+                    operator="compound",
+                    value=LiveProfileCompound(
+                        kind=cast(Any, selection.field),
+                        dimensions=[
+                            LiveProfileSelection(
+                                key=dimension.key,
+                                values=sorted(dimension.values),
+                            )
+                            for dimension in selection.profile
+                        ],
+                    ),
+                    source_fields=source,
+                )
+            )
+        else:
+            raise CollectorError("UNSUPPORTED_FILTER", selection.field)
     if normalized.content_types:
         filters.append(
             Filter(

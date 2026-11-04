@@ -7,6 +7,7 @@ detail endpoints (`live-promotion/star/{starId}`).  The video adapter is not mod
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -28,7 +29,10 @@ from .domain import (
     uid,
 )
 from .juxing_adapter import KuaishouJuxingAdapter
+from .live_filters import juxing_live_filter_body, live_filter_fields
 from .normalize import number
+
+logger = logging.getLogger(__name__)
 
 
 class KuaishouJuxingLiveAdapter(KuaishouJuxingAdapter):
@@ -77,6 +81,7 @@ class KuaishouJuxingLiveAdapter(KuaishouJuxingAdapter):
             if item.field == "keyword" and isinstance(item.value, str):
                 keyword = item.value
                 break
+        filtered = bool(live_filter_fields(plan))
         body: dict[str, Any] = {
             "currentPage": page_number,
             "pageSize": self.PAGE_SIZE,
@@ -88,17 +93,49 @@ class KuaishouJuxingLiveAdapter(KuaishouJuxingAdapter):
             "starTagIds": [],
             "pickList": [],
             "advertiserPickList": [],
-            "pathSource": "search_live" if keyword else "no_filter_live",
+            "pathSource": (
+                "has_filter_live" if filtered else "search_live" if keyword else "no_filter_live"
+            ),
         }
         if keyword:
             body["userName"] = keyword
+        # Every planned filter must be represented exactly once.  The helper raises instead of
+        # silently dropping an unmapped field.
+        body.update(juxing_live_filter_body(plan, self.registry.capabilities))
         return body
 
     async def _live_search(self, plan: FilterPlan, cp: Any, *, page_number: int) -> SearchPage:
         assert self.search_page is not None
-        payload = await self._post_json(
-            self.search_page, self.SEARCH_PATH, self._build_live_search_body(plan, page_number)
+        body = self._build_live_search_body(plan, page_number)
+        applied = {
+            key: value
+            for key, value in body.items()
+            if key
+            not in {
+                "currentPage",
+                "pageSize",
+                "starOrderTag",
+                "starOrderType",
+                "taskType",
+                "viewerCityPercentage",
+                "fansCityPercentage",
+                "starTagIds",
+                "pickList",
+                "advertiserPickList",
+                "pathSource",
+                "userName",
+            }
+        }
+        logger.info(
+            "juxing live search root=%s page=%s filters=%s path_source=%s digest=%s applied=%s",
+            getattr(self, "_root_task_id", None),
+            page_number,
+            live_filter_fields(plan),
+            body.get("pathSource"),
+            plan.digest()[:16],
+            applied,
         )
+        payload = await self._post_json(self.search_page, self.SEARCH_PATH, body)
         rows = payload.get("starList")
         total = payload.get("total")
         current = payload.get("currentPage")
@@ -149,7 +186,7 @@ class KuaishouJuxingLiveAdapter(KuaishouJuxingAdapter):
         )
 
     async def prepare(self, plan: FilterPlan, cp: Any, ctx: ExecutionContext) -> bool:
-        del ctx
+        self._root_task_id = ctx.root_task_id
         self.registry.capabilities.validate_plan(plan, live=self.live)
         if self.search_page is None:
             self.search_page = await self.browser.new_page()

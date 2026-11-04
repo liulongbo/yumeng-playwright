@@ -263,6 +263,58 @@ class AudienceProfileCompound(Model):
         return self
 
 
+LIVE_OPTION_FIELDS: frozenset[str] = frozenset(
+    {
+        "live_content_type",
+        "live_content_category",
+        "live_gender",
+        "live_certification",
+    }
+)
+LIVE_RANGE_FIELDS: frozenset[str] = frozenset(
+    {
+        "live_followers",
+        "live_recent_sessions",
+        "live_avg_viewers",
+        "live_avg_view_visits",
+        "live_acu",
+        "live_pcu",
+        "live_expected_viewers",
+        "live_max_online",
+        "live_expected_cpm",
+    }
+)
+LIVE_PROFILE_FIELDS: frozenset[str] = frozenset({"live_viewer_profile", "live_fan_profile"})
+LIVE_FILTER_FIELDS: frozenset[str] = (
+    LIVE_OPTION_FIELDS | LIVE_RANGE_FIELDS | LIVE_PROFILE_FIELDS | {"live_region"}
+)
+
+
+class LiveProfileSelection(Model):
+    key: str = Field(min_length=1)
+    values: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def nonblank_and_unique(self) -> Self:
+        if not self.key.strip() or any(not value.strip() for value in self.values):
+            raise ValueError("live profile values cannot be blank")
+        if len(self.values) != len(set(self.values)):
+            raise ValueError("live profile values must be unique")
+        return self
+
+
+class LiveProfileCompound(Model):
+    kind: Literal["live_viewer_profile", "live_fan_profile"]
+    dimensions: list[LiveProfileSelection] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_dimensions(self) -> Self:
+        keys = [dimension.key for dimension in self.dimensions]
+        if len(keys) != len(set(keys)):
+            raise ValueError("live profile dimensions must be unique")
+        return self
+
+
 class Filter(Model):
     field: Literal[
         "keyword",
@@ -280,6 +332,22 @@ class Filter(Model):
         "connection_users",
         "viewer_profile",
         "fan_profile",
+        "live_content_type",
+        "live_content_category",
+        "live_gender",
+        "live_certification",
+        "live_region",
+        "live_followers",
+        "live_recent_sessions",
+        "live_avg_viewers",
+        "live_avg_view_visits",
+        "live_acu",
+        "live_pcu",
+        "live_expected_viewers",
+        "live_max_online",
+        "live_expected_cpm",
+        "live_viewer_profile",
+        "live_fan_profile",
     ]
     operator: Literal["eq", "in", "range", "compound"]
     value: (
@@ -289,6 +357,7 @@ class Filter(Model):
         | RegionCompound
         | ConnectionUsersCompound
         | AudienceProfileCompound
+        | LiveProfileCompound
     )
     source_fields: list[str] = Field(min_length=1)
     unit: str | None = None
@@ -330,7 +399,13 @@ class FilterPlan(Model):
             if f.operator == "in" and not isinstance(f.value, list):
                 raise ValueError("in requires options")
             compound = isinstance(
-                f.value, (RegionCompound, ConnectionUsersCompound, AudienceProfileCompound)
+                f.value,
+                (
+                    RegionCompound,
+                    ConnectionUsersCompound,
+                    AudienceProfileCompound,
+                    LiveProfileCompound,
+                ),
             )
             if (f.operator == "compound") != compound:
                 raise ValueError("compound operator/value mismatch")
@@ -342,6 +417,23 @@ class FilterPlan(Model):
             } and not (f.currency and f.cooperation_form and f.unit):
                 raise ValueError("quote requires currency, cooperation form and unit")
         fields = {f.field for f in self.filters}
+        if self.creator_scene == CreatorScene.LIVE_SQUARE:
+            if fields - LIVE_FILTER_FIELDS - {"keyword"}:
+                raise ValueError("unsupported live_square filter field")
+            for f in self.filters:
+                if f.field in LIVE_PROFILE_FIELDS:
+                    if not isinstance(f.value, LiveProfileCompound) or f.value.kind != f.field:
+                        raise ValueError("live profile operator/value mismatch")
+                elif f.field == "live_region":
+                    if not isinstance(f.value, RegionCompound):
+                        raise ValueError("live region requires region compound")
+                elif f.field in LIVE_RANGE_FIELDS:
+                    if not isinstance(f.value, NumberRange):
+                        raise ValueError("live range requires number range")
+                elif f.field in LIVE_OPTION_FIELDS:
+                    if not isinstance(f.value, (str, list)):
+                        raise ValueError("live option requires text or options")
+            return self
         if self.platform == "kuaishou_juxing":
             if self.schema_version != "filter_plan.v3":
                 raise ValueError("kuaishou_juxing requires filter_plan.v3")
@@ -427,13 +519,23 @@ class FilterCapability(Model):
     label: str | None = None
     group: str | None = None
     control: (
-        Literal["text", "single-select", "cascader", "range", "range-group", "profile-group"] | None
+        Literal[
+            "text",
+            "single-select",
+            "multi-select",
+            "cascader",
+            "range",
+            "range-group",
+            "profile-group",
+        ]
+        | None
     ) = None
     options: list[CapabilityOption] = Field(default_factory=list)
     dimensions: list[CapabilityDimension] = Field(default_factory=list)
     region_tree: list[RegionNode] = Field(default_factory=list)
     range_constraints: RangeConstraint | None = None
     incompatible_with: list[str] = Field(default_factory=list)
+    disabled_reason: str | None = None
     request_mapping: dict[str, JsonValue] = Field(default_factory=dict)
     automation: dict[str, JsonValue] = Field(default_factory=dict)
 
@@ -484,6 +586,8 @@ class Capabilities(Model):
             spec = specs.get(f.field)
             if not spec or f.operator not in spec.operators or f.unit != spec.unit:
                 raise CollectorError("UNSUPPORTED_FILTER", f.field)
+            if spec.disabled_reason:
+                raise CollectorError("UNSUPPORTED_FILTER", spec.disabled_reason)
             if f.field == "keyword" and spec.keyword_mode != "content":
                 raise CollectorError("UNSUPPORTED_FILTER", "content mode not verified")
             vals = f.value if isinstance(f.value, list) else [f.value]
@@ -502,20 +606,20 @@ class Capabilities(Model):
                 or f.cooperation_form not in spec.cooperation_forms
             ):
                 raise CollectorError("UNSUPPORTED_FILTER", "quote semantics")
-            if f.field == "region":
+            if f.field in {"region", "live_region"}:
                 if not isinstance(f.value, RegionCompound):
-                    if plan.schema_version == "filter_plan.v2":
+                    if f.field == "region" and plan.schema_version == "filter_plan.v2":
                         raise CollectorError("INVALID_FORM", "region structure")
-                else:
-                    provinces = {node.value: node for node in spec.region_tree}
-                    for selection in f.value.selections:
-                        province = provinces.get(selection.province_code)
-                        if province is None:
-                            raise CollectorError("INVALID_FORM", "unknown province")
-                        if selection.city is not None and selection.city not in {
-                            child.label for child in province.children
-                        }:
-                            raise CollectorError("INVALID_FORM", "unknown city")
+                    raise CollectorError("INVALID_FORM", "region structure")
+                provinces = {node.value: node for node in spec.region_tree}
+                for selection in f.value.selections:
+                    province = provinces.get(selection.province_code)
+                    if province is None:
+                        raise CollectorError("INVALID_FORM", "unknown province")
+                    if selection.city is not None and selection.city not in {
+                        child.label for child in province.children
+                    }:
+                        raise CollectorError("INVALID_FORM", "unknown city")
             if f.field == "connection_users" and isinstance(f.value, ConnectionUsersCompound):
                 for value in (
                     f.value.connected,
@@ -534,6 +638,38 @@ class Capabilities(Model):
                     value is not None and value > 5000 for value in (f.value.min, f.value.max)
                 ):
                     raise CollectorError("INVALID_FORM", "followers exceeds 5000w")
+            if f.field in LIVE_RANGE_FIELDS and isinstance(f.value, NumberRange):
+                constraints = spec.range_constraints
+                if constraints is not None:
+                    if f.unit != constraints.unit:
+                        raise CollectorError("UNSUPPORTED_FILTER", "range unit")
+                    for bound in (f.value.min, f.value.max):
+                        if bound is not None and (
+                            bound < constraints.min or bound > constraints.max
+                        ):
+                            raise CollectorError("INVALID_FORM", "range outside capability")
+                if f.field == "live_followers" and f.unit == "ten_thousand_count":
+                    if any(
+                        bound is not None and bound > 5000 for bound in (f.value.min, f.value.max)
+                    ):
+                        raise CollectorError("INVALID_FORM", "live followers exceeds 5000w")
+            if f.field in LIVE_PROFILE_FIELDS:
+                if not isinstance(f.value, LiveProfileCompound):
+                    raise CollectorError("INVALID_FORM", "live profile structure")
+                if f.value.kind != f.field:
+                    raise CollectorError("INVALID_FORM", "live profile kind mismatch")
+                dimensions = {dimension.key: dimension for dimension in spec.dimensions}
+                for profile_selection in f.value.dimensions:
+                    dimension = dimensions.get(profile_selection.key)
+                    if dimension is None:
+                        raise CollectorError(
+                            "UNSUPPORTED_FILTER", f"{f.field}.{profile_selection.key}"
+                        )
+                    allowed = {option.value for option in dimension.options}
+                    if any(value not in allowed for value in profile_selection.values):
+                        raise CollectorError(
+                            "UNSUPPORTED_FILTER", f"{f.field}.{profile_selection.key}"
+                        )
             if f.field in {"viewer_profile", "fan_profile"}:
                 if not isinstance(f.value, AudienceProfileCompound):
                     raise CollectorError("INVALID_FORM", "profile structure")

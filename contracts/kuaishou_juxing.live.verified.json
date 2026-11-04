@@ -1,7 +1,7 @@
 {
  "schema_version": "platform_registry.v1",
- "contract_version": "juxing-live-square-v1",
- "adapter_version": "juxing-live-browser-v1",
+ "contract_version": "juxing-live-square-v2",
+ "adapter_version": "juxing-live-browser-v2",
  "status": "VERIFIED",
  "sample_kind": "live",
  "verified_at": "2026-11-04T21:30:00+08:00",
@@ -11,11 +11,11 @@
   "docs/tasks/LIVE-02.md"
  ],
  "capabilities": {
-  "version": "juxing-live-square-capability-v1",
+  "version": "juxing-live-square-capability-v2",
   "status": "VERIFIED",
   "sample_kind": "live",
   "evidence_refs": [
-   "docs/evidence/LIVE-02-live-square-investigation.md"
+   "docs/evidence/LIVE-02-live-filter-investigation.md"
   ],
   "fields": [
    {
@@ -26,21 +26,559 @@
     ],
     "keyword_mode": "content",
     "control": "text"
+   },
+   {
+    "field": "live_content_category",
+    "label": "内容分类",
+    "group": "内容分类",
+    "operators": [
+     "in"
+    ],
+    "control": "multi-select",
+    "enum": [
+     "beauty",
+     "food",
+     "fashion"
+    ],
+    "options": [
+     {
+      "value": "beauty",
+      "label": "美妆"
+     },
+     {
+      "value": "food",
+      "label": "美食"
+     },
+     {
+      "value": "fashion",
+      "label": "时尚"
+     }
+    ],
+    "request_mapping": {
+     "mode": "content_tags",
+     "field": "contentTagIdList",
+     "tags": {
+      "beauty": {
+       "id": "670",
+       "subIds": [
+        "707",
+        "708",
+        "709",
+        "710",
+        "711",
+        "712"
+       ],
+       "selectFirstLevelId": true
+      },
+      "food": {
+       "id": "673",
+       "subIds": [
+        "718",
+        "719",
+        "720",
+        "721",
+        "722",
+        "723",
+        "724"
+       ],
+       "selectFirstLevelId": true
+      },
+      "fashion": {
+       "id": "675",
+       "subIds": [
+        "735",
+        "736",
+        "737",
+        "738",
+        "739"
+       ],
+       "selectFirstLevelId": true
+      }
+     }
+    },
+    "automation": {
+     "mode": "category_tag"
+    }
+   },
+   {
+    "field": "live_fan_profile",
+    "label": "粉丝画像",
+    "group": "受众人群",
+    "operators": [
+     "compound"
+    ],
+    "control": "profile-group",
+    "dimensions": [
+     {
+      "key": "age",
+      "label": "粉丝年龄",
+      "control": "multi-select",
+      "options": [
+       {
+        "value": "18-23",
+        "label": "18-23岁居多"
+       },
+       {
+        "value": "24-30",
+        "label": "24-30岁居多"
+       },
+       {
+        "value": "31-40",
+        "label": "31-40岁居多"
+       },
+       {
+        "value": "41-49",
+        "label": "41-49岁居多"
+       },
+       {
+        "value": "50+",
+        "label": "50岁以上居多"
+       }
+      ]
+     },
+     {
+      "key": "gender",
+      "label": "粉丝性别",
+      "control": "single-select",
+      "options": [
+       {
+        "value": "MALE",
+        "label": "男性"
+       },
+       {
+        "value": "FEMALE",
+        "label": "女性"
+       }
+      ]
+     },
+     {
+      "key": "mobile",
+      "label": "粉丝设备",
+      "control": "single-select",
+      "options": [
+       {
+        "value": "IOS",
+        "label": "苹果"
+       },
+       {
+        "value": "ANDROID",
+        "label": "安卓"
+       }
+      ]
+     },
+     {
+      "key": "crowd",
+      "label": "粉丝九大人群",
+      "control": "multi-select",
+      "options": [
+       {
+        "value": "小镇青年",
+        "label": "小镇青年"
+       },
+       {
+        "value": "小镇中年",
+        "label": "小镇中年"
+       },
+       {
+        "value": "小镇老年",
+        "label": "小镇老年"
+       },
+       {
+        "value": "Z时代",
+        "label": "Z时代"
+       },
+       {
+        "value": "都市蓝领",
+        "label": "都市蓝领"
+       },
+       {
+        "value": "精致妈妈",
+        "label": "精致妈妈"
+       },
+       {
+        "value": "新锐白领",
+        "label": "新锐白领"
+       },
+       {
+        "value": "资深中产",
+        "label": "资深中产"
+       },
+       {
+        "value": "都市银发",
+        "label": "都市银发"
+       }
+      ]
+     }
+    ],
+    "request_mapping": {
+     "mode": "profile",
+     "age_field": "fansAgeList",
+     "gender_field": "fansGender",
+     "mobile_field": "fansMobile",
+     "crowd_field": "fansNineMajorGroupsList",
+     "seed_from": "0.50",
+     "seed_to": "1.00"
+    },
+    "automation": {
+     "mode": "profile_popover",
+     "opener_text": "粉丝画像",
+     "confirm_text": "确 认"
+    }
+   },
+   {
+    "field": "live_viewer_profile",
+    "label": "观众画像",
+    "group": "受众人群",
+    "operators": [
+     "compound"
+    ],
+    "control": "profile-group",
+    "dimensions": [
+     {
+      "key": "age",
+      "label": "观众年龄",
+      "control": "multi-select",
+      "options": [
+       {
+        "value": "18-23",
+        "label": "18-23岁居多"
+       },
+       {
+        "value": "24-30",
+        "label": "24-30岁居多"
+       },
+       {
+        "value": "31-40",
+        "label": "31-40岁居多"
+       },
+       {
+        "value": "41-49",
+        "label": "41-49岁居多"
+       },
+       {
+        "value": "50+",
+        "label": "50岁以上居多"
+       }
+      ]
+     },
+     {
+      "key": "gender",
+      "label": "观众性别",
+      "control": "single-select",
+      "options": [
+       {
+        "value": "男",
+        "label": "男性"
+       },
+       {
+        "value": "女",
+        "label": "女性"
+       }
+      ]
+     },
+     {
+      "key": "mobile",
+      "label": "观众设备",
+      "control": "single-select",
+      "options": [
+       {
+        "value": "IOS",
+        "label": "苹果"
+       },
+       {
+        "value": "ANDROID",
+        "label": "安卓"
+       }
+      ]
+     },
+     {
+      "key": "crowd",
+      "label": "观众九大人群",
+      "control": "multi-select",
+      "options": [
+       {
+        "value": "小镇青年",
+        "label": "小镇青年"
+       },
+       {
+        "value": "小镇中年",
+        "label": "小镇中年"
+       },
+       {
+        "value": "小镇老年",
+        "label": "小镇老年"
+       },
+       {
+        "value": "Z时代",
+        "label": "Z时代"
+       },
+       {
+        "value": "都市蓝领",
+        "label": "都市蓝领"
+       },
+       {
+        "value": "精致妈妈",
+        "label": "精致妈妈"
+       },
+       {
+        "value": "新锐白领",
+        "label": "新锐白领"
+       },
+       {
+        "value": "资深中产",
+        "label": "资深中产"
+       },
+       {
+        "value": "都市银发",
+        "label": "都市银发"
+       }
+      ]
+     }
+    ],
+    "request_mapping": {
+     "mode": "profile",
+     "age_field": "viewerAgeList",
+     "gender_field": "viewerGender",
+     "mobile_field": "viewerMobileType",
+     "crowd_field": "viewNineMajorGroupsList",
+     "seed_from": "0.50",
+     "seed_to": "1.00"
+    },
+    "automation": {
+     "mode": "profile_popover",
+     "opener_text": "观众画像",
+     "confirm_text": "确 认"
+    }
+   },
+   {
+    "field": "live_expected_viewers",
+    "label": "预期观看人数",
+    "group": "内容表现",
+    "operators": [
+     "range"
+    ],
+    "control": "range",
+    "unit": "ten_thousand_count",
+    "range_constraints": {
+     "min": 0,
+     "max": 100000,
+     "unit": "ten_thousand_count"
+    },
+    "options": [
+     {
+      "value": "liveExpectViewer_top",
+      "label": "1000万以上",
+      "range": {
+       "min": 1000,
+       "max": null
+      }
+     },
+     {
+      "value": "liveExpectViewer_500_1000",
+      "label": "500万-1000万",
+      "range": {
+       "min": 500,
+       "max": 1000
+      }
+     },
+     {
+      "value": "liveExpectViewer_300_500",
+      "label": "300万-500万",
+      "range": {
+       "min": 300,
+       "max": 500
+      }
+     },
+     {
+      "value": "liveExpectViewer_100_300",
+      "label": "100万-300万",
+      "range": {
+       "min": 100,
+       "max": 300
+      }
+     },
+     {
+      "value": "liveExpectViewer_10_100",
+      "label": "10万-100万",
+      "range": {
+       "min": 10,
+       "max": 100
+      }
+     },
+     {
+      "value": "liveExpectViewer_low",
+      "label": "10万以下",
+      "range": {
+       "min": null,
+       "max": 10
+      }
+     }
+    ],
+    "request_mapping": {
+     "mode": "range",
+     "field": "liveExpectViewer",
+     "nested": true,
+     "scale": 10000
+    }
+   },
+   {
+    "field": "live_max_online",
+    "label": "最高在线人数",
+    "group": "内容表现",
+    "operators": [
+     "range"
+    ],
+    "control": "range",
+    "unit": "ten_thousand_count",
+    "range_constraints": {
+     "min": 0,
+     "max": 100000,
+     "unit": "ten_thousand_count"
+    },
+    "options": [
+     {
+      "value": "liveMaxViewer_top",
+      "label": "1000万以上",
+      "range": {
+       "min": 1000,
+       "max": null
+      }
+     },
+     {
+      "value": "liveMaxViewer_500_1000",
+      "label": "500万-1000万",
+      "range": {
+       "min": 500,
+       "max": 1000
+      }
+     },
+     {
+      "value": "liveMaxViewer_300_500",
+      "label": "300万-500万",
+      "range": {
+       "min": 300,
+       "max": 500
+      }
+     },
+     {
+      "value": "liveMaxViewer_100_300",
+      "label": "100万-300万",
+      "range": {
+       "min": 100,
+       "max": 300
+      }
+     },
+     {
+      "value": "liveMaxViewer_10_100",
+      "label": "10万-100万",
+      "range": {
+       "min": 10,
+       "max": 100
+      }
+     },
+     {
+      "value": "liveMaxViewer_low",
+      "label": "10万以下",
+      "range": {
+       "min": null,
+       "max": 10
+      }
+     }
+    ],
+    "request_mapping": {
+     "mode": "range",
+     "min_field": "liveMaxViewerMinNum",
+     "max_field": "liveMaxViewerMaxNum",
+     "scale": 10000
+    }
+   },
+   {
+    "field": "live_expected_cpm",
+    "label": "预期CPM",
+    "group": "内容表现",
+    "operators": [
+     "range"
+    ],
+    "control": "range",
+    "unit": "yuan",
+    "range_constraints": {
+     "min": 0,
+     "max": 100000,
+     "unit": "yuan"
+    },
+    "options": [
+     {
+      "value": "expectCpm_top",
+      "label": "100以上",
+      "range": {
+       "min": 100,
+       "max": null
+      }
+     },
+     {
+      "value": "expectCpm_50_100",
+      "label": "50-100",
+      "range": {
+       "min": 50,
+       "max": 100
+      }
+     },
+     {
+      "value": "expectCpm_30_50",
+      "label": "30-50",
+      "range": {
+       "min": 30,
+       "max": 50
+      }
+     },
+     {
+      "value": "expectCpm_10_30",
+      "label": "10-30",
+      "range": {
+       "min": 10,
+       "max": 30
+      }
+     },
+     {
+      "value": "expectCpm_5_10",
+      "label": "5-10",
+      "range": {
+       "min": 5,
+       "max": 10
+      }
+     },
+     {
+      "value": "expectCpm_low",
+      "label": "5以下",
+      "range": {
+       "min": null,
+       "max": 5
+      }
+     }
+    ],
+    "request_mapping": {
+     "mode": "range",
+     "min_field": "expectCpmMinNum",
+     "max_field": "expectCpmMaxNum",
+     "scale": 1
+    }
    }
   ],
   "sorts": [
    "platform_default"
   ],
-  "combinations": [
-   [
-    "keyword"
-   ]
-  ],
+  "combinations": [],
   "combination_policy": {
    "schema_version": "combination_policy.v2",
    "mode": "composable",
    "fields": [
-    "keyword"
+    "keyword",
+    "live_content_category",
+    "live_fan_profile",
+    "live_viewer_profile",
+    "live_expected_viewers",
+    "live_max_online",
+    "live_expected_cpm"
    ],
    "incompatible": []
   },
@@ -486,8 +1024,7 @@
  "direct_api_enabled": false,
  "raw_har_trace_enabled": false,
  "coverage_gaps": [
-  "直播筛选器仅调查未实现",
-  "列表与详情部分同名字段口径不同，按来源展示",
+  "直播筛选仅覆盖用户指定字段；聚星九大人群等平台配置随账号配置变化，未选择时不发送",
   "page 7+ 与真实终点未验证"
  ]
 }

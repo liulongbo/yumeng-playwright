@@ -39,12 +39,13 @@ export interface CapabilityField {
   label: string;
   operators: string[];
   group?: string | null;
-  control?: "text" | "single-select" | "cascader" | "range" | "range-group" | "profile-group" | null;
+  control?: "text" | "single-select" | "multi-select" | "cascader" | "range" | "range-group" | "profile-group" | null;
   options: CapabilityOption[];
   dimensions: CapabilityDimension[];
   region_tree: RegionNode[];
   range_constraints?: RangeConstraint | null;
   incompatible_with: string[];
+  disabled_reason?: string | null;
   unit?: string | null;
   currencies: string[];
   cooperation_forms: string[];
@@ -116,11 +117,26 @@ export interface AudienceProfile {
   crowd: string[];
 }
 
+export interface LiveFilterRange {
+  min: number | null;
+  max: number | null;
+  unit: "count" | "ten_thousand_count" | "yuan";
+}
+
+export interface LiveFilterSelection {
+  field: string;
+  values: string[];
+  range?: LiveFilterRange;
+  regions?: Array<{ province_code: string; city?: string | null }>;
+  profile?: Array<{ key: string; values: string[] }>;
+}
+
 export interface RequirementFormV2 {
   schema_version: "requirement_form.v2";
   platform: "douyin_xingtu";
   creator_scene?: CreatorScene;
   keyword: string | null;
+  live_filters?: LiveFilterSelection[];
   creator_types: [];
   followers: RangeValue | null;
   creator_gender: "male" | "female" | null;
@@ -146,6 +162,7 @@ export interface RequirementFormV3 {
   platform: "kuaishou_juxing";
   creator_scene?: CreatorScene;
   keyword: string | null;
+  live_filters?: LiveFilterSelection[];
   content_types: string[];
   creator_types: [];
   followers: CountRangeValue | null;
@@ -170,7 +187,8 @@ export interface LiveRequirementForm {
   schema_version: "requirement_form.v2" | "requirement_form.v3";
   platform: "douyin_xingtu" | "kuaishou_juxing";
   creator_scene: "live_square";
-  keyword: string;
+  keyword: string | null;
+  live_filters: LiveFilterSelection[];
   target_count: number;
 }
 

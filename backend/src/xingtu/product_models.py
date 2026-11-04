@@ -8,6 +8,9 @@ from pydantic import Field, JsonValue, model_validator
 
 from .domain import (
     CONNECTION_USERS_MAX_W,
+    LIVE_OPTION_FIELDS,
+    LIVE_PROFILE_FIELDS,
+    LIVE_RANGE_FIELDS,
     Capabilities,
     CreatorScene,
     FilterPlan,
@@ -154,6 +157,75 @@ class JuxingVideoQuotes(Model):
         return self
 
 
+LiveFilterField = Literal[
+    "live_content_type",
+    "live_content_category",
+    "live_gender",
+    "live_certification",
+    "live_region",
+    "live_followers",
+    "live_recent_sessions",
+    "live_avg_viewers",
+    "live_avg_view_visits",
+    "live_acu",
+    "live_pcu",
+    "live_expected_viewers",
+    "live_max_online",
+    "live_expected_cpm",
+    "live_viewer_profile",
+    "live_fan_profile",
+]
+
+
+class LiveProfileDimensionRequirement(Model):
+    key: str = Field(min_length=1)
+    values: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def nonblank_and_unique(self) -> Self:
+        if not self.key.strip() or any(not value.strip() for value in self.values):
+            raise ValueError("live profile values cannot be blank")
+        if len(self.values) != len(set(self.values)):
+            raise ValueError("live profile values must be unique")
+        return self
+
+
+class LiveFilterRequirement(Model):
+    field: LiveFilterField
+    values: list[str] = Field(default_factory=list)
+    range: RequirementRange | None = None
+    regions: list[RegionSelection] = Field(default_factory=list)
+    profile: list[LiveProfileDimensionRequirement] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def shape(self) -> Self:
+        payloads = {
+            "values": bool(self.values),
+            "range": self.range is not None,
+            "regions": bool(self.regions),
+            "profile": bool(self.profile),
+        }
+        if sum(payloads.values()) != 1:
+            raise ValueError("live filter requires exactly one value shape")
+        if self.field in LIVE_OPTION_FIELDS and not payloads["values"]:
+            raise ValueError("live option filter requires values")
+        if self.field in LIVE_RANGE_FIELDS and not payloads["range"]:
+            raise ValueError("live range filter requires a range")
+        if self.field in LIVE_PROFILE_FIELDS and not payloads["profile"]:
+            raise ValueError("live profile filter requires profile dimensions")
+        if self.field == "live_region" and not payloads["regions"]:
+            raise ValueError("live region filter requires regions")
+        if len(self.values) != len(set(self.values)):
+            raise ValueError("live filter values must be unique")
+        keys = [(value.province_code, value.city) for value in self.regions]
+        if len(keys) != len(set(keys)):
+            raise ValueError("live region paths must be unique")
+        profile_keys = [value.key for value in self.profile]
+        if len(profile_keys) != len(set(profile_keys)):
+            raise ValueError("live profile dimensions must be unique")
+        return self
+
+
 class RequirementForm(Model):
     """The user-authored requirement, deliberately separate from ``FilterPlan``."""
 
@@ -163,6 +235,7 @@ class RequirementForm(Model):
     platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
     creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE
     keyword: str | None = None
+    live_filters: list[LiveFilterRequirement] = Field(default_factory=list)
     content_types: list[str] = Field(default_factory=list)
     creator_types: list[str] = Field(default_factory=list)
     followers: RequirementRange | None = None
@@ -184,11 +257,13 @@ class RequirementForm(Model):
     def meaningful_and_unique(self) -> Self:
         if self.keyword is not None and not self.keyword.strip():
             raise ValueError("keyword cannot be blank")
+        if self.creator_scene != CreatorScene.LIVE_SQUARE and self.live_filters:
+            raise ValueError("live filters are only valid for live_square")
         if self.creator_scene == CreatorScene.LIVE_SQUARE:
             if self.target_count > 70:
                 raise ValueError("live target_count exceeds 70")
-            if self.keyword is None or not self.keyword.strip():
-                raise ValueError("live collection requires a keyword or creator id")
+            if (self.keyword is None or not self.keyword.strip()) and not self.live_filters:
+                raise ValueError("live collection requires a keyword, creator id or filter")
             if any(
                 (
                     self.content_types,
@@ -206,6 +281,9 @@ class RequirementForm(Model):
                 )
             ):
                 raise ValueError("live collection does not support video filters yet")
+            live_fields = [value.field for value in self.live_filters]
+            if len(live_fields) != len(set(live_fields)):
+                raise ValueError("live filter fields must be unique")
         if any(not value.strip() for value in self.creator_types):
             raise ValueError("filter options cannot be blank")
         if len(self.creator_types) != len(set(self.creator_types)):
@@ -299,6 +377,7 @@ class RequirementForm(Model):
                 self.connection_users is not None,
                 self.viewer_profile is not None,
                 self.fan_profile is not None,
+                bool(self.live_filters),
             )
         ):
             raise ValueError("at least one business filter is required")
@@ -332,6 +411,32 @@ class RequirementForm(Model):
             data["creator_gender"] = self.creator_gender.strip()
         if self.sort_key is not None:
             data["sort_key"] = self.sort_key.strip()
+        normalized_live: list[dict[str, object]] = []
+        for item in self.live_filters:
+            value = item.model_dump(mode="json")
+            value["values"] = sorted(part.strip() for part in item.values)
+            value["regions"] = sorted(
+                (
+                    {
+                        "province_code": region.province_code.strip(),
+                        "city": region.city.strip() if region.city else None,
+                    }
+                    for region in item.regions
+                ),
+                key=lambda region: (region["province_code"], region["city"] or ""),
+            )
+            value["profile"] = sorted(
+                (
+                    {
+                        "key": profile.key.strip(),
+                        "values": sorted(part.strip() for part in profile.values),
+                    }
+                    for profile in item.profile
+                ),
+                key=lambda profile: profile["key"],
+            )
+            normalized_live.append(value)
+        data["live_filters"] = sorted(normalized_live, key=lambda value: value["field"])
         return RequirementForm.model_validate(data)
 
 
@@ -346,6 +451,7 @@ class CapabilityFieldDTO(Model):
     region_tree: list[dict[str, JsonValue]] = Field(default_factory=list)
     range_constraints: dict[str, JsonValue] | None = None
     incompatible_with: list[str] = Field(default_factory=list)
+    disabled_reason: str | None = None
     unit: str | None = None
     currencies: list[str] = Field(default_factory=list)
     cooperation_forms: list[str] = Field(default_factory=list)
@@ -404,6 +510,7 @@ class CapabilityDTO(Model):
                     if item.range_constraints
                     else None,
                     incompatible_with=item.incompatible_with,
+                    disabled_reason=item.disabled_reason,
                     unit=item.unit,
                     currencies=item.currencies,
                     cooperation_forms=item.cooperation_forms,

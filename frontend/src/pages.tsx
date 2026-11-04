@@ -16,6 +16,7 @@ import type { FeaturedCardView, FeaturedCollectionView, FeaturedContent } from "
 import { ProvenanceDrawer } from "./profile/audience";
 import { indexCatalog, useFieldCatalog } from "./fieldCatalog";
 import { LiveCreatorDetailView, liveMetricList, payloadDisplayName } from "./liveCreator";
+import { EMPTY_LIVE_FILTERS, LiveFilterFields, liveFilterSummary, validateLiveFilters } from "./liveFilters";
 import { formatDate, shortId, statusLabel, terminalStatuses, waitingStatuses } from "./status";
 import type {
   AudienceProfile, CapabilityDimension, CapabilityField, ContentPage,
@@ -33,8 +34,11 @@ const taskKindLabel: Record<TaskKind, string> = {
 };
 const platformLabel = { douyin_xingtu: "巨量星图", kuaishou_juxing: "磁力聚星" } as const;
 
-function taskTitle(task: { task_kind?: TaskKind; keyword: string | null; counts: { target_count: number } }) {
-  if (!task.task_kind || task.task_kind === "collection") return task.keyword || "系统内部任务";
+function taskTitle(task: { task_kind?: TaskKind; keyword: string | null; creator_scene?: CreatorScene; counts: { target_count: number } }) {
+  if (!task.task_kind || task.task_kind === "collection") {
+    if (task.keyword) return task.keyword;
+    return task.creator_scene === "live_square" ? "直播广场筛选采集" : "系统内部任务";
+  }
   return `${taskKindLabel[task.task_kind]} · ${task.counts.target_count} 位达人`;
 }
 
@@ -203,7 +207,8 @@ function emptyLive(platform: "douyin_xingtu" | "kuaishou_juxing", target = 20): 
     schema_version: platform === "kuaishou_juxing" ? "requirement_form.v3" : "requirement_form.v2",
     platform,
     creator_scene: "live_square",
-    keyword: "",
+    keyword: null,
+    live_filters: EMPTY_LIVE_FILTERS,
     target_count: target,
   };
 }
@@ -264,7 +269,8 @@ export function NewTaskPage() {
         schema_version: platform === "kuaishou_juxing" ? "requirement_form.v3" : "requirement_form.v2",
         platform,
         creator_scene: "live_square",
-        keyword: ("keyword" in requirement ? requirement.keyword : "") || "",
+        keyword: ("keyword" in requirement ? requirement.keyword : null) ?? null,
+        live_filters: ("live_filters" in requirement ? (requirement as LiveRequirementForm).live_filters : []) ?? [],
         target_count: requirement.target_count,
       });
       return;
@@ -282,10 +288,14 @@ export function NewTaskPage() {
   function submitForm(event: FormEvent) {
     event.preventDefault(); setClientError("");
     if (selectedScene === "live_square") {
-      if (!liveForm.keyword.trim()) { setClientError("直播采集必须填写达人昵称/平台 ID。"); return; }
-      if (liveForm.target_count < 1 || liveForm.target_count > 70) {
-        setClientError("直播单任务目标数量必须在 1—70 之间。"); return;
-      }
+      const liveCapability = capabilities.data;
+      if (!liveCapability) return;
+      const liveError = validateLiveFilters(
+        liveForm,
+        liveCapability.fields,
+        liveCapability.combination_policy,
+      );
+      if (liveError) { setClientError(liveError); return; }
       submit.mutate();
       return;
     }
@@ -307,7 +317,7 @@ export function NewTaskPage() {
   ];
   const sceneLabel = sceneOptions.find((option) => option.scene === selectedScene)?.label || (selectedScene === "live_square" ? "直播广场" : "短视频广场");
   const summary = selectedScene === "live_square"
-    ? (liveForm.keyword.trim() ? [`关键词/ID：${liveForm.keyword.trim()}`] : [])
+    ? liveFilterSummary(liveForm, cap.fields)
     : selectedPlatform === "douyin_xingtu"
       ? selectedConditionSummary(form, cap.fields)
       : selectedJuxingConditionSummary(juxingForm, cap.fields);
@@ -326,11 +336,12 @@ export function NewTaskPage() {
           {sceneOptions.map((scene) => <button key={scene.scene} type="button" role="radio" aria-checked={scene.scene === selectedScene} className={`platform-option ${scene.scene === selectedScene ? "active" : ""}`} disabled={!scene.enabled} onClick={() => { setSelectedScene(scene.scene); setClientError(""); keyRef.current = crypto.randomUUID(); }}><strong>{scene.label}</strong><span>{scene.capability_status === "verified" ? "已验证可用" : "暂不可用"}</span>{scene.disabled_reason && <small>{scene.disabled_reason}</small>}</button>)}
         </div>
         <div className="section-heading"><span className="step-index">01</span><div><h2>达人筛选条件</h2><p>系统会先转换并校验需求，合法后才申请浏览器资源。</p></div></div>
-        <div className="capability-banner"><ShieldCheck size={18} /><div><strong>已核验能力版本</strong><span>{cap.capability_version}</span></div><em>{cap.fields.length} 项条件可用</em></div>
+        <div className="capability-banner"><ShieldCheck size={18} /><div><strong>已核验能力版本</strong><span>{cap.capability_version}</span></div><em>{cap.fields.filter((field) => !field.disabled_reason).length} 项条件可用</em></div>
         {selectedScene === "live_square" ? <div className="field-grid">
-          <label className="field full"><span>达人昵称 / 平台 ID <i>必填</i></span><input aria-label="直播达人昵称或平台ID" value={liveForm.keyword} onChange={(event) => setLiveForm((current) => ({ ...current, keyword: event.target.value }))} placeholder={selectedPlatform === "douyin_xingtu" ? "输入达人昵称、抖音号或星图ID" : "输入达人快手ID或昵称"} required /><small>首版直播只支持关键词/达人 ID + 目标数量；其他筛选后续开放。</small></label>
+          <label className="field full"><span>达人昵称 / 平台 ID <i>选填</i></span><input aria-label="直播达人昵称或平台ID" value={liveForm.keyword ?? ""} onChange={(event) => setLiveForm((current) => ({ ...current, keyword: event.target.value || null }))} placeholder={selectedPlatform === "douyin_xingtu" ? "输入达人昵称、抖音号或星图ID" : "输入达人快手ID或昵称"} /><small>可留空；与直播筛选条件至少选择一项。</small></label>
           <label className="field"><span>目标达人数量 <i>必填</i></span><div className="number-field"><input aria-label="直播目标达人数量" type="number" min={cap.target_count_min} max={Math.min(70, cap.target_count_max)} step={1} value={liveForm.target_count} onChange={(event) => setLiveForm((current) => ({ ...current, target_count: Number(event.target.value) }))} required /><b>位</b></div><small>默认 {cap.target_count_default}，单任务最多 70 位（两平台统一）。</small></label>
-          <div className="profile-exclusion"><ShieldCheck size={15} />直播任务需要跨越列表分页寻找候选；达到 70 位有效达人后结束，候选不足会如实标记部分完成。</div>
+          <LiveFilterFields fields={cap.fields.filter((field) => field.field !== "keyword")} values={liveForm.live_filters} onChange={(next) => setLiveForm((current) => ({ ...current, live_filters: next }))} />
+          <div className="profile-exclusion"><ShieldCheck size={15} />筛选会在平台直播广场真实应用并校验请求；达到 70 位有效达人后结束，候选不足会如实标记部分完成。</div>
         </div> : selectedPlatform === "douyin_xingtu" ? <div className="field-grid">
           {keywordField && <CapabilityInput field={keywordField} form={form} update={update} setForm={setForm} />}
           <fieldset className="capability-group"><legend>背景信息</legend><p>达人自身属性</p><div className="field-grid">{backgroundFields.map((field) => <CapabilityInput key={field.field} field={field} form={form} update={update} setForm={setForm} />)}</div></fieldset>
@@ -554,6 +565,12 @@ export function TaskDetailPage() {
     enabled: task.data?.platform === "kuaishou_juxing" && task.data?.creator_scene !== "live_square",
     staleTime: 30 * 60 * 1000,
   });
+  const liveCapabilities = useQuery({
+    queryKey: ["capabilities", task.data?.platform ?? "douyin_xingtu", "live_square"],
+    queryFn: () => api.capabilities(task.data?.platform ?? "douyin_xingtu", "live_square"),
+    enabled: task.data?.creator_scene === "live_square",
+    staleTime: 30 * 60 * 1000,
+  });
   useEffect(() => {
     if (task.data && terminalStatuses.has(task.data.status)) {
       queryClient.invalidateQueries({ queryKey: ["creators", taskId] });
@@ -572,10 +589,16 @@ export function TaskDetailPage() {
   const liveTask = item.creator_scene === "live_square";
   const noFeatured = juxingTask || liveTask;
   const sceneLabel = liveTask ? "直播广场" : "短视频广场";
-  const juxingRequirement = item.requirement?.schema_version === "requirement_form.v3"
+  const juxingRequirement = !liveTask && item.requirement?.schema_version === "requirement_form.v3"
     ? (item.requirement as RequirementFormV3)
     : null;
   const juxingConditions = juxingRequirement ? selectedJuxingConditionSummary(juxingRequirement, juxingCapabilities.data?.fields ?? []) : [];
+  const requirementScene = (item.requirement as { creator_scene?: CreatorScene } | null | undefined)?.creator_scene;
+  const liveRequirement = liveTask && requirementScene === "live_square"
+    ? (item.requirement as LiveRequirementForm)
+    : null;
+  const liveConditions = liveRequirement ? liveFilterSummary(liveRequirement, liveCapabilities.data?.fields ?? []) : [];
+  const conditionRows = liveTask ? liveConditions : juxingConditions;
   const remainingToTarget = Math.max(0, item.counts.target_count - item.counts.valid_count);
   const backfillPending = Math.max(0, item.counts.valid_count - item.counts.profile_complete_count);
   const completeDetail = backfillPending > 0 ? `待补采 ${backfillPending} 位` : "全部完整";
@@ -618,7 +641,7 @@ export function TaskDetailPage() {
       <section className="panel creators-panel"><div className="panel-heading"><div><h2>任务内达人</h2><p>执行中只展示已持久草稿；终态展示任务关联快照。</p></div><span>{creators.data?.pages.flatMap((page) => page.items).length ?? 0} 位可查看</span></div>
         {creators.isLoading ? <SkeletonRows rows={4} /> : creators.isError ? <ErrorState error={creators.error} retry={() => creators.refetch()} /> : !creators.data?.pages[0]?.items.length ? <EmptyState title={terminalStatuses.has(item.status) ? "当前任务没有有效达人" : "达人结果正在形成"} description={terminalStatuses.has(item.status) ? "查看任务状态与失败原因，确认是零结果、部分完成还是执行失败。" : "发现并有效落库后，达人会出现在这里。"} /> : <><div className="creator-list">{creators.data.pages.flatMap((page) => page.items).map((creator) => <CreatorRow key={creator.creator_id} taskId={taskId} creator={creator} />)}</div>{creators.hasNextPage && <div className="pagination"><button className="button secondary" disabled={creators.isFetchingNextPage} onClick={() => creators.fetchNextPage()}>{creators.isFetchingNextPage ? "正在读取" : "查看更多达人"}<ArrowRight size={16} /></button></div>}</>}
       </section>
-      {taskKind === "collection" ? <aside className="panel requirement-panel"><div className="panel-heading"><div><h2>需求与执行约束</h2><p>原始需求和执行计划分开留存。</p></div></div><dl><div><dt>平台</dt><dd>{platformLabel[item.platform ?? "douyin_xingtu"]}</dd></div><div><dt>内容关键词</dt><dd>{item.requirement?.keyword || item.keyword || "—"}</dd></div>{juxingConditions.filter((condition) => !condition.startsWith("关键词：")).map((condition) => { const [label, ...rest] = condition.split("："); return <div key={condition}><dt>{label}</dt><dd>{rest.join("：")}</dd></div>; })}<div><dt>目标数量</dt><dd>{item.counts.target_count} 位</dd></div><div><dt>排序方式</dt><dd>平台默认排序</dd></div><div><dt>来源</dt><dd>{item.source === "product" ? "媒介产品提交" : "系统内部任务"}</dd></div></dl>{item.plan && <details><summary>查看最终执行计划</summary><pre>{JSON.stringify(item.plan, null, 2)}</pre></details>}{item.origin_root_task_id && <Link to={`/tasks/${item.origin_root_task_id}`} className="origin-link"><RotateCcw size={15} />查看来源任务</Link>}</aside> : <aside className="panel requirement-panel"><div className="panel-heading"><div><h2>更新目标</h2><p>批次内每位达人独立采集、独立保存；失败不影响其他达人。</p></div></div><dl><div><dt>平台</dt><dd>{platformLabel[item.platform ?? "douyin_xingtu"]}</dd></div><div><dt>任务类型</dt><dd>{taskKindLabel[taskKind]}</dd></div><div><dt>目标数量</dt><dd>{item.counts.target_count} 位</dd></div><div><dt>已更新</dt><dd>{item.counts.valid_count} 位</dd></div><div><dt>来源</dt><dd>{item.created_by_name || "定时调度"}</dd></div></dl><div className="update-target-list">{(item.update_targets ?? []).map((target) => <div key={target.platform_creator_id}><span>{target.display_name || `达人 ${target.first_position + 1}`}</span><em>{updateTargetStateLabel[target.state] || target.state}</em>{target.failure_reason && <small>{target.failure_reason}</small>}</div>)}</div></aside>}
+      {taskKind === "collection" ? <aside className="panel requirement-panel"><div className="panel-heading"><div><h2>需求与执行约束</h2><p>原始需求和执行计划分开留存。</p></div></div><dl><div><dt>平台</dt><dd>{platformLabel[item.platform ?? "douyin_xingtu"]}</dd></div><div><dt>{liveTask ? "关键词 / 平台 ID" : "内容关键词"}</dt><dd>{item.requirement?.keyword || item.keyword || "—"}</dd></div>{conditionRows.filter((condition) => !condition.startsWith("关键词")).map((condition) => { const [label, ...rest] = condition.split("："); return <div key={condition}><dt>{label}</dt><dd>{rest.join("：")}</dd></div>; })}<div><dt>目标数量</dt><dd>{item.counts.target_count} 位</dd></div><div><dt>排序方式</dt><dd>平台默认排序</dd></div><div><dt>来源</dt><dd>{item.source === "product" ? "媒介产品提交" : "系统内部任务"}</dd></div></dl>{item.plan && <details><summary>查看最终执行计划</summary><pre>{JSON.stringify(item.plan, null, 2)}</pre></details>}{item.origin_root_task_id && <Link to={`/tasks/${item.origin_root_task_id}`} className="origin-link"><RotateCcw size={15} />查看来源任务</Link>}</aside> : <aside className="panel requirement-panel"><div className="panel-heading"><div><h2>更新目标</h2><p>批次内每位达人独立采集、独立保存；失败不影响其他达人。</p></div></div><dl><div><dt>平台</dt><dd>{platformLabel[item.platform ?? "douyin_xingtu"]}</dd></div><div><dt>任务类型</dt><dd>{taskKindLabel[taskKind]}</dd></div><div><dt>目标数量</dt><dd>{item.counts.target_count} 位</dd></div><div><dt>已更新</dt><dd>{item.counts.valid_count} 位</dd></div><div><dt>来源</dt><dd>{item.created_by_name || "定时调度"}</dd></div></dl><div className="update-target-list">{(item.update_targets ?? []).map((target) => <div key={target.platform_creator_id}><span>{target.display_name || `达人 ${target.first_position + 1}`}</span><em>{updateTargetStateLabel[target.state] || target.state}</em>{target.failure_reason && <small>{target.failure_reason}</small>}</div>)}</div></aside>}
     </div>
   </div>;
 }

@@ -302,6 +302,7 @@ def _factory():
         expected_account_id: str,
         guard: Any,
         *,
+        scene: Any = None,
         on_session_health: Any,
         manually_attested_account_id: str | None = None,
     ) -> SyntheticJuxingAdapter:
@@ -309,6 +310,7 @@ def _factory():
         FACTORY_CALLS.append(
             {
                 "platform": platform,
+                "scene": str(scene) if scene is not None else None,
                 "expected_account_id": expected_account_id,
                 "contract_version": active_registry.contract_version,
                 "adapter_version": active_registry.adapter_version,
@@ -534,6 +536,7 @@ async def test_juxing_product_chain_from_api_to_temporal_worker_to_library(
     assert FACTORY_CALLS == [
         {
             "platform": PlatformId.KUAISHOU_JUXING,
+            "scene": "video_square",
             "expected_account_id": JUXING_ACCOUNT,
             "contract_version": registry.contract_version,
             "adapter_version": registry.adapter_version,
