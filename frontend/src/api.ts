@@ -1,7 +1,7 @@
 import type {
   Capabilities, ContentPage, CreatorLibraryDetail, CreatorLibraryHistory, CreatorLibraryPage,
   CreatorLibraryQuote, CreatorPage, CreatorSummary, CreatorUpdateResponse, CreatorUpdateStatus,
-  CreatorVideoPage, PlatformOption, ProductError, ProfileFieldCatalog,
+  CreatorScene, CreatorVideoPage, PlatformOption, ProductError, ProfileFieldCatalog,
   BrowserTakeover, ExecutionUnit, RequirementForm, TaskDetail, TaskPage, UserView, VerificationEvent,
 } from "./types";
 
@@ -37,11 +37,25 @@ export const api = {
     method: "POST", body: JSON.stringify({ username, password }),
   }),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
-  capabilities: (platform: "douyin_xingtu" | "kuaishou_juxing" = "douyin_xingtu") =>
-    request<Capabilities>(`/api/platforms/${platform}/capabilities`),
+  capabilities: (
+    platform: "douyin_xingtu" | "kuaishou_juxing" = "douyin_xingtu",
+    creatorScene: CreatorScene = "video_square",
+  ) =>
+    request<Capabilities>(
+      creatorScene === "live_square"
+        ? `/api/platforms/${platform}/capabilities?creator_scene=${creatorScene}`
+        : `/api/platforms/${platform}/capabilities`,
+    ),
   platforms: () => request<PlatformOption[]>("/api/platforms"),
-  profileFieldCatalog: (platform: "douyin_xingtu" | "kuaishou_juxing" = "douyin_xingtu") =>
-    request<ProfileFieldCatalog>(`/api/platforms/${platform}/profile-field-catalog`),
+  profileFieldCatalog: (
+    platform: "douyin_xingtu" | "kuaishou_juxing" = "douyin_xingtu",
+    creatorScene: CreatorScene = "video_square",
+  ) =>
+    request<ProfileFieldCatalog>(
+      creatorScene === "live_square"
+        ? `/api/platforms/${platform}/profile-field-catalog?creator_scene=${creatorScene}`
+        : `/api/platforms/${platform}/profile-field-catalog`,
+    ),
   listTasks: (params: URLSearchParams) => request<TaskPage>(`/api/tasks?${params.toString()}`),
   task: (id: string) => request<TaskDetail>(`/api/tasks/${id}`),
   executionUnits: () => request<ExecutionUnit[]>("/api/execution-units"),
@@ -76,9 +90,21 @@ export const api = {
     `/api/tasks/${taskId}/creators/${creatorId}`,
   ),
   creatorLibrary: (params: URLSearchParams) => request<CreatorLibraryPage>(`/api/creator-library?${params.toString()}`),
-  creatorLibraryDetail: (creatorId: string) => request<CreatorLibraryDetail>(`/api/creator-library/${creatorId}`),
+  creatorLibraryDetail: (creatorId: string, creatorScene: CreatorScene = "video_square") =>
+    request<CreatorLibraryDetail>(
+      creatorScene === "live_square"
+        ? `/api/creator-library/${creatorId}?creator_scene=${creatorScene}`
+        : `/api/creator-library/${creatorId}`,
+    ),
   creatorLibraryHistory: (creatorId: string) => request<CreatorLibraryHistory>(`/api/creator-library/${creatorId}/history`),
   creatorUpdateStatus: (creatorId: string) => request<CreatorUpdateStatus>(`/api/creator-library/${creatorId}/update`),
+  creatorLiveUpdateStatus: (creatorId: string) =>
+    request<CreatorUpdateStatus>(`/api/creator-library/${creatorId}/live-update`),
+  createCreatorLiveUpdate: (creatorId: string, idempotencyKey: string) =>
+    request<CreatorUpdateResponse>(`/api/creator-library/${creatorId}/live-updates`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+    }),
   createCreatorUpdate: (creatorId: string, idempotencyKey: string) =>
     request<CreatorUpdateResponse>(`/api/creator-library/${creatorId}/updates`, {
       method: "POST",

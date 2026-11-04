@@ -1,0 +1,493 @@
+{
+ "schema_version": "platform_registry.v1",
+ "contract_version": "juxing-live-square-v1",
+ "adapter_version": "juxing-live-browser-v1",
+ "status": "VERIFIED",
+ "sample_kind": "live",
+ "verified_at": "2026-11-04T21:30:00+08:00",
+ "account_permission_type": "已登录且具备直播广场访问权限的平台账号（阶段一真实页面验证）",
+ "evidence_refs": [
+  "docs/evidence/LIVE-02-live-square-investigation.md",
+  "docs/tasks/LIVE-02.md"
+ ],
+ "capabilities": {
+  "version": "juxing-live-square-capability-v1",
+  "status": "VERIFIED",
+  "sample_kind": "live",
+  "evidence_refs": [
+   "docs/evidence/LIVE-02-live-square-investigation.md"
+  ],
+  "fields": [
+   {
+    "field": "keyword",
+    "label": "内容关键词",
+    "operators": [
+     "eq"
+    ],
+    "keyword_mode": "content",
+    "control": "text"
+   }
+  ],
+  "sorts": [
+   "platform_default"
+  ],
+  "combinations": [
+   [
+    "keyword"
+   ]
+  ],
+  "combination_policy": {
+   "schema_version": "combination_policy.v2",
+   "mode": "composable",
+   "fields": [
+    "keyword"
+   ],
+   "incompatible": []
+  },
+  "compatible_plan_versions": [
+   "filter_plan.v3"
+  ]
+ },
+ "allowed_hosts": [
+  "k.kuaishou.com"
+ ],
+ "homepage_path_prefixes": [
+  "/"
+ ],
+ "action_interval_seconds": 0.5,
+ "operation_timeout_seconds": 30,
+ "response_body_max_bytes": 8000000,
+ "session_boot_timeout_seconds": 120,
+ "session": {
+  "entry_url": "https://k.kuaishou.com/#/star_plaza/live",
+  "account": {
+   "selector": "iframe[src*='aid=']",
+   "attribute": "src",
+   "capture_regex": "[?&]aid=(\\d+)"
+  },
+  "account_url_parameter": "__accountId__",
+  "protected_ready": {
+   "selector": "input[placeholder='请输入达人快手ID、快手昵称或MCN机构名称']"
+  },
+  "error_selectors": {
+   "ACCOUNT_SELECTION_REQUIRED": {
+    "selector": "div.account-component"
+   }
+  },
+  "identity": {
+   "selector": "div.id-and-location > div:first-child",
+   "capture_regex": "^ID\\s*[:：]?\\s*(\\d+)$"
+  },
+  "business_urls": [
+   "https://k.kuaishou.com/#/star_plaza/live"
+  ]
+ },
+ "search": {
+  "entry_url": "https://k.kuaishou.com/#/star_plaza/live",
+  "default_bindings": {},
+  "reset_actions": [],
+  "apply_actions": [],
+  "final_actions": [],
+  "ready": {
+   "selector": "input[placeholder='请输入达人快手ID、快手昵称或MCN机构名称']"
+  },
+  "ready_hidden": [],
+  "readback": {
+   "keyword": {
+    "selector": "input[placeholder='请输入达人快手ID、快手昵称或MCN机构名称']",
+    "property": "value"
+   }
+  },
+  "requests": [
+   {
+    "key": "search",
+    "method": "POST",
+    "host": "k.kuaishou.com",
+    "path": "/rest/web/star/list",
+    "request_match": {
+     "currentPage": "$cursor",
+     "userName": "$keyword"
+    },
+    "response_match": {},
+    "required": true
+   }
+  ],
+  "result_request_key": "search",
+  "candidates_path": "starList",
+  "id_path": "userId",
+  "homepage_path": null,
+  "homepage_template": "https://k.kuaishou.com/#/live-promotion/star/{platform_creator_id}?openBy=user",
+  "next_path": "currentPage",
+  "exhausted_path": "total",
+  "exhausted_value": "0",
+  "pagination": "page",
+  "next_page_mode": "page_fetch",
+  "page_fetch_max_verified": 6,
+  "resume_supported": true,
+  "initial_cursor": "1",
+  "fixed_sort": true,
+  "single_page_only": false,
+  "binding_values": {},
+  "coverage_gaps": [
+   "直播筛选器未实现；仅关键词/ID + 目标数",
+   "homepage 由 adapter 使用列表 starId 构造，不使用模板 userId"
+  ]
+ },
+ "modules": [
+  {
+   "key": "basic",
+   "basic": true,
+   "entry": null,
+   "actions": [],
+   "ready": {
+    "selector": "body"
+   },
+   "ready_hidden": [],
+   "requests": [],
+   "fields": [
+    {
+     "key": "platform_creator_id",
+     "name": "快手ID",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "platform_star_id",
+     "name": "starId",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "nickname",
+     "name": "昵称",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "avatar_uri",
+     "name": "头像",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "gender",
+     "name": "性别",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "province",
+     "name": "省份",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "city",
+     "name": "城市",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "followers",
+     "name": "粉丝数",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "creator_type_label",
+     "name": "达人类型",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "industry_labels",
+     "name": "所属行业",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "mcn_name",
+     "name": "所属机构",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    }
+   ],
+   "checkpoint_version": 1,
+   "coverage_gaps": [
+    "live fields are parsed by the live adapter from registered platform responses; DOM sources are contract placeholders for completeness/labels"
+   ]
+  },
+  {
+   "key": "live",
+   "basic": false,
+   "entry": null,
+   "actions": [],
+   "ready": {
+    "selector": "body"
+   },
+   "ready_hidden": [],
+   "requests": [],
+   "fields": [
+    {
+     "key": "platform_star_id",
+     "name": "starId",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "live.expect_viewer",
+     "name": "预期观看人数",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.max_online",
+     "name": "最高在线人数",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.expect_cpm",
+     "name": "预期CPM",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "cpm"
+    },
+    {
+     "key": "live.weekly_sessions",
+     "name": "周均直播场次",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.avg_people",
+     "name": "平均观看人数",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.avg_like",
+     "name": "场均点赞",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.week_release",
+     "name": "直播周发布",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.interaction_rate",
+     "name": "直播互动率",
+     "kind": "ratio",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "ratio"
+    },
+    {
+     "key": "live.quote_hour",
+     "name": "直播按小时报价",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "yuan"
+    },
+    {
+     "key": "live.quote_day",
+     "name": "直播按天报价",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "yuan"
+    },
+    {
+     "key": "live.quote_goods",
+     "name": "直播按商品报价",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "yuan"
+    },
+    {
+     "key": "live.commerce_sessions",
+     "name": "带货直播场次",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.commerce_watch_median",
+     "name": "观看人数中位数",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.commerce_max_online_median",
+     "name": "最高在线人数中位数",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.commerce_goods",
+     "name": "带货商品数量",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    }
+   ],
+   "checkpoint_version": 1,
+   "coverage_gaps": [
+    "live fields are parsed by the live adapter from registered platform responses; DOM sources are contract placeholders for completeness/labels"
+   ]
+  }
+ ],
+ "featured": [],
+ "direct_api_enabled": false,
+ "raw_har_trace_enabled": false,
+ "coverage_gaps": [
+  "直播筛选器仅调查未实现",
+  "列表与详情部分同名字段口径不同，按来源展示",
+  "page 7+ 与真实终点未验证"
+ ]
+}

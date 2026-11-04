@@ -41,6 +41,7 @@ function ProductRoutes() {
       <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
       <Route path="/tasks/:taskId/creators/:creatorId" element={<CreatorDetailPage />} />
       <Route path="/creators" element={<CreatorLibraryPage />} />
+      <Route path="/creators/:creatorId/live" element={<CreatorLibraryDetailPage />} />
       <Route path="/creators/:creatorId" element={<CreatorLibraryDetailPage />} />
       <Route path="/execution-units" element={<ExecutionUnitsPage />} />
       <Route path="/settings" element={<div className="placeholder"><Settings2 />当前里程碑不包含设置页面</div>} />

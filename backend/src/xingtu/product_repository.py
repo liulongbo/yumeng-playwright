@@ -242,8 +242,8 @@ class ProductRepository:
             }
             conn.execute(
                 """INSERT INTO root_tasks(root_task_id,state,version,unit_id,payload,
-                requirement_id,created_by,origin_root_task_id,task_type,platform)
-                VALUES(%s,'RECEIVED',0,NULL,%s,%s,%s,%s,'product_intake',%s)""",
+                requirement_id,created_by,origin_root_task_id,task_type,platform,creator_scene)
+                VALUES(%s,'RECEIVED',0,NULL,%s,%s,%s,%s,'product_intake',%s,%s)""",
                 (
                     root_task_id,
                     Jsonb(root_payload),
@@ -251,6 +251,7 @@ class ProductRepository:
                     user_id,
                     origin_root_task_id,
                     form.platform,
+                    form.creator_scene.value,
                 ),
             )
             conn.execute(
@@ -537,6 +538,7 @@ class ProductRepository:
                 task_id=p2_task_id,
                 attempt_id=attempt_id,
                 plan=plan,
+                creator_scene=plan.creator_scene,
                 state=TaskStatus.QUEUED,
                 version=int(root["version"]) + 1,
                 execution_unit_id=assigned_unit_id,
@@ -553,8 +555,8 @@ class ProductRepository:
                 ),
             )
             conn.execute(
-                "UPDATE root_tasks SET platform=%s WHERE root_task_id=%s",
-                (plan.platform, state.root_task_id),
+                "UPDATE root_tasks SET platform=%s,creator_scene=%s WHERE root_task_id=%s",
+                (plan.platform, plan.creator_scene.value, state.root_task_id),
             )
             conn.execute(
                 "INSERT INTO filter_plans(root_task_id,payload,source) VALUES(%s,%s,'model')",

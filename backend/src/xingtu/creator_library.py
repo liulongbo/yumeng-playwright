@@ -598,3 +598,192 @@ class CreatorLibraryWriter:
                     captured_at,
                 ),
             )
+
+
+class CreatorLiveLibraryWriter:
+    """Project one immutable live snapshot into the live-only current table.
+
+    Live business data never writes ``platform_creators.projection`` or the Xingtu video current
+    table.  On update, only COLLECTED fields replace the current metrics, so a failed or empty
+    observation cannot clear previously collected values.
+    """
+
+    _basic_columns = {
+        "display_name": "nickname",
+        "avatar_uri": "avatar_uri",
+        "gender": "gender",
+        "province": "province",
+        "city": "city",
+        "creator_type_label": "creator_type_label",
+        "mcn_name": "mcn_name",
+    }
+
+    @staticmethod
+    def _collected(snapshot: dict[str, Any], key: str) -> dict[str, Any] | None:
+        field = _field(snapshot, key)
+        if field and field.get("status") == "COLLECTED":
+            return field
+        return None
+
+    @staticmethod
+    def _text(field: dict[str, Any] | None) -> str | None:
+        if not field:
+            return None
+        value = field.get("value")
+        return value if isinstance(value, str) else None
+
+    @staticmethod
+    def _amount(field: dict[str, Any] | None) -> Decimal | None:
+        if not field:
+            return None
+        value = field.get("value")
+        if isinstance(value, dict):
+            amount = value.get("amount")
+            try:
+                return Decimal(str(amount)) if amount is not None else None
+            except (InvalidOperation, TypeError, ValueError):
+                return None
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _labels(field: dict[str, Any] | None) -> list[str]:
+        if not field:
+            return []
+        value = field.get("value")
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, str)]
+        if isinstance(value, str):
+            return [item.strip() for item in re.split(r"[,，/]", value) if item.strip()]
+        return []
+
+    def sync(
+        self,
+        conn: Any,
+        *,
+        creator_id: str,
+        platform: str,
+        platform_creator_id: str,
+        snapshot_id: str,
+        snapshot: dict[str, Any],
+        captured_at: datetime,
+        profile_complete: bool,
+        pipeline_complete: bool,
+    ) -> None:
+        modules = snapshot.get("modules") or {}
+        fields = [
+            field
+            for module in modules.values()
+            for field in (module.get("fields") or [])
+            if isinstance(field, dict)
+        ]
+        all_fields = {str(field.get("field_key")): field for field in fields}
+        collected_metrics = {
+            key: value
+            for key, value in all_fields.items()
+            if key.startswith("live.") and value.get("status") == "COLLECTED"
+        }
+        sources = {
+            key: {
+                name: value.get(name)
+                for name in (
+                    "status",
+                    "unit",
+                    "period_label",
+                    "source_kind",
+                    "source_contract",
+                    "path_ref",
+                    "observed_at",
+                )
+                if value.get(name) is not None
+            }
+            for key, value in all_fields.items()
+        }
+        row = {
+            "creator_id": creator_id,
+            "platform": platform,
+            "platform_creator_id": platform_creator_id,
+            "platform_star_id": (
+                self._text(self._collected(snapshot, "platform_star_id"))
+                or self._text(self._collected(snapshot, "platform_creator_id"))
+            ),
+            "latest_snapshot_id": snapshot_id,
+            "display_name": self._text(self._collected(snapshot, "nickname")),
+            "avatar_uri": self._text(self._collected(snapshot, "avatar_uri")),
+            "gender": self._text(self._collected(snapshot, "gender")),
+            "province": self._text(self._collected(snapshot, "province")),
+            "city": self._text(self._collected(snapshot, "city")),
+            "creator_type_label": self._text(self._collected(snapshot, "creator_type_label")),
+            "industry_labels": self._labels(self._collected(snapshot, "industry_labels")),
+            "content_theme_labels": self._labels(self._collected(snapshot, "content_type")),
+            "mcn_name": self._text(self._collected(snapshot, "mcn_name")),
+            "followers_count": self._amount(self._collected(snapshot, "followers")),
+            "followers_raw": (self._collected(snapshot, "followers") or {}).get("raw_value"),
+            "followers_is_approximate": bool(
+                ((self._collected(snapshot, "followers") or {}).get("value") or {}).get(
+                    "bound", "exact"
+                )
+                != "exact"
+            ),
+            "live_metrics": collected_metrics,
+            "profile_complete": profile_complete,
+            "pipeline_complete": pipeline_complete,
+            "collected_field_count": sum(f.get("status") == "COLLECTED" for f in fields),
+            "failed_field_count": sum(f.get("status") == "FAILED" for f in fields),
+            "field_sources": sources,
+            "data_updated_at": captured_at,
+        }
+        conn.execute(
+            """INSERT INTO creator_live_current(
+            creator_id,platform,platform_creator_id,platform_star_id,latest_snapshot_id,
+            display_name,avatar_uri,gender,province,city,creator_type_label,industry_labels,
+            content_theme_labels,mcn_name,followers_count,followers_raw,
+            followers_is_approximate,live_metrics,profile_complete,pipeline_complete,
+            collected_field_count,failed_field_count,field_sources,data_updated_at)
+            VALUES(%(creator_id)s,%(platform)s,%(platform_creator_id)s,%(platform_star_id)s,
+            %(latest_snapshot_id)s,%(display_name)s,%(avatar_uri)s,%(gender)s,%(province)s,
+            %(city)s,%(creator_type_label)s,%(industry_labels)s,%(content_theme_labels)s,
+            %(mcn_name)s,%(followers_count)s,%(followers_raw)s,%(followers_is_approximate)s,
+            %(live_metrics)s,%(profile_complete)s,%(pipeline_complete)s,
+            %(collected_field_count)s,%(failed_field_count)s,%(field_sources)s,
+            %(data_updated_at)s)
+            ON CONFLICT(creator_id) DO UPDATE SET
+              platform=EXCLUDED.platform,
+              platform_creator_id=EXCLUDED.platform_creator_id,
+              platform_star_id=COALESCE(EXCLUDED.platform_star_id,creator_live_current.platform_star_id),
+              latest_snapshot_id=EXCLUDED.latest_snapshot_id,
+              display_name=COALESCE(EXCLUDED.display_name,creator_live_current.display_name),
+              avatar_uri=COALESCE(EXCLUDED.avatar_uri,creator_live_current.avatar_uri),
+              gender=COALESCE(EXCLUDED.gender,creator_live_current.gender),
+              province=COALESCE(EXCLUDED.province,creator_live_current.province),
+              city=COALESCE(EXCLUDED.city,creator_live_current.city),
+              creator_type_label=COALESCE(EXCLUDED.creator_type_label,creator_live_current.creator_type_label),
+              industry_labels=CASE WHEN jsonb_array_length(EXCLUDED.industry_labels)=0
+                THEN creator_live_current.industry_labels ELSE EXCLUDED.industry_labels END,
+              content_theme_labels=CASE WHEN
+                jsonb_array_length(EXCLUDED.content_theme_labels)=0
+                THEN creator_live_current.content_theme_labels
+                ELSE EXCLUDED.content_theme_labels END,
+              mcn_name=COALESCE(EXCLUDED.mcn_name,creator_live_current.mcn_name),
+              followers_count=COALESCE(EXCLUDED.followers_count,creator_live_current.followers_count),
+              followers_raw=COALESCE(EXCLUDED.followers_raw,creator_live_current.followers_raw),
+              followers_is_approximate=EXCLUDED.followers_is_approximate
+                OR creator_live_current.followers_is_approximate,
+              live_metrics=creator_live_current.live_metrics || EXCLUDED.live_metrics,
+              profile_complete=EXCLUDED.profile_complete,
+              pipeline_complete=EXCLUDED.pipeline_complete,
+              collected_field_count=EXCLUDED.collected_field_count,
+              failed_field_count=EXCLUDED.failed_field_count,
+              field_sources=creator_live_current.field_sources || EXCLUDED.field_sources,
+              data_updated_at=EXCLUDED.data_updated_at
+            """,
+            {
+                **row,
+                "industry_labels": Jsonb(row["industry_labels"]),
+                "content_theme_labels": Jsonb(row["content_theme_labels"]),
+                "live_metrics": Jsonb(row["live_metrics"]),
+                "field_sources": Jsonb(row["field_sources"]),
+            },
+        )

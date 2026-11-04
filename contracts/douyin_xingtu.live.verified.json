@@ -1,0 +1,478 @@
+{
+ "schema_version": "platform_registry.v1",
+ "contract_version": "xingtu-live-square-v1",
+ "adapter_version": "xingtu-live-browser-v1",
+ "status": "VERIFIED",
+ "sample_kind": "live",
+ "verified_at": "2026-11-04T21:30:00+08:00",
+ "account_permission_type": "已登录且具备直播广场访问权限的平台账号（阶段一真实页面验证）",
+ "evidence_refs": [
+  "docs/evidence/LIVE-02-live-square-investigation.md",
+  "docs/tasks/LIVE-02.md"
+ ],
+ "capabilities": {
+  "version": "xingtu-live-square-capability-v1",
+  "status": "VERIFIED",
+  "sample_kind": "live",
+  "evidence_refs": [
+   "docs/evidence/LIVE-02-live-square-investigation.md"
+  ],
+  "fields": [
+   {
+    "field": "keyword",
+    "label": "内容关键词",
+    "operators": [
+     "eq"
+    ],
+    "keyword_mode": "content",
+    "control": "text"
+   }
+  ],
+  "sorts": [
+   "platform_default"
+  ],
+  "combinations": [
+   [
+    "keyword"
+   ]
+  ],
+  "combination_policy": {
+   "schema_version": "combination_policy.v2",
+   "mode": "composable",
+   "fields": [
+    "keyword"
+   ],
+   "incompatible": []
+  },
+  "compatible_plan_versions": [
+   "filter_plan.v2"
+  ]
+ },
+ "allowed_hosts": [
+  "www.xingtu.cn",
+  "xingtu.cn",
+  "sso.oceanengine.com"
+ ],
+ "homepage_path_prefixes": [
+  "/ad/creator/author/"
+ ],
+ "action_interval_seconds": 2.0,
+ "operation_timeout_seconds": 90,
+ "response_body_max_bytes": 8000000,
+ "session_boot_timeout_seconds": 180,
+ "session": {
+  "entry_url": "https://sso.oceanengine.com/xingtu/login?role=1",
+  "account": {
+   "selector": "div.navigator-user__userid"
+  },
+  "protected_ready": {
+   "selector": "a.navigator-menu-item-link[href=\"/ad/creator/index\"]"
+  },
+  "error_selectors": {
+   "PLATFORM_SECURITY_CHALLENGE": {
+    "selector": "iframe[src*='rmc.bytedance.com/verifycenter/captcha/v2']"
+   }
+  },
+  "identity": {
+   "selector": "div.author-info"
+  },
+  "business_urls": [
+   "https://www.xingtu.cn/ad/creator/market/live",
+   "https://www.xingtu.cn/ad/creator/market"
+  ]
+ },
+ "search": {
+  "entry_url": "https://www.xingtu.cn/ad/creator/market/live",
+  "default_bindings": {},
+  "reset_actions": [],
+  "apply_actions": [],
+  "final_actions": [],
+  "ready": {
+   "selector": "input[placeholder='输入达人昵称、抖音号或星图ID']"
+  },
+  "ready_hidden": [],
+  "readback": {
+   "keyword": {
+    "selector": "input[placeholder='输入达人昵称、抖音号或星图ID']",
+    "property": "value"
+   }
+  },
+  "requests": [
+   {
+    "key": "search",
+    "method": "POST",
+    "host": "www.xingtu.cn",
+    "path": "/gw/api/gsearch/search_for_author_square",
+    "request_match": {
+     "page_param.page": "$cursor",
+     "search_param.keyword": "$keyword"
+    },
+    "response_match": {},
+    "required": true
+   }
+  ],
+  "result_request_key": "search",
+  "candidates_path": "authors",
+  "id_path": "star_id",
+  "homepage_path": null,
+  "homepage_template": "https://www.xingtu.cn/ad/creator/author/douyin/{platform_creator_id}/10",
+  "next_path": "pagination.has_more",
+  "exhausted_path": "pagination.has_more",
+  "exhausted_value": "false",
+  "pagination": "page",
+  "next_page_mode": "page_fetch",
+  "page_fetch_max_verified": 6,
+  "resume_supported": false,
+  "initial_cursor": "1",
+  "fixed_sort": true,
+  "single_page_only": false,
+  "binding_values": {},
+  "coverage_gaps": [
+   "直播筛选器未实现；仅关键词/ID + 目标数"
+  ]
+ },
+ "modules": [
+  {
+   "key": "basic",
+   "basic": true,
+   "entry": null,
+   "actions": [],
+   "ready": {
+    "selector": "body"
+   },
+   "ready_hidden": [],
+   "requests": [],
+   "fields": [
+    {
+     "key": "platform_creator_id",
+     "name": "星图ID",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "nickname",
+     "name": "昵称",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "avatar_uri",
+     "name": "头像",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "gender",
+     "name": "性别",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "province",
+     "name": "省份",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "city",
+     "name": "城市",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "followers",
+     "name": "粉丝数",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "content_type",
+     "name": "内容类型",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "mcn_name",
+     "name": "所属机构",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    }
+   ],
+   "checkpoint_version": 1,
+   "coverage_gaps": [
+    "live fields are parsed by the live adapter from registered platform responses; DOM sources are contract placeholders for completeness/labels"
+   ]
+  },
+  {
+   "key": "live",
+   "basic": false,
+   "entry": null,
+   "actions": [],
+   "ready": {
+    "selector": "body"
+   },
+   "ready_hidden": [],
+   "requests": [],
+   "fields": [
+    {
+     "key": "platform_star_id",
+     "name": "星图ID",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "live.room_cnt",
+     "name": "近期直播场次",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.watch_ucnt_avg",
+     "name": "平均观看人数",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.watch_cnt_avg",
+     "name": "平均观看人次",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.acu",
+     "name": "ACU",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.pcu",
+     "name": "PCU",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.fans_watch_rate",
+     "name": "粉丝观看占比",
+     "kind": "ratio",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "ratio"
+    },
+    {
+     "key": "live.follow_ucnt_avg",
+     "name": "场均涨粉数",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.comment_rate_avg",
+     "name": "场均评论率",
+     "kind": "ratio",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "ratio"
+    },
+    {
+     "key": "live.like_rate_avg",
+     "name": "场均点赞率",
+     "kind": "ratio",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "ratio"
+    },
+    {
+     "key": "live.watch_duration_avg",
+     "name": "平均看播时长",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "second"
+    },
+    {
+     "key": "live.interact_rate_avg",
+     "name": "场均互动率",
+     "kind": "ratio",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "ratio"
+    },
+    {
+     "key": "live.acu_precede_percent",
+     "name": "同粉段ACU排名",
+     "kind": "ratio",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "ratio"
+    },
+    {
+     "key": "live.ecom_product_num",
+     "name": "带货商品数",
+     "kind": "number",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     },
+     "unit": "count"
+    },
+    {
+     "key": "live.ecom_avg_gmv_range",
+     "name": "场均GMV",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "live.ecom_avg_price_range",
+     "name": "带货商品客单价",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    },
+    {
+     "key": "live.ecom_avg_gpm_range",
+     "name": "GPM",
+     "kind": "text",
+     "source": {
+      "kind": "dom",
+      "locator": {
+       "selector": "body"
+      }
+     }
+    }
+   ],
+   "checkpoint_version": 1,
+   "coverage_gaps": [
+    "live fields are parsed by the live adapter from registered platform responses; DOM sources are contract placeholders for completeness/labels"
+   ]
+  }
+ ],
+ "featured": [],
+ "direct_api_enabled": false,
+ "raw_har_trace_enabled": false,
+ "coverage_gaps": [
+  "直播筛选器仅调查未实现",
+  "列表 live_sn_* 与详情口径不同，按字段来源展示",
+  "page 7+ 与真实终点未验证"
+ ]
+}

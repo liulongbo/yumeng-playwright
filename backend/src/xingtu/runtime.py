@@ -61,6 +61,7 @@ class PlatformBindingConfig(Model):
     expected_account_id: str = Field(min_length=1)
     profile_directory: Path
     registry_path: Path
+    live_registry_path: Path | None = None
     enabled: bool = True
     manual_identity_attestation: ManualIdentityAttestation | None = None
 
@@ -92,6 +93,7 @@ class UnitConfig(Model):
     line_id: str
     profile_directory: Path
     registry_path: Path
+    live_registry_path: Path | None = None
     active_platform: PlatformId = PlatformId.DOUYIN_XINGTU
     # Empty keeps every existing unit file valid as a single Douyin Xingtu binding.
     platform_bindings: list[PlatformBindingConfig] = Field(default_factory=list)
@@ -187,6 +189,7 @@ class UnitConfig(Model):
                 expected_account_id=self.expected_account_id,
                 profile_directory=self.profile_directory,
                 registry_path=self.registry_path,
+                live_registry_path=self.live_registry_path,
                 manual_identity_attestation=self.manual_identity_attestation,
             )
         raise CollectorError("RESOURCE_UNAVAILABLE", "PLATFORM_BINDING_NOT_CONFIGURED")
@@ -202,8 +205,24 @@ class UnitConfig(Model):
             expected_account_id=binding.expected_account_id,
             profile_directory=binding.profile_directory,
             registry_path=binding.registry_path,
+            live_registry_path=binding.live_registry_path,
             manual_identity_attestation=binding.manual_identity_attestation,
         )
+        return UnitConfig.model_validate(data)
+
+    def for_scene(self, platform: PlatformId | str, scene: Any) -> UnitConfig:
+        """Resolve the executable scene binding; a missing live contract fails closed."""
+
+        from .domain import CreatorScene
+
+        value = CreatorScene(scene) if isinstance(scene, str) else scene
+        base = self.for_platform(platform)
+        if value == CreatorScene.VIDEO_SQUARE:
+            return base
+        if not base.live_registry_path:
+            raise CollectorError("RESOURCE_UNAVAILABLE", "LIVE_CONTRACT_NOT_CONFIGURED")
+        data = base.model_dump()
+        data["registry_path"] = base.live_registry_path
         return UnitConfig.model_validate(data)
 
     @property

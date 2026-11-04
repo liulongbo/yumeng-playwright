@@ -15,12 +15,14 @@ import { QuoteTable } from "./profile/panels";
 import type { FeaturedCardView, FeaturedCollectionView, FeaturedContent } from "./profile/commercial";
 import { ProvenanceDrawer } from "./profile/audience";
 import { indexCatalog, useFieldCatalog } from "./fieldCatalog";
+import { LiveCreatorDetailView, liveMetricList, payloadDisplayName } from "./liveCreator";
 import { formatDate, shortId, statusLabel, terminalStatuses, waitingStatuses } from "./status";
 import type {
   AudienceProfile, CapabilityDimension, CapabilityField, ContentPage,
-  CreatorLibraryDetail, CreatorLibraryQuote, CreatorLibrarySummary, CreatorSummary, CreatorVideoPage,
-  CountRangeValue, IntakeProgress, BrowserTakeover, ExecutionUnit, RangeValue, RequirementForm, RequirementFormV2,
-  RequirementFormV3, TaskDetail, TaskKind, TaskStatus,
+  CreatorLibraryDetail, CreatorLibraryQuote, CreatorLibrarySummary, CreatorSummary, CreatorScene,
+  CreatorVideoPage, LiveMetricEnvelope, LiveRequirementForm,
+  CountRangeValue, IntakeProgress, BrowserTakeover, ExecutionUnit, RangeValue, RequirementForm,
+  RequirementFormV1, RequirementFormV2, RequirementFormV3, TaskDetail, TaskKind, TaskStatus,
 } from "./types";
 import { BrandMark, EmptyState, ErrorState, LoadingState, PageHeader, SkeletonRows, StatusBadge } from "./ui";
 
@@ -118,6 +120,7 @@ export function TasksPage() {
   const [status, setStatus] = useState("");
   const [taskKind, setTaskKind] = useState("");
   const [platform, setPlatform] = useState("");
+  const [scene, setScene] = useState("");
   const [keyword, setKeyword] = useState("");
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
@@ -127,11 +130,12 @@ export function TasksPage() {
     if (status) value.set("status", status);
     if (taskKind) value.set("task_kind", taskKind);
     if (platform) value.set("platform", platform);
+    if (scene) value.set("creator_scene", scene);
     if (createdFrom) value.set("created_from", new Date(`${createdFrom}T00:00:00`).toISOString());
     if (createdTo) { const exclusive = new Date(`${createdTo}T00:00:00`); exclusive.setDate(exclusive.getDate() + 1); value.set("created_to", exclusive.toISOString()); }
     if (cursor) value.set("cursor", cursor);
     return value;
-  }, [status, taskKind, platform, createdFrom, createdTo, cursor]);
+  }, [status, taskKind, platform, scene, createdFrom, createdTo, cursor]);
   const tasks = useQuery({ queryKey: ["tasks", params.toString()], queryFn: () => api.listTasks(params), refetchInterval: 15_000 });
   const visible = (tasks.data?.items ?? []).filter((task) => !keyword.trim() || (task.keyword || "").toLowerCase().includes(keyword.trim().toLowerCase()) || task.root_task_id.includes(keyword.trim()));
   const summary = tasks.data?.items.reduce((acc, task) => {
@@ -154,6 +158,7 @@ export function TasksPage() {
       <div className="toolbar">
         <div className="search-box"><Search size={17} /><input aria-label="搜索任务" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="搜索关键词或任务 ID" /></div>
         <label className="select-wrap"><ListFilter size={16} /><select aria-label="按平台筛选" value={platform} onChange={(e) => { setPlatform(e.target.value); setCursor(null); }}><option value="">全部平台</option><option value="douyin_xingtu">巨量星图</option><option value="kuaishou_juxing">磁力聚星</option></select></label>
+        <label className="select-wrap"><ListFilter size={16} /><select aria-label="按场景筛选" value={scene} onChange={(e) => { setScene(e.target.value); setCursor(null); }}><option value="">全部场景</option><option value="video_square">短视频广场</option><option value="live_square">直播广场</option></select></label>
         <label className="select-wrap"><ListFilter size={16} /><select aria-label="按任务类型筛选" value={taskKind} onChange={(e) => { setTaskKind(e.target.value); setCursor(null); }}><option value="">全部类型</option><option value="collection">采集任务</option><option value="manual_update">手动更新</option><option value="scheduled_update">定时更新</option></select></label>
         <label className="select-wrap"><ListFilter size={16} /><select aria-label="按状态筛选" value={status} onChange={(e) => { setStatus(e.target.value); setCursor(null); }}><option value="">全部状态</option>{allStatuses.map((item) => <option key={item} value={item}>{statusLabel[item]}</option>)}</select></label>
         <label className="date-filter"><span>从</span><input aria-label="创建开始日期" type="date" value={createdFrom} onChange={(e) => { setCreatedFrom(e.target.value); setCursor(null); }} /></label>
@@ -163,9 +168,9 @@ export function TasksPage() {
       {tasks.isLoading ? <SkeletonRows rows={6} /> : tasks.isError ? <ErrorState error={tasks.error} retry={() => tasks.refetch()} /> : visible.length === 0 ? <EmptyState title="没有匹配的任务" description={tasks.data?.items.length ? "调整搜索词或状态筛选后再试。" : "创建第一个达人采集任务，提交后即可在这里追踪进度。"} action={!tasks.data?.items.length && <Link to="/tasks/new" className="button primary"><Plus size={16} />创建任务</Link>} /> : <div className="task-table" role="table">
         <div className="task-row table-head" role="row"><span>任务</span><span>进度</span><span>结果计数</span><span>创建信息</span><span /></div>
         {visible.map((task) => <Link className="task-row" role="row" to={`/tasks/${task.root_task_id}`} key={task.root_task_id}>
-          <div className="task-main"><StatusBadge status={task.status} pulse={!terminalStatuses.has(task.status)} /><strong>{taskTitle(task)}</strong><span>#{shortId(task.root_task_id)} · {platformLabel[task.platform ?? "douyin_xingtu"]} · {taskKindLabel[task.task_kind] || taskKindLabel.collection} · {task.source === "product" ? "产品提交" : "内部任务"}</span>{task.failure_reason === "ACCOUNT_SELECTION_REQUIRED" && <span className="task-account-alert">需要选择子账号</span>}</div>
+          <div className="task-main"><StatusBadge status={task.status} pulse={!terminalStatuses.has(task.status)} /><strong>{taskTitle(task)}</strong><span>#{shortId(task.root_task_id)} · {platformLabel[task.platform ?? "douyin_xingtu"]} · {task.creator_scene === "live_square" ? "直播广场" : "短视频广场"} · {taskKindLabel[task.task_kind] || taskKindLabel.collection} · {task.source === "product" ? "产品提交" : "内部任务"}</span>{task.failure_reason === "ACCOUNT_SELECTION_REQUIRED" && <span className="task-account-alert">需要选择子账号</span>}</div>
           <div className="task-stage"><strong>{task.stage}</strong><div className="mini-progress"><i style={{ width: `${Math.min(100, task.counts.target_count ? task.counts.valid_count / task.counts.target_count * 100 : 0)}%` }} /></div><span>{task.counts.valid_count} / {task.counts.target_count} 位{(task.task_kind ?? "collection") === "collection" ? "有效达人" : "已更新"}</span></div>
-          <div className="count-pills"><span><b>{task.counts.discovered_count}</b>{(task.task_kind ?? "collection") === "collection" ? "发现" : "目标"}</span><span><b>{task.counts.profile_complete_count}</b>资料</span>{task.platform !== "kuaishou_juxing" && <span><b>{task.counts.featured_complete_count}</b>精选</span>}{task.counts.failed_count > 0 && <span className="failed"><b>{task.counts.failed_count}</b>失败</span>}</div>
+          <div className="count-pills"><span><b>{task.counts.discovered_count}</b>{(task.task_kind ?? "collection") === "collection" ? "发现" : "目标"}</span><span><b>{task.counts.profile_complete_count}</b>资料</span>{task.platform !== "kuaishou_juxing" && task.creator_scene !== "live_square" && <span><b>{task.counts.featured_complete_count}</b>精选</span>}{task.counts.failed_count > 0 && <span className="failed"><b>{task.counts.failed_count}</b>失败</span>}</div>
           <div className="task-meta"><strong>{task.created_by_name || "系统"}</strong><span>{formatDate(task.created_at)}</span></div>
           <ChevronRight size={18} />
         </Link>)}
@@ -193,7 +198,17 @@ function emptyJuxingRequirement(target = 10): RequirementFormV3 {
   };
 }
 
-function upgradeRequirement(form: RequirementForm): RequirementFormV2 {
+function emptyLive(platform: "douyin_xingtu" | "kuaishou_juxing", target = 20): LiveRequirementForm {
+  return {
+    schema_version: platform === "kuaishou_juxing" ? "requirement_form.v3" : "requirement_form.v2",
+    platform,
+    creator_scene: "live_square",
+    keyword: "",
+    target_count: target,
+  };
+}
+
+function upgradeRequirement(form: RequirementFormV1 | RequirementFormV2 | RequirementFormV3): RequirementFormV2 {
   if (form.schema_version === "requirement_form.v2") return form;
   const upgraded = emptyRequirement(form.target_count);
   upgraded.keyword = form.keyword;
@@ -216,30 +231,64 @@ export function NewTaskPage() {
   const [search] = useSearchParams();
   const origin = search.get("origin");
   const [selectedPlatform, setSelectedPlatform] = useState<"douyin_xingtu" | "kuaishou_juxing">("douyin_xingtu");
-  const capabilities = useQuery({ queryKey: ["capabilities", selectedPlatform], queryFn: () => api.capabilities(selectedPlatform) });
+  const [selectedScene, setSelectedScene] = useState<CreatorScene>("video_square");
+  const capabilities = useQuery({
+    queryKey: ["capabilities", selectedPlatform, selectedScene],
+    queryFn: () => api.capabilities(selectedPlatform, selectedScene),
+  });
   const platforms = useQuery({ queryKey: ["platforms"], queryFn: api.platforms, retry: false });
   const original = useQuery({ queryKey: ["task", origin], queryFn: () => api.task(origin!), enabled: Boolean(origin) });
   const [form, setForm] = useState<RequirementFormV2>(emptyRequirement());
   const [juxingForm, setJuxingForm] = useState<RequirementFormV3>(emptyJuxingRequirement());
+  const [liveForm, setLiveForm] = useState<LiveRequirementForm>(emptyLive("douyin_xingtu"));
   const [clientError, setClientError] = useState("");
   const keyRef = useRef(crypto.randomUUID());
   useEffect(() => {
     if (!capabilities.data || origin) return;
+    if (selectedScene === "live_square") {
+      setLiveForm(emptyLive(selectedPlatform, Math.min(capabilities.data.target_count_default, capabilities.data.target_count_max)));
+      return;
+    }
     if (selectedPlatform === "douyin_xingtu") setForm(emptyRequirement(capabilities.data.target_count_default));
     else setJuxingForm(emptyJuxingRequirement(capabilities.data.target_count_default));
-  }, [capabilities.data, origin, selectedPlatform]);
+  }, [capabilities.data, origin, selectedPlatform, selectedScene]);
   useEffect(() => {
     const requirement = original.data?.requirement;
     if (!requirement) return;
+    const scene = (requirement as { creator_scene?: CreatorScene }).creator_scene;
+    if (scene === "live_square") {
+      setSelectedScene("live_square");
+      const platform = requirement.platform;
+      setSelectedPlatform(platform);
+      setLiveForm({
+        schema_version: platform === "kuaishou_juxing" ? "requirement_form.v3" : "requirement_form.v2",
+        platform,
+        creator_scene: "live_square",
+        keyword: ("keyword" in requirement ? requirement.keyword : "") || "",
+        target_count: requirement.target_count,
+      });
+      return;
+    }
+    setSelectedScene("video_square");
     if (requirement.schema_version === "requirement_form.v3") {
-      setSelectedPlatform("kuaishou_juxing"); setJuxingForm(requirement);
-    } else { setSelectedPlatform("douyin_xingtu"); setForm(upgradeRequirement(requirement)); }
+      setSelectedPlatform("kuaishou_juxing"); setJuxingForm(requirement as RequirementFormV3);
+    } else { setSelectedPlatform("douyin_xingtu"); setForm(upgradeRequirement(requirement as RequirementFormV1 | RequirementFormV2 | RequirementFormV3)); }
   }, [original.data]);
-  const activeForm: RequirementForm = selectedPlatform === "douyin_xingtu" ? form : juxingForm;
+  const activeForm: RequirementForm = selectedScene === "live_square"
+    ? liveForm
+    : selectedPlatform === "douyin_xingtu" ? form : juxingForm;
   const submit = useMutation({ mutationFn: () => api.createTask(activeForm, keyRef.current, origin), onSuccess: (result) => navigate(`/tasks/${result.root_task_id}`) });
   function update<K extends keyof RequirementFormV2>(key: K, value: RequirementFormV2[K]) { setForm((current) => ({ ...current, [key]: value })); }
   function submitForm(event: FormEvent) {
     event.preventDefault(); setClientError("");
+    if (selectedScene === "live_square") {
+      if (!liveForm.keyword.trim()) { setClientError("直播采集必须填写达人昵称/平台 ID。"); return; }
+      if (liveForm.target_count < 1 || liveForm.target_count > 70) {
+        setClientError("直播单任务目标数量必须在 1—70 之间。"); return;
+      }
+      submit.mutate();
+      return;
+    }
     const hasFilter = selectedPlatform === "douyin_xingtu"
       ? hasBusinessFilter(form)
       : Boolean(juxingForm.keyword?.trim() || juxingForm.content_types.length || juxingForm.followers || juxingForm.creator_regions.length || juxingForm.juxing_video_quotes);
@@ -252,9 +301,16 @@ export function NewTaskPage() {
   const keywordField = cap.fields.find((field) => field.field === "keyword");
   const backgroundFields = cap.fields.filter((field) => field.group === "背景信息");
   const audienceFields = cap.fields.filter((field) => field.group === "受众画像");
-  const summary = selectedPlatform === "douyin_xingtu"
-    ? selectedConditionSummary(form, cap.fields)
-    : selectedJuxingConditionSummary(juxingForm, cap.fields);
+  const sceneOptions = platforms.data?.find((option) => option.platform === selectedPlatform)?.scenes ?? [
+    { scene: "video_square" as const, label: "短视频广场", enabled: true, capability_status: "verified" as const, contract_version: cap.capability_version },
+    { scene: "live_square" as const, label: "直播广场", enabled: false, capability_status: "unavailable" as const, contract_version: null, disabled_reason: "直播能力尚未启用" },
+  ];
+  const sceneLabel = sceneOptions.find((option) => option.scene === selectedScene)?.label || (selectedScene === "live_square" ? "直播广场" : "短视频广场");
+  const summary = selectedScene === "live_square"
+    ? (liveForm.keyword.trim() ? [`关键词/ID：${liveForm.keyword.trim()}`] : [])
+    : selectedPlatform === "douyin_xingtu"
+      ? selectedConditionSummary(form, cap.fields)
+      : selectedJuxingConditionSummary(juxingForm, cap.fields);
   return <div className="page-wrap narrow-page">
     <PageHeader eyebrow={origin ? "MODIFY & RESUBMIT" : "NEW COLLECTION TASK"} title={origin ? "修改并重新提交" : "创建采集任务"} description={origin ? "旧任务与原始需求保持不变，本次提交会创建一个新任务。" : "按所选平台仅展示当前真实核验通过的筛选能力。"} actions={<Link className="button ghost" to={origin ? `/tasks/${origin}` : "/tasks"}><ArrowLeft size={17} />返回</Link>} />
     <form className="intake-layout" onSubmit={submitForm}>
@@ -264,11 +320,18 @@ export function NewTaskPage() {
           {(platforms.data ?? [
             { platform: "douyin_xingtu", label: "巨量星图", enabled: true, capability_status: "verified", contract_version: cap.capability_version },
             { platform: "kuaishou_juxing", label: "磁力聚星", enabled: false, capability_status: "observed", contract_version: null, disabled_reason: "等待授权环境完成筛选回读与真实合同验证" },
-          ]).map((platform) => <button key={platform.platform} type="button" role="radio" aria-checked={platform.platform === selectedPlatform} className={`platform-option ${platform.platform === selectedPlatform ? "active" : ""}`} disabled={!platform.enabled} onClick={() => { setSelectedPlatform(platform.platform); setClientError(""); keyRef.current = crypto.randomUUID(); }}><strong>{platform.label}</strong><span>{platform.capability_status === "verified" ? "已验证可用" : "能力已观察，尚待验证"}</span>{platform.disabled_reason && <small>{platform.disabled_reason}</small>}</button>)}
+          ]).map((platform) => <button key={platform.platform} type="button" role="radio" aria-checked={platform.platform === selectedPlatform} className={`platform-option ${platform.platform === selectedPlatform ? "active" : ""}`} disabled={!platform.enabled} onClick={() => { setSelectedPlatform(platform.platform); setSelectedScene("video_square"); setClientError(""); keyRef.current = crypto.randomUUID(); }}><strong>{platform.label}</strong><span>{platform.capability_status === "verified" ? "已验证可用" : "能力已观察，尚待验证"}</span>{platform.disabled_reason && <small>{platform.disabled_reason}</small>}</button>)}
+        </div>
+        <div className="platform-selector" role="radiogroup" aria-label="采集场景">
+          {sceneOptions.map((scene) => <button key={scene.scene} type="button" role="radio" aria-checked={scene.scene === selectedScene} className={`platform-option ${scene.scene === selectedScene ? "active" : ""}`} disabled={!scene.enabled} onClick={() => { setSelectedScene(scene.scene); setClientError(""); keyRef.current = crypto.randomUUID(); }}><strong>{scene.label}</strong><span>{scene.capability_status === "verified" ? "已验证可用" : "暂不可用"}</span>{scene.disabled_reason && <small>{scene.disabled_reason}</small>}</button>)}
         </div>
         <div className="section-heading"><span className="step-index">01</span><div><h2>达人筛选条件</h2><p>系统会先转换并校验需求，合法后才申请浏览器资源。</p></div></div>
         <div className="capability-banner"><ShieldCheck size={18} /><div><strong>已核验能力版本</strong><span>{cap.capability_version}</span></div><em>{cap.fields.length} 项条件可用</em></div>
-        {selectedPlatform === "douyin_xingtu" ? <div className="field-grid">
+        {selectedScene === "live_square" ? <div className="field-grid">
+          <label className="field full"><span>达人昵称 / 平台 ID <i>必填</i></span><input aria-label="直播达人昵称或平台ID" value={liveForm.keyword} onChange={(event) => setLiveForm((current) => ({ ...current, keyword: event.target.value }))} placeholder={selectedPlatform === "douyin_xingtu" ? "输入达人昵称、抖音号或星图ID" : "输入达人快手ID或昵称"} required /><small>首版直播只支持关键词/达人 ID + 目标数量；其他筛选后续开放。</small></label>
+          <label className="field"><span>目标达人数量 <i>必填</i></span><div className="number-field"><input aria-label="直播目标达人数量" type="number" min={cap.target_count_min} max={Math.min(70, cap.target_count_max)} step={1} value={liveForm.target_count} onChange={(event) => setLiveForm((current) => ({ ...current, target_count: Number(event.target.value) }))} required /><b>位</b></div><small>默认 {cap.target_count_default}，单任务最多 70 位（两平台统一）。</small></label>
+          <div className="profile-exclusion"><ShieldCheck size={15} />直播任务需要跨越列表分页寻找候选；达到 70 位有效达人后结束，候选不足会如实标记部分完成。</div>
+        </div> : selectedPlatform === "douyin_xingtu" ? <div className="field-grid">
           {keywordField && <CapabilityInput field={keywordField} form={form} update={update} setForm={setForm} />}
           <fieldset className="capability-group"><legend>背景信息</legend><p>达人自身属性</p><div className="field-grid">{backgroundFields.map((field) => <CapabilityInput key={field.field} field={field} form={form} update={update} setForm={setForm} />)}</div></fieldset>
           <fieldset className="capability-group"><legend>受众画像</legend><p>连接深度、粉丝量与唯一一种画像</p><div className="field-grid">{audienceFields.map((field) => <CapabilityInput key={field.field} field={field} form={form} update={update} setForm={setForm} />)}</div><div className="profile-exclusion"><ShieldCheck size={15} />巨量星图仅允许观众画像与粉丝画像二选一；选择一侧会清空另一侧。</div></fieldset>
@@ -279,7 +342,7 @@ export function NewTaskPage() {
       </section>
       <aside className="submit-card">
         <div className="section-heading compact"><span className="step-index">02</span><div><h2>确认提交</h2><p>提交后立即获得任务编号。</p></div></div>
-        <dl><div><dt>平台</dt><dd>{platformLabel[selectedPlatform]}</dd></div><div><dt>已选条件</dt><dd>{summary.length ? `${summary.length} 项` : "待填写"}</dd></div><div><dt>目标数量</dt><dd>{activeForm.target_count} 位</dd></div><div><dt>排序</dt><dd>{cap.fixed_sort_label}</dd></div></dl>
+        <dl><div><dt>平台 / 场景</dt><dd>{platformLabel[selectedPlatform]} · {sceneLabel}</dd></div><div><dt>已选条件</dt><dd>{summary.length ? `${summary.length} 项` : "待填写"}</dd></div><div><dt>目标数量</dt><dd>{activeForm.target_count} 位</dd></div><div><dt>排序</dt><dd>{cap.fixed_sort_label}</dd></div></dl>
         {summary.length > 0 && <ul className="condition-summary">{summary.map((item) => <li key={item}>{item}</li>)}</ul>}
         <div className="submit-assurance"><Check size={16} /><span>重复点击或网络重试不会创建第二个任务</span></div>
         <button className="button primary submit-button" disabled={submit.isPending}>{submit.isPending ? <><LoaderCircle className="spin" size={18} />正在可靠提交</> : <><WandSparkles size={18} />提交采集任务</>}</button>
@@ -488,7 +551,7 @@ export function TaskDetailPage() {
   const juxingCapabilities = useQuery({
     queryKey: ["capabilities", "kuaishou_juxing"],
     queryFn: () => api.capabilities("kuaishou_juxing"),
-    enabled: task.data?.platform === "kuaishou_juxing",
+    enabled: task.data?.platform === "kuaishou_juxing" && task.data?.creator_scene !== "live_square",
     staleTime: 30 * 60 * 1000,
   });
   useEffect(() => {
@@ -506,7 +569,12 @@ export function TaskDetailPage() {
   const item = task.data;
   const taskKind = item.task_kind ?? "collection";
   const juxingTask = item.platform === "kuaishou_juxing";
-  const juxingRequirement = item.requirement?.schema_version === "requirement_form.v3" ? item.requirement : null;
+  const liveTask = item.creator_scene === "live_square";
+  const noFeatured = juxingTask || liveTask;
+  const sceneLabel = liveTask ? "直播广场" : "短视频广场";
+  const juxingRequirement = item.requirement?.schema_version === "requirement_form.v3"
+    ? (item.requirement as RequirementFormV3)
+    : null;
   const juxingConditions = juxingRequirement ? selectedJuxingConditionSummary(juxingRequirement, juxingCapabilities.data?.fields ?? []) : [];
   const remainingToTarget = Math.max(0, item.counts.target_count - item.counts.valid_count);
   const backfillPending = Math.max(0, item.counts.valid_count - item.counts.profile_complete_count);
@@ -516,7 +584,7 @@ export function TaskDetailPage() {
     ? [
         ["已发现", item.counts.discovered_count, "候选达人"],
         ["有效入库", item.counts.valid_count, `目标 ${item.counts.target_count}${remainingToTarget > 0 ? ` · 还差 ${remainingToTarget} 位` : ""}`],
-        ...(juxingTask
+        ...(noFeatured
           ? [["资料完整", item.counts.profile_complete_count, completeDetail] as const]
           : [
               ["资料完整", item.counts.profile_complete_count, backfillPending > 0 ? `待补采 ${backfillPending} 位` : "全部完整"] as const,
@@ -531,11 +599,11 @@ export function TaskDetailPage() {
   ];
   return <div className="page-wrap">
     <div className="detail-topline"><Link to="/tasks" className="back-link"><ArrowLeft size={17} />任务中心</Link><span>/</span><span>#{shortId(item.root_task_id)}</span></div>
-    <PageHeader eyebrow="TASK DETAIL" title={taskTitle(item)} description={`任务 #${item.root_task_id}`} actions={<TaskActions task={item} busy={command.isPending} run={(action) => command.mutate(action)} />} />
+    <PageHeader eyebrow="TASK DETAIL" title={taskTitle(item)} description={`任务 #${item.root_task_id} · ${platformLabel[item.platform ?? "douyin_xingtu"]} · ${sceneLabel}`} actions={<TaskActions task={item} busy={command.isPending} run={(action) => command.mutate(action)} />} />
     <section className="task-hero panel">
       <div className="hero-status"><StatusBadge status={item.status} pulse={!terminalStatuses.has(item.status)} /><h2>{item.stage}</h2><p>{taskMessage(item)}</p></div>
       <ProgressRail status={item.status} kind={taskKind} />
-      <div className="hero-meta"><div><span>创建人</span><strong>{item.created_by_name || "系统"}</strong></div><div><span>创建时间</span><strong>{formatDate(item.created_at)}</strong></div><div><span>最近更新</span><strong title="服务端最后一次改动这条任务记录的时间（状态推进、进度保存或人工操作），不代表任务完成时刻">{formatDate(item.updated_at)}</strong></div>{/* 只在任务真正进入终态后展示完成时间，进行中的任务不显示该字段，避免误读为已完成。 */}{item.completed_at && <div><span>首次完成时间</span><strong title="任务第一次进入终态的时间；补采成功后不会改写，最近一次写入见「最近更新」">{formatDate(item.completed_at)}</strong></div>}<div><span>能力版本</span><strong>{item.capability_version || (taskKind === "collection" ? "历史任务" : "更新任务不适用")}</strong></div></div>
+      <div className="hero-meta"><div><span>创建人</span><strong>{item.created_by_name || "系统"}</strong></div><div><span>创建时间</span><strong>{formatDate(item.created_at)}</strong></div><div><span>最近更新</span><strong title="服务端最后一次改动这条任务记录的时间（状态推进、进度保存或人工操作），不代表任务完成时刻">{formatDate(item.updated_at)}</strong></div>{/* 只在任务真正进入终态后展示完成时间，进行中的任务不显示该字段，避免误读为已完成。 */}{item.completed_at && <div><span>首次完成时间</span><strong title="任务第一次进入终态的时间；补采成功后不会改写，最近一次写入见「最近更新」">{formatDate(item.completed_at)}</strong></div>}<div><span>平台 / 场景</span><strong>{platformLabel[item.platform ?? "douyin_xingtu"]} · {sceneLabel}</strong></div><div><span>能力版本</span><strong>{item.capability_version || (taskKind === "collection" ? "历史任务" : "更新任务不适用")}</strong></div></div>
     </section>
     {item.challenge && <ChallengePanel task={item} />}
     {item.intake && <IntakePanel intake={item.intake} />}
@@ -1057,16 +1125,32 @@ function taskSnapshotQuotes(payload: Record<string, unknown>): CreatorLibraryQuo
 export function CreatorDetailPage() {
   const { taskId = "", creatorId = "" } = useParams();
   const creator = useQuery({ queryKey: ["creator", taskId, creatorId], queryFn: () => api.creator(taskId, creatorId) });
+  const task = useQuery({ queryKey: ["task", taskId], queryFn: () => api.task(taskId) });
   const platform = creator.data?.platform ?? "douyin_xingtu";
   const juxing = platform === "kuaishou_juxing";
+  const live = task.data?.creator_scene === "live_square";
   // 聚星没有星图 F06 精选集合与星图作品观测表：不发起这些请求，也不把空结果伪装成业务数据。
-  const contents = useFeaturedContent({ kind: "task", taskId, creatorId }, Boolean(creator.data) && !juxing);
-  const videos = useVideoObservations({ kind: "task", taskId, creatorId }, Boolean(creator.data) && !juxing);
+  const contents = useFeaturedContent({ kind: "task", taskId, creatorId }, Boolean(creator.data) && !juxing && !live);
+  const videos = useVideoObservations({ kind: "task", taskId, creatorId }, Boolean(creator.data) && !juxing && !live);
   const catalog = useFieldCatalog(platform);
   const index = useMemo(() => indexCatalog(catalog), [catalog]);
   if (creator.isLoading) return <div className="page-wrap"><LoadingState label="正在读取达人快照" /></div>;
   if (creator.isError || !creator.data) return <div className="page-wrap"><ErrorState error={creator.error} retry={() => creator.refetch()} /></div>;
   const item = creator.data;
+  if (live) {
+    return <LiveCreatorDetailView
+      platform={platform}
+      creatorId={item.creator_id}
+      platformCreatorId={item.platform_creator_id}
+      displayName={payloadDisplayName(item.payload, item.platform_creator_id)}
+      payload={item.payload}
+      observedAt={item.observed_at}
+      backTo={`/tasks/${taskId}`}
+      backLabel="返回任务"
+      scopeLabel="本任务直播快照"
+      liveHref={`/creators/${creatorId}/live`}
+    />;
+  }
   const view = snapshotCreatorView(
     item.payload,
     {
@@ -1143,7 +1227,12 @@ export function CreatorLibraryPage() {
   const platform: "douyin_xingtu" | "kuaishou_juxing" =
     search.get("platform") === "kuaishou_juxing" ? "kuaishou_juxing" : "douyin_xingtu";
   const juxing = platform === "kuaishou_juxing";
-  const params = useMemo(() => new URLSearchParams(search), [search]);
+  const scene: CreatorScene = search.get("creator_scene") === "live_square" ? "live_square" : "video_square";
+  const live = scene === "live_square";
+  const params = useMemo(() => {
+    const value = new URLSearchParams(search);
+    return value;
+  }, [search]);
   const library = useInfiniteQuery({
     queryKey: ["creator-library", params.toString()],
     queryFn: ({ pageParam }) => {
@@ -1169,35 +1258,44 @@ export function CreatorLibraryPage() {
     if (value === "kuaishou_juxing") next.set("platform", value);
     setSearch(next);
   };
+  const setScene = (value: CreatorScene) => {
+    const next = new URLSearchParams();
+    if (platform === "kuaishou_juxing") next.set("platform", platform);
+    if (value === "live_square") next.set("creator_scene", value);
+    setSearch(next);
+  };
   const items = library.data?.pages.flatMap((page) => page.items) ?? [];
   return <div className="page-wrap creator-library-page">
     <PageHeader
       eyebrow="CREATOR LIBRARY"
       title="达人库"
-      description={juxing
-        ? "独立于任务结果的磁力聚星当前达人资料；字段、单位与统计窗口保持聚星平台原始口径。"
-        : "独立于任务结果的巨量星图当前达人资料；所有商业和表现指标保持平台原始口径。"}
+      description={live
+        ? `${platformLabel[platform]}直播达人资料；直播数据与短视频数据独立存储、独立更新，空值不显示为 0。`
+        : juxing
+          ? "独立于任务结果的磁力聚星当前达人资料；字段、单位与统计窗口保持聚星平台原始口径。"
+          : "独立于任务结果的巨量星图当前达人资料；所有商业和表现指标保持平台原始口径。"}
     />
     <section className="panel library-filters">
       <div className="panel-heading"><div><h2>筛选与排序</h2><p>缺失数据仍保留；数值筛选仅作用于已成功采集的原始值。</p></div><label className="library-check"><input type="checkbox" checked={search.get("complete_only") === "true"} onChange={(event) => setFilter("complete_only", event.target.checked ? "true" : "")} />仅看数据完整</label></div>
       <div className="library-filter-grid">
         <label>平台<select aria-label="达人库平台" value={platform} onChange={(event) => setPlatform(event.target.value as "douyin_xingtu" | "kuaishou_juxing")}><option value="douyin_xingtu">巨量星图</option><option value="kuaishou_juxing">磁力聚星</option></select></label>
-        {!juxing && <label>行业<input aria-label="按行业筛选" value={search.get("industry") ?? ""} onChange={(event) => setFilter("industry", event.target.value)} placeholder="例如：食品饮料" /></label>}
-        {!juxing && <label>达人类型<input aria-label="按达人类型筛选" value={search.get("creator_type") ?? ""} onChange={(event) => setFilter("creator_type", event.target.value)} placeholder="例如：生活" /></label>}
+        <label>业务数据<select aria-label="达人库业务数据" value={scene} onChange={(event) => setScene(event.target.value as CreatorScene)}><option value="video_square">短视频</option><option value="live_square">直播</option></select></label>
+        {!juxing && !live && <label>行业<input aria-label="按行业筛选" value={search.get("industry") ?? ""} onChange={(event) => setFilter("industry", event.target.value)} placeholder="例如：食品饮料" /></label>}
+        {!juxing && !live && <label>达人类型<input aria-label="按达人类型筛选" value={search.get("creator_type") ?? ""} onChange={(event) => setFilter("creator_type", event.target.value)} placeholder="例如：生活" /></label>}
         <label>省份<input aria-label="按省份筛选" value={search.get("province") ?? ""} onChange={(event) => setFilter("province", event.target.value)} placeholder="例如：北京市" /></label>
         <label>城市<input aria-label="按城市筛选" value={search.get("city") ?? ""} onChange={(event) => setFilter("city", event.target.value)} placeholder="例如：朝阳区" /></label>
         <label>粉丝数下限<input type="number" min="0" value={search.get("followers_min") ?? ""} onChange={(event) => setFilter("followers_min", event.target.value)} /></label>
         <label>粉丝数上限<input type="number" min="0" value={search.get("followers_max") ?? ""} onChange={(event) => setFilter("followers_max", event.target.value)} /></label>
-        {!juxing && <label>互动原始值下限<input type="number" min="0" value={search.get("interaction_min") ?? ""} onChange={(event) => setFilter("interaction_min", event.target.value)} /></label>}
-        {!juxing && <label>完播原始值下限<input type="number" min="0" value={search.get("completion_min") ?? ""} onChange={(event) => setFilter("completion_min", event.target.value)} /></label>}
-        {!juxing && <label>预期 CPM 下限<input type="number" min="0" value={search.get("expected_cpm_min") ?? ""} onChange={(event) => setFilter("expected_cpm_min", event.target.value)} /></label>}
-        {!juxing && <label>预期 CPE 下限<input type="number" min="0" value={search.get("expected_cpe_min") ?? ""} onChange={(event) => setFilter("expected_cpe_min", event.target.value)} /></label>}
-        {!juxing && <label>合作形式<input aria-label="按合作形式筛选" value={search.get("cooperation_form") ?? ""} onChange={(event) => setFilter("cooperation_form", event.target.value)} placeholder="例如：植入视频" /></label>}
-        <label>排序<select aria-label="达人库排序" value={search.get("sort") ?? "updated_at"} onChange={(event) => setFilter("sort", event.target.value)}><option value="updated_at">最近更新时间</option><option value="followers">粉丝数</option>{!juxing && <><option value="monthly_growth">月涨粉原始值</option><option value="interaction">互动原始值</option><option value="completion">完播原始值</option><option value="expected_cpm">预期 CPM 原始值</option><option value="expected_cpe">预期 CPE 原始值</option></>}</select></label>
+        {!juxing && !live && <label>互动原始值下限<input type="number" min="0" value={search.get("interaction_min") ?? ""} onChange={(event) => setFilter("interaction_min", event.target.value)} /></label>}
+        {!juxing && !live && <label>完播原始值下限<input type="number" min="0" value={search.get("completion_min") ?? ""} onChange={(event) => setFilter("completion_min", event.target.value)} /></label>}
+        {!juxing && !live && <label>预期 CPM 下限<input type="number" min="0" value={search.get("expected_cpm_min") ?? ""} onChange={(event) => setFilter("expected_cpm_min", event.target.value)} /></label>}
+        {!juxing && !live && <label>预期 CPE 下限<input type="number" min="0" value={search.get("expected_cpe_min") ?? ""} onChange={(event) => setFilter("expected_cpe_min", event.target.value)} /></label>}
+        {!juxing && !live && <label>合作形式<input aria-label="按合作形式筛选" value={search.get("cooperation_form") ?? ""} onChange={(event) => setFilter("cooperation_form", event.target.value)} placeholder="例如：植入视频" /></label>}
+        <label>排序<select aria-label="达人库排序" value={search.get("sort") ?? "updated_at"} onChange={(event) => setFilter("sort", event.target.value)}><option value="updated_at">最近更新时间</option><option value="followers">粉丝数</option>{!juxing && !live && <><option value="monthly_growth">月涨粉原始值</option><option value="interaction">互动原始值</option><option value="completion">完播原始值</option><option value="expected_cpm">预期 CPM 原始值</option><option value="expected_cpe">预期 CPE 原始值</option></>}</select></label>
       </div>
     </section>
-    <section className="panel library-results"><div className="panel-heading"><div><h2>{juxing ? "磁力聚星达人" : "巨量星图达人"}</h2><p>{juxing ? "默认按最近更新时间倒序；聚星专属指标保留原单位与统计窗口，不与星图指标等同。" : "默认按最近更新时间倒序；“原始值”不代表统一百分比、币种或跨平台指标。"}</p></div><span>{items.length} 位已加载</span></div>
-      {library.isLoading ? <SkeletonRows rows={7} /> : library.isError ? <ErrorState error={library.error} retry={() => library.refetch()} /> : !items.length ? <EmptyState title="暂无匹配达人" description={juxing ? "该平台当前没有已发布的聚星达人资料；系统不会用空值补造数据。" : "调整筛选条件后重试；系统不会用空值补造数据。"} /> : <div className="library-rows">{items.map((creator) => <CreatorLibraryRow key={creator.creator_id} creator={creator} />)}</div>}
+    <section className="panel library-results"><div className="panel-heading"><div><h2>{live ? `${platformLabel[platform]}直播达人` : juxing ? "磁力聚星达人" : "巨量星图达人"}</h2><p>{live ? "直播资料单独读取；默认按最近更新时间倒序，指标为平台原生口径。" : juxing ? "默认按最近更新时间倒序；聚星专属指标保留原单位与统计窗口，不与星图指标等同。" : "默认按最近更新时间倒序；“原始值”不代表统一百分比、币种或跨平台指标。"}</p></div><span>{items.length} 位已加载</span></div>
+      {library.isLoading ? <SkeletonRows rows={7} /> : library.isError ? <ErrorState error={library.error} retry={() => library.refetch()} /> : !items.length ? <EmptyState title="暂无匹配达人" description={live ? "该平台当前没有已发布的直播达人资料；系统不会用空值补造数据。" : juxing ? "该平台当前没有已发布的聚星达人资料；系统不会用空值补造数据。" : "调整筛选条件后重试；系统不会用空值补造数据。"} /> : <div className="library-rows">{items.map((creator) => <CreatorLibraryRow key={creator.creator_id} creator={creator} />)}</div>}
       {library.hasNextPage && <div className="pagination"><button className="button secondary" disabled={library.isFetchingNextPage} onClick={() => library.fetchNextPage()}>{library.isFetchingNextPage ? "正在读取" : "查看更多达人"}<ArrowRight size={16} /></button></div>}
     </section>
   </div>;
@@ -1206,19 +1304,28 @@ export function CreatorLibraryPage() {
 function CreatorLibraryRow({ creator }: { creator: CreatorLibrarySummary }) {
   const complete = creator.profile_complete && creator.pipeline_complete;
   const juxing = creator.platform === "kuaishou_juxing";
-  return <Link className="library-row" to={`/creators/${creator.creator_id}`}>
+  const live = creator.creator_scene === "live_square";
+  const liveMetrics = liveMetricList(creator.platform, undefined, creator.live_metrics).filter((item) => item.status === "COLLECTED").slice(0, 3);
+  return <Link className="library-row" to={live ? `/creators/${creator.creator_id}/live` : `/creators/${creator.creator_id}`}>
     <div className="creator-avatar">{creator.avatar_uri ? <img src={creator.avatar_uri} alt="" /> : <UserRound size={20} />}</div>
     <div className="library-identity">
       <strong>{creator.display_name || "未提供昵称"}</strong>
       {/* Xingtu rows keep their original「达人类型 · 地区」line; juxing has no verified creator
           type taxonomy, so it states the platform instead of inventing one. */}
-      <span>{juxing ? "磁力聚星" : (creator.creator_type_label || "类型暂无数据")} · {[creator.province, creator.city].filter(Boolean).join(" / ") || "地区暂无数据"}</span>
+      <span>{live
+        ? `${platformLabel[creator.platform]} · 直播 · ${creator.creator_type_label || "类型暂无数据"} · ${[creator.province, creator.city].filter(Boolean).join(" / ") || "地区暂无数据"}`
+        : `${juxing ? "磁力聚星" : (creator.creator_type_label || "类型暂无数据")} · ${[creator.province, creator.city].filter(Boolean).join(" / ") || "地区暂无数据"}`}</span>
       <em>{juxing
         ? (creator.content_theme_labels.length ? creator.content_theme_labels.join(" / ") : "内容类型暂无数据")
         : (creator.industry_labels.length ? creator.industry_labels.join(" / ") : "行业暂无数据")}</em>
     </div>
     <div className="library-stat"><span>粉丝</span><strong>{numberText(creator.followers.value)}</strong></div>
-    {juxing ? (
+    {live ? (
+      <>
+        {liveMetrics.map((metric) => <div className="library-stat" key={metric.key}><span>{metric.label}</span><strong>{metric.value}</strong></div>)}
+        <div className="library-stat"><span>最近更新</span><strong>{creator.data_updated_at ? formatDate(creator.data_updated_at) : "暂无"}</strong></div>
+      </>
+    ) : juxing ? (
       <>
         <div className="library-stat"><span>月涨粉率</span><strong>{ratioMetric(creator.monthly_follower_growth_rate)}</strong></div>
         <div className="library-stat"><span>互动 / 完播</span><strong>{ratioMetric(creator.interaction_rate)} / {ratioMetric(creator.completion_rate)}</strong></div>
@@ -1237,30 +1344,67 @@ function CreatorLibraryRow({ creator }: { creator: CreatorLibrarySummary }) {
 
 export function CreatorLibraryDetailPage() {
   const { creatorId = "" } = useParams();
+  const location = useLocation();
   const queryClient = useQueryClient();
-  const detail = useQuery({ queryKey: ["creator-library", creatorId], queryFn: () => api.creatorLibraryDetail(creatorId) });
+  const scene: CreatorScene = location.pathname.endsWith("/live") ? "live_square" : "video_square";
+  const live = scene === "live_square";
+  const detail = useQuery({
+    queryKey: ["creator-library", creatorId, scene],
+    queryFn: () => api.creatorLibraryDetail(creatorId, scene),
+  });
   const platform = detail.data?.platform ?? "douyin_xingtu";
   const juxing = platform === "kuaishou_juxing";
-  // 聚星没有星图报价/历史/精选/作品观测读模型，也没有更新服务：不发起这些只属于星图的请求。
-  const quotes = useQuery({ queryKey: ["creator-library-quotes", creatorId], queryFn: () => api.creatorLibraryQuotes(creatorId), enabled: Boolean(detail.data) && !juxing });
+  // 聚星/直播没有星图报价/历史/精选/作品观测读模型：不发起这些只属于星图视频的请求。
+  const quotes = useQuery({ queryKey: ["creator-library-quotes", creatorId], queryFn: () => api.creatorLibraryQuotes(creatorId), enabled: Boolean(detail.data) && !juxing && !live });
   const update = useQuery({
-    queryKey: ["creator-update", creatorId],
-    queryFn: () => api.creatorUpdateStatus(creatorId),
-    enabled: Boolean(detail.data) && !juxing,
+    queryKey: ["creator-update", creatorId, live ? "live" : "video"],
+    queryFn: () => live ? api.creatorLiveUpdateStatus(creatorId) : api.creatorUpdateStatus(creatorId),
+    enabled: Boolean(detail.data) && (live || !juxing),
     refetchInterval: (query) => (query.state.data?.in_flight_root_task_id ? 5_000 : false),
   });
   const requestUpdate = useMutation({
-    mutationFn: () => api.createCreatorUpdate(creatorId, crypto.randomUUID()),
+    mutationFn: () => live
+      ? api.createCreatorLiveUpdate(creatorId, crypto.randomUUID())
+      : api.createCreatorUpdate(creatorId, crypto.randomUUID()),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["creator-update", creatorId] });
       void queryClient.invalidateQueries({ queryKey: ["creator-library", creatorId] });
     },
   });
-  const contents = useFeaturedContent({ kind: "library", creatorId }, Boolean(detail.data) && !juxing);
-  const videos = useVideoObservations({ kind: "library", creatorId }, Boolean(detail.data) && !juxing);
+  const contents = useFeaturedContent({ kind: "library", creatorId }, Boolean(detail.data) && !juxing && !live);
+  const videos = useVideoObservations({ kind: "library", creatorId }, Boolean(detail.data) && !juxing && !live);
   if (detail.isLoading) return <div className="page-wrap"><LoadingState label="正在读取达人库资料" /></div>;
   if (detail.isError || !detail.data) return <div className="page-wrap"><ErrorState error={detail.error} retry={() => detail.refetch()} /></div>;
   const creator = detail.data;
+  if (live) {
+    const liveActions = <div className="creator-update-actions">
+      <button className="button primary" disabled={Boolean(update.data?.in_flight_root_task_id) || requestUpdate.isPending} onClick={() => requestUpdate.mutate()}>
+        {requestUpdate.isPending ? <><LoaderCircle className="spin" size={16} />正在提交</> : update.data?.in_flight_root_task_id ? <><Clock3 size={16} />更新进行中</> : <><RefreshCcw size={16} />手动更新直播资料</>}
+      </button>
+      {update.data?.in_flight_root_task_id && <Link className="origin-link" to={`/tasks/${update.data.in_flight_root_task_id}`}>查看更新任务<ChevronRight size={14} /></Link>}
+      {update.data?.last_success_at && <span>最近成功更新 {formatDate(update.data.last_success_at)}</span>}
+      {update.data?.last_write_at && update.data.last_write_at !== update.data.last_success_at && <span>最近写入 {formatDate(update.data.last_write_at)}</span>}
+      {update.data?.last_failure_reason && <span>最近一次未完成：{update.data.last_failure_reason}</span>}
+      {requestUpdate.isError && <span className="form-error">{friendlyError(requestUpdate.error)}</span>}
+    </div>;
+    const hasVideo = (creator.available_scenes ?? []).includes("video_square");
+    return <LiveCreatorDetailView
+      platform={platform}
+      creatorId={creator.creator_id}
+      platformCreatorId={creator.platform_creator_id}
+      displayName={creator.display_name}
+      payload={creator.profile_payload}
+      liveMetrics={creator.live_metrics}
+      observedAt={creator.data_updated_at}
+      backTo="/creators?creator_scene=live_square"
+      backLabel="返回达人库"
+      scopeLabel="当前直播资料"
+      actions={liveActions}
+      availableScenes={creator.available_scenes}
+      videoHref={hasVideo ? `/creators/${creator.creator_id}` : undefined}
+      liveHref={`/creators/${creator.creator_id}/live`}
+    />;
+  }
   const quoteRows = quotes.data ?? [];
   const seenForms = new Set<string>();
   const currentQuotes = quoteRows.filter((quote) => {

@@ -118,6 +118,32 @@ async def _run_intake(unit_config: Path, profile_requirement: Path | None) -> No
             )
             continue
         platform_registries[binding.platform.value] = bound_registry
+    scene_registries: dict[str, PlatformRegistry] = {}
+    live_paths: list[tuple[str, Path]] = []
+    if config.live_registry_path:
+        live_paths.append((config.active_platform.value, config.live_registry_path))
+    for binding in config.platform_bindings:
+        if binding.live_registry_path:
+            live_paths.append((binding.platform.value, binding.live_registry_path))
+    # The intake worker has one unit config; a platform's dedicated worker config may be a
+    # different file.  The environment paths are the explicit cross-platform source for P1.
+    for platform, env_key in (
+        ("douyin_xingtu", "XINGTU_LIVE_REGISTRY_PATH"),
+        ("kuaishou_juxing", "XINGTU_JUXING_LIVE_REGISTRY_PATH"),
+    ):
+        raw = os.environ.get(env_key)
+        if raw:
+            live_paths.append((platform, Path(raw)))
+    for platform, live_path in live_paths:
+        try:
+            live_registry = PlatformRegistry.model_validate_json(live_path.read_text())
+            live_registry.require_enabled(live=True)
+        except (OSError, ValidationError) as exc:
+            logger.warning(
+                "live registry unavailable: %s (%s)", platform, type(exc).__name__
+            )
+            continue
+        scene_registries[f"{platform}:live_square"] = live_registry
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
         raise CollectorError("RESOURCE_UNAVAILABLE", "DEEPSEEK_API_KEY_REQUIRED")
@@ -140,6 +166,7 @@ async def _run_intake(unit_config: Path, profile_requirement: Path | None) -> No
         execution_unit_id=config.unit_id,
         profile_requirement=requirement,
         platform_registries=platform_registries,
+        scene_registries=scene_registries,
     )
     await run_intake_worker(
         products,

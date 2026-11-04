@@ -289,7 +289,7 @@ else:
   - `search.entry_url`、`session.business_urls`、`search.reset_actions`（清空默认条件）、`search.apply_actions`（填关键词+搜索）、`search.readback`（关键词回读）、`search.requests`（live 请求匹配，含 scene_param/搜索参数）、`search.candidates_path=authors`、`id_path=star_id`、`homepage_template`、`pagination`；
   - `modules`（`basic` + `live_performance` 等）与字段路径；
   - 不注册 `featured`；
-  - `page_fetch_max_verified` 按阶段二真实翻页验证填写（阶段一已验证 page 2）。
+  - `page_fetch_max_verified=6`：阶段一已验证 page 2；阶段二真实核验 page 5/6（各 20 条、0 重复）。真实数据存在无效/无直播候选人，6 页（120 位候选）才足以稳定凑满 70 位有效达人；page 7+ 仍未验证并在契约 coverage_gaps 披露。
 - 列表级 `live_sn_*` 与详情级「不限」口径分别登记 source/scope；首版详情页以详情接口为准，列表列显示对应详情字段或明确标注口径。
 
 ### 6.2 聚星直播

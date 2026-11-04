@@ -115,6 +115,13 @@ class PlatformId(StrEnum):
     KUAISHOU_JUXING = "kuaishou_juxing"
 
 
+class CreatorScene(StrEnum):
+    """Business surface of one platform; one root task always has exactly one scene."""
+
+    VIDEO_SQUARE = "video_square"
+    LIVE_SQUARE = "live_square"
+
+
 class NetworkMode(StrEnum):
     """Explicit network binding. A local development unit is never a production line unit."""
 
@@ -296,6 +303,7 @@ class Sort(Model):
 class FilterPlan(Model):
     schema_version: Literal["filter_plan.v1", "filter_plan.v2", "filter_plan.v3"] = "filter_plan.v2"
     platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
+    creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE
     capability_version: str
     target_count: int = Field(default=20, ge=1, le=200, strict=True)
     filters: list[Filter] = Field(min_length=1)
@@ -304,6 +312,8 @@ class FilterPlan(Model):
 
     @model_validator(mode="after")
     def unique(self) -> Self:
+        if self.creator_scene == CreatorScene.LIVE_SQUARE and self.target_count > 70:
+            raise ValueError("live target_count exceeds 70")
         if len({f.field for f in self.filters}) != len(self.filters):
             raise ValueError("duplicate filter field")
         if self.validation_errors:
@@ -371,7 +381,10 @@ class FilterPlan(Model):
 
     def digest(self) -> str:
         # Target is a stop condition, never part of platform request matching.
-        data = self.model_dump(mode="json", exclude={"target_count", "validation_errors"})
+        data = self.model_dump(
+            mode="json",
+            exclude={"target_count", "validation_errors", "creator_scene"},
+        )
         data["filters"] = sorted(data["filters"], key=lambda f: f["field"])
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
@@ -1088,6 +1101,7 @@ class TaskRecord(Model):
     # filter plan; its targets are seeded directly and only the profile/featured steps run.
     plan: FilterPlan | None = None
     task_kind: TaskKind = TaskKind.COLLECTION
+    creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE
     update_targets: list[CreatorRef] = Field(default_factory=list)
     state: TaskStatus = TaskStatus.QUEUED
     version: int = 0
@@ -1120,6 +1134,8 @@ class TaskRecord(Model):
         if self.task_kind == TaskKind.COLLECTION:
             if self.plan is None:
                 raise ValueError("collection task requires a filter plan")
+            if self.plan.creator_scene != self.creator_scene:
+                raise ValueError("collection task scene must match its filter plan")
             if self.update_targets:
                 raise ValueError("collection task cannot carry update targets")
             return self

@@ -16,6 +16,7 @@ from psycopg.types.json import Jsonb
 from .creator_update import reconcile_update_task
 from .domain import (
     CollectorError,
+    CreatorScene,
     FilterPlan,
     PlatformId,
     TaskKind,
@@ -319,6 +320,7 @@ class ProductQueries:
         created_to: datetime | None,
         task_kind: TaskKind | None = None,
         platform: PlatformId | None = None,
+        creator_scene: CreatorScene | None = None,
     ) -> str:
         value = "|".join(
             [
@@ -332,6 +334,8 @@ class ProductQueries:
         # existed stay valid while a filtered cursor can never be replayed against another scope.
         if platform is not None:
             value += "|" + platform.value
+        if creator_scene is not None:
+            value += "|" + creator_scene.value
         return hashlib.sha256(value.encode()).hexdigest()[:16]
 
     def list_tasks(
@@ -340,6 +344,7 @@ class ProductQueries:
         status: TaskStatus | None = None,
         task_kind: TaskKind | None = None,
         platform: PlatformId | None = None,
+        creator_scene: CreatorScene | None = None,
         created_from: datetime | None = None,
         created_to: datetime | None = None,
         cursor: str | None = None,
@@ -347,7 +352,7 @@ class ProductQueries:
     ) -> TaskPage:
         if not 1 <= limit <= 100:
             raise CollectorError("INVALID_FORM", "INVALID_PAGE_SIZE")
-        scope = self._scope(status, created_from, created_to, task_kind, platform)
+        scope = self._scope(status, created_from, created_to, task_kind, platform, creator_scene)
         clauses = [sql.SQL("true")]
         params: list[Any] = []
         if status:
@@ -359,6 +364,9 @@ class ProductQueries:
         if platform:
             clauses.append(sql.SQL("r.platform=%s"))
             params.append(platform.value)
+        if creator_scene:
+            clauses.append(sql.SQL("r.creator_scene=%s"))
+            params.append(creator_scene.value)
         if created_from:
             clauses.append(sql.SQL("r.created_at>=%s"))
             params.append(created_from)
@@ -647,6 +655,7 @@ class ProductQueries:
         return TaskSummary(
             root_task_id=str(row["root_task_id"]),
             platform=row.get("platform") or "douyin_xingtu",
+            creator_scene=CreatorScene(row.get("creator_scene") or "video_square"),
             task_kind=TaskKind(row.get("task_kind") or "collection"),
             status=status,
             stage=task_stage(status),
@@ -1138,6 +1147,7 @@ class ProductQueries:
         metric = cls._metric
         return CreatorLibrarySummary(
             creator_id=str(row["creator_id"]),
+            creator_scene=CreatorScene.VIDEO_SQUARE,
             platform_creator_id=row["platform_creator_id"],
             display_name=row.get("display_name"),
             avatar_uri=row.get("avatar_uri"),
@@ -1212,6 +1222,7 @@ class ProductQueries:
         self,
         *,
         platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu",
+        creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE,
         industry: str | None = None,
         creator_type: str | None = None,
         province: str | None = None,
@@ -1237,6 +1248,32 @@ class ProductQueries:
     ) -> CreatorLibraryPage:
         if not 1 <= limit <= 100:
             raise CollectorError("INVALID_FORM", "INVALID_PAGE_SIZE")
+        if creator_scene == CreatorScene.LIVE_SQUARE:
+            return self._list_live_creator_library(
+                platform=platform,
+                industry=industry,
+                creator_type=creator_type,
+                province=province,
+                city=city,
+                followers_min=followers_min,
+                followers_max=followers_max,
+                monthly_growth_min=monthly_growth_min,
+                monthly_growth_max=monthly_growth_max,
+                interaction_min=interaction_min,
+                interaction_max=interaction_max,
+                completion_min=completion_min,
+                completion_max=completion_max,
+                expected_cpm_min=expected_cpm_min,
+                expected_cpm_max=expected_cpm_max,
+                expected_cpe_min=expected_cpe_min,
+                expected_cpe_max=expected_cpe_max,
+                cooperation_form=cooperation_form,
+                complete_only=complete_only,
+                sort=sort,
+                direction=direction,
+                cursor=cursor,
+                limit=limit,
+            )
         if platform == "kuaishou_juxing":
             return self._list_juxing_creator_library(
                 industry=industry,
@@ -1360,7 +1397,9 @@ class ProductQueries:
             items=[self._creator_library_summary(row) for row in visible], next_cursor=next_cursor
         )
 
-    def get_creator_library(self, creator_id: str) -> CreatorLibraryDetail:
+    def get_creator_library(
+        self, creator_id: str, creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE
+    ) -> CreatorLibraryDetail:
         creator_id = _validated_uuid(creator_id, "CREATOR_NOT_FOUND")
         with self.repository.connect() as conn:
             identity = conn.execute(
@@ -1368,6 +1407,8 @@ class ProductQueries:
             ).fetchone()
             if not identity:
                 raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+            if creator_scene == CreatorScene.LIVE_SQUARE:
+                return self._get_live_creator_library(conn, creator_id, identity["platform"])
             if identity["platform"] == "kuaishou_juxing":
                 return self._get_juxing_creator_library(conn, creator_id)
             row = conn.execute(
@@ -1384,6 +1425,7 @@ class ProductQueries:
             raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
         return CreatorLibraryDetail(
             **self._creator_library_summary(row).model_dump(),
+            available_scenes=self._available_scenes(conn, creator_id, "douyin_xingtu"),
             latest_snapshot_id=str(row["latest_snapshot_id"])
             if row["latest_snapshot_id"]
             else None,
@@ -1397,6 +1439,219 @@ class ProductQueries:
             profile_payload=self._current_profile_payload(
                 row.get("latest_payload") or {}, row.get("projection") or {}
             ),
+        )
+
+    def _available_scenes(
+        self, conn: Any, creator_id: str, platform: str
+    ) -> list[CreatorScene]:
+        del conn
+        scenes: list[CreatorScene] = []
+        with self.repository.connect() as own:
+            if platform == "douyin_xingtu":
+                row = own.execute(
+                    "SELECT 1 FROM douyin_xingtu_creator_current WHERE creator_id=%s",
+                    (creator_id,),
+                ).fetchone()
+                if row:
+                    scenes.append(CreatorScene.VIDEO_SQUARE)
+            else:
+                row = own.execute(
+                    """SELECT 1 FROM creator_snapshots
+                    WHERE creator_id=%s AND creator_scene='video_square' LIMIT 1""",
+                    (creator_id,),
+                ).fetchone()
+                if row:
+                    scenes.append(CreatorScene.VIDEO_SQUARE)
+            row = own.execute(
+                "SELECT 1 FROM creator_live_current WHERE creator_id=%s", (creator_id,)
+            ).fetchone()
+            if row:
+                scenes.append(CreatorScene.LIVE_SQUARE)
+        return scenes
+
+    @classmethod
+    def _live_library_summary(cls, row: dict[str, Any]) -> CreatorLibrarySummary:
+        return CreatorLibrarySummary(
+            creator_id=str(row["creator_id"]),
+            platform=row["platform"],
+            creator_scene=CreatorScene.LIVE_SQUARE,
+            platform_creator_id=str(row["platform_creator_id"]),
+            live_metrics=row.get("live_metrics") or {},
+            display_name=row.get("display_name"),
+            avatar_uri=row.get("avatar_uri"),
+            creator_type_label=row.get("creator_type_label"),
+            province=row.get("province"),
+            city=row.get("city"),
+            industry_labels=row.get("industry_labels") or [],
+            content_theme_labels=row.get("content_theme_labels") or [],
+            followers=cls._metric(
+                row,
+                column="followers_count",
+                source_key="followers",
+                raw_column="followers_raw",
+                approximate_column="followers_is_approximate",
+            ),
+            monthly_deep_users=cls._empty_metric(),
+            monthly_connected_users=cls._empty_metric(),
+            monthly_follower_growth_rate=cls._empty_metric(),
+            interaction_rate=cls._empty_metric(),
+            completion_rate=cls._empty_metric(),
+            play_median=cls._empty_metric(),
+            average_duration=cls._empty_metric(),
+            average_likes=cls._empty_metric(),
+            average_comments=cls._empty_metric(),
+            average_shares=cls._empty_metric(),
+            expected_cpm_21_60=cls._empty_metric(),
+            expected_cpm_60_plus=cls._empty_metric(),
+            expected_cpe_21_60=cls._empty_metric(),
+            expected_cpe_60_plus=cls._empty_metric(),
+            profile_complete=bool(row.get("profile_complete")),
+            pipeline_complete=bool(row.get("pipeline_complete")),
+            data_updated_at=row.get("data_updated_at"),
+        )
+
+    def _list_live_creator_library(
+        self,
+        *,
+        platform: Literal["douyin_xingtu", "kuaishou_juxing"],
+        industry: str | None,
+        creator_type: str | None,
+        province: str | None,
+        city: str | None,
+        followers_min: float | None,
+        followers_max: float | None,
+        monthly_growth_min: float | None,
+        monthly_growth_max: float | None,
+        interaction_min: float | None,
+        interaction_max: float | None,
+        completion_min: float | None,
+        completion_max: float | None,
+        expected_cpm_min: float | None,
+        expected_cpm_max: float | None,
+        expected_cpe_min: float | None,
+        expected_cpe_max: float | None,
+        cooperation_form: str | None,
+        complete_only: bool,
+        sort: str,
+        direction: Literal["asc", "desc"],
+        cursor: str | None,
+        limit: int,
+    ) -> CreatorLibraryPage:
+        unsupported = (
+            industry,
+            creator_type,
+            monthly_growth_min,
+            monthly_growth_max,
+            interaction_min,
+            interaction_max,
+            completion_min,
+            completion_max,
+            expected_cpm_min,
+            expected_cpm_max,
+            expected_cpe_min,
+            expected_cpe_max,
+            cooperation_form,
+        )
+        if any(value is not None for value in unsupported):
+            raise CollectorError("INVALID_FORM", "LIVE_LIBRARY_FILTER_UNSUPPORTED")
+        if sort not in {"updated_at", "followers"}:
+            raise CollectorError("INVALID_FORM", "LIVE_LIBRARY_SORT_UNSUPPORTED")
+        filters = {
+            "platform": platform,
+            "creator_scene": CreatorScene.LIVE_SQUARE.value,
+            "province": province,
+            "city": city,
+            "followers_min": followers_min,
+            "followers_max": followers_max,
+            "complete_only": complete_only,
+            "sort": sort,
+            "direction": direction,
+        }
+        scope = self._creator_library_scope(filters)
+        offset = self._library_cursor(cursor, scope) if cursor else 0
+        clauses = [sql.SQL("c.platform=%s")]
+        params: list[Any] = [platform]
+        if province:
+            clauses.append(sql.SQL("c.province=%s"))
+            params.append(province)
+        if city:
+            clauses.append(sql.SQL("c.city=%s"))
+            params.append(city)
+        if followers_min is not None:
+            clauses.append(sql.SQL("c.followers_count>=%s"))
+            params.append(followers_min)
+        if followers_max is not None:
+            clauses.append(sql.SQL("c.followers_count<=%s"))
+            params.append(followers_max)
+        if complete_only:
+            clauses.append(sql.SQL("c.profile_complete AND c.pipeline_complete"))
+        order_column = (
+            sql.SQL("c.data_updated_at")
+            if sort == "updated_at"
+            else sql.SQL("c.followers_count")
+        )
+        order_direction = sql.SQL("ASC") if direction == "asc" else sql.SQL("DESC")
+        query = (
+            sql.SQL(
+                """SELECT c.*,s.payload AS latest_payload FROM creator_live_current c
+                LEFT JOIN creator_snapshots s ON s.snapshot_id=c.latest_snapshot_id
+                WHERE """
+            )
+            + sql.SQL(" AND ").join(clauses)
+            + sql.SQL(" ORDER BY ")
+            + order_column
+            + sql.SQL(" ")
+            + order_direction
+            + sql.SQL(" NULLS LAST,c.creator_id ASC LIMIT %s OFFSET %s")
+        )
+        params.extend([limit + 1, offset])
+        with self.repository.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        visible = rows[:limit]
+        next_cursor = None
+        if len(rows) > limit:
+            raw = json.dumps(
+                {"scope": scope, "offset": offset + limit}, separators=(",", ":")
+            ).encode()
+            next_cursor = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+        return CreatorLibraryPage(
+            items=[self._live_library_summary(row) for row in visible],
+            next_cursor=next_cursor,
+        )
+
+    def _get_live_creator_library(
+        self, conn: Any, creator_id: str, platform: str
+    ) -> CreatorLibraryDetail:
+        row = conn.execute(
+            """SELECT c.*,s.payload AS latest_payload
+            FROM creator_live_current c
+            LEFT JOIN creator_snapshots s ON s.snapshot_id=c.latest_snapshot_id
+            WHERE c.creator_id=%s AND c.platform=%s""",
+            (creator_id, platform),
+        ).fetchone()
+        if not row:
+            raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
+        payload = row.get("latest_payload") or {}
+        modules = payload.get("modules") if isinstance(payload, dict) else None
+        module_statuses = {
+            str(key): (module.get("status") if isinstance(module, dict) else None)
+            for key, module in (modules.items() if isinstance(modules, dict) else [])
+        }
+        return CreatorLibraryDetail(
+            **self._live_library_summary(row).model_dump(),
+            available_scenes=self._available_scenes(conn, creator_id, platform),
+            latest_snapshot_id=str(row["latest_snapshot_id"])
+            if row["latest_snapshot_id"]
+            else None,
+            platform_star_id=row.get("platform_star_id"),
+            mcn_name=row.get("mcn_name"),
+            introduction=None,
+            gender=row.get("gender"),
+            collected_field_count=int(row["collected_field_count"]),
+            failed_field_count=int(row["failed_field_count"]),
+            field_sources=row.get("field_sources") or {},
+            module_statuses=module_statuses,
+            profile_payload=payload,
         )
 
     @staticmethod
@@ -1508,6 +1763,7 @@ class ProductQueries:
         return CreatorLibrarySummary(
             creator_id=str(row["creator_id"]),
             platform="kuaishou_juxing",
+            creator_scene=CreatorScene.VIDEO_SQUARE,
             platform_creator_id=str(row["platform_creator_id"]),
             display_name=cls._projection_text(projection, "basic.nickname"),
             avatar_uri=cls._projection_text(projection, "basic.avatar_uri"),
@@ -1566,6 +1822,7 @@ class ProductQueries:
             JOIN LATERAL (
               SELECT cs.snapshot_id,cs.payload,cs.created_at
               FROM creator_snapshots cs WHERE cs.creator_id=pc.creator_id
+                AND cs.creator_scene='video_square'
               ORDER BY cs.created_at DESC,cs.snapshot_id DESC LIMIT 1
             ) s ON true
             WHERE pc.creator_id=%s AND pc.platform='kuaishou_juxing'""",
@@ -1584,6 +1841,7 @@ class ProductQueries:
         }
         return CreatorLibraryDetail(
             **self._juxing_library_summary(row).model_dump(),
+            available_scenes=self._available_scenes(conn, creator_id, "kuaishou_juxing"),
             latest_snapshot_id=str(row["latest_snapshot_id"])
             if row["latest_snapshot_id"]
             else None,
@@ -1694,6 +1952,7 @@ class ProductQueries:
                 JOIN LATERAL (
                   SELECT cs.snapshot_id,cs.payload,cs.created_at
                   FROM creator_snapshots cs WHERE cs.creator_id=pc.creator_id
+                    AND cs.creator_scene='video_square'
                   ORDER BY cs.created_at DESC,cs.snapshot_id DESC LIMIT 1
                 ) s ON true
                 WHERE """

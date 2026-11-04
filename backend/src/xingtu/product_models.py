@@ -9,6 +9,7 @@ from pydantic import Field, JsonValue, model_validator
 from .domain import (
     CONNECTION_USERS_MAX_W,
     Capabilities,
+    CreatorScene,
     FilterPlan,
     Model,
     TaskKind,
@@ -160,6 +161,7 @@ class RequirementForm(Model):
         "requirement_form.v2"
     )
     platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
+    creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE
     keyword: str | None = None
     content_types: list[str] = Field(default_factory=list)
     creator_types: list[str] = Field(default_factory=list)
@@ -182,6 +184,28 @@ class RequirementForm(Model):
     def meaningful_and_unique(self) -> Self:
         if self.keyword is not None and not self.keyword.strip():
             raise ValueError("keyword cannot be blank")
+        if self.creator_scene == CreatorScene.LIVE_SQUARE:
+            if self.target_count > 70:
+                raise ValueError("live target_count exceeds 70")
+            if self.keyword is None or not self.keyword.strip():
+                raise ValueError("live collection requires a keyword or creator id")
+            if any(
+                (
+                    self.content_types,
+                    self.creator_types,
+                    self.followers,
+                    self.creator_gender,
+                    self.creator_regions,
+                    self.creator_education,
+                    self.yellow_v_certification,
+                    self.connection_users,
+                    self.viewer_profile,
+                    self.fan_profile,
+                    self.quote,
+                    self.juxing_video_quotes,
+                )
+            ):
+                raise ValueError("live collection does not support video filters yet")
         if any(not value.strip() for value in self.creator_types):
             raise ValueError("filter options cannot be blank")
         if len(self.creator_types) != len(set(self.creator_types)):
@@ -330,6 +354,7 @@ class CapabilityFieldDTO(Model):
 
 class CapabilityDTO(Model):
     platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
+    creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE
     capability_version: str
     fields: list[CapabilityFieldDTO]
     combinations: list[list[str]]
@@ -346,6 +371,7 @@ class CapabilityDTO(Model):
         capabilities: Capabilities,
         *,
         platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu",
+        creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE,
         target_count_max: int | None = None,
     ) -> CapabilityDTO:
         if capabilities.status != "VERIFIED" or capabilities.sample_kind != "live":
@@ -362,6 +388,7 @@ class CapabilityDTO(Model):
             raise ValueError("M3 requires one verified platform default sort")
         return cls(
             platform=platform,
+            creator_scene=creator_scene,
             capability_version=capabilities.version,
             fields=[
                 CapabilityFieldDTO(
@@ -389,10 +416,18 @@ class CapabilityDTO(Model):
             if capabilities.combination_policy
             else None,
             target_count_default=(
-                min(20, max(1, target_count_max or 200)) if platform == "kuaishou_juxing" else 20
+                20
+                if creator_scene == CreatorScene.LIVE_SQUARE
+                else (
+                    min(20, max(1, target_count_max or 200))
+                    if platform == "kuaishou_juxing"
+                    else 20
+                )
             ),
             target_count_max=(
-                max(1, target_count_max or 200) if platform == "kuaishou_juxing" else 200
+                70
+                if creator_scene == CreatorScene.LIVE_SQUARE
+                else (max(1, target_count_max or 200) if platform == "kuaishou_juxing" else 200)
             ),
             fixed_sort_key=capabilities.sorts[0],
         )
@@ -563,6 +598,7 @@ class ExecutionUnitView(Model):
 class TaskSummary(Model):
     root_task_id: str
     platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
+    creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE
     task_kind: TaskKind = TaskKind.COLLECTION
     status: TaskStatus
     stage: str
@@ -687,7 +723,9 @@ class LibraryMetric(Model):
 class CreatorLibrarySummary(Model):
     creator_id: str
     platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
+    creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE
     platform_creator_id: str
+    live_metrics: dict[str, JsonValue] = Field(default_factory=dict)
     display_name: str | None = None
     avatar_uri: str | None = None
     creator_type_label: str | None = None
@@ -727,6 +765,8 @@ class CreatorLibraryPage(Model):
 
 
 class CreatorLibraryDetail(CreatorLibrarySummary):
+    available_scenes: list[CreatorScene] = Field(default_factory=list)
+    platform_star_id: str | None = None
     latest_snapshot_id: str | None = None
     mcn_name: str | None = None
     introduction: str | None = None

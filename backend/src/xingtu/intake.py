@@ -446,6 +446,7 @@ def build_expected_plan(
             else "filter_plan.v2"
         ),
         platform=normalized.platform,
+        creator_scene=normalized.creator_scene,
         capability_version=capability_version or capabilities.version,
         target_count=normalized.target_count,
         filters=filters,

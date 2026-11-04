@@ -290,6 +290,7 @@ def test_network_mode_is_persisted_and_immutable(repo):
         18,
         19,
         20,
+        21,
     ]
     with repo.connect() as conn:
         binding = conn.execute(

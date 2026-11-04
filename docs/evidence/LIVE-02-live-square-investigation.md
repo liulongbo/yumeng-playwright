@@ -111,6 +111,11 @@
   - `pagination.page=2`、`has_more=true`、`total_count=977`
   - 第 1 页 20 个 `star_id`、第 2 页 20 个 `star_id`，**跨页 0 重复**
 - 证据：`.runtime/live02/xingtu-page2-ui/results.json`（私有原始件）。
+- 2026-11-04 追加核验（`keyword=美妆`）：用真实 UI `.btn-next` 翻到第 5、6 页，并以页面内 XHR 回读响应：
+  - 第 5 页 `pagination.page=5`、20 条、20 个唯一 `star_id`、`total_count=10000`；
+  - 第 6 页 `pagination.page=6`、20 条、20 个唯一 `star_id`；
+  - 第 5/6 页 0 重复；两页均 `has_more=true`。
+  - 证据：`.runtime/live02/xt-pages56b/`（私有原始件）。
 
 ### 3.5 达人详情
 
@@ -171,7 +176,7 @@
 | 会话/账号 | PASS | 页面显示期望账号；无登录墙 |
 | 筛选标签/控件 | PASS（标签） | 请求映射多数 NOT_VERIFIED |
 | 列表字段/请求契约 | PASS | 请求体与响应路径真实捕获 |
-| 翻页 | PASS（第 2 页） | 20 条、0 重复；page 3+ 未验证 |
+| 翻页 | PASS（第 2/5/6 页） | 每页 20 条、0 重复；page 7+ 未验证 |
 | 详情/字段 | PASS（数据概览） | 直播分析/受众画像标签页待验证 |
 | 身份交叉 | PASS | 同 star_id |
 | 直播筛选完整开发 | NOT_VERIFIED | 阶段一只调查，不实现 |
@@ -240,6 +245,11 @@
   - 每页 20 条；跨页 0 重复；`total=5000`
 - 请求体对比：`currentPage` 1→2，`taskType=4`、`pathSource="no_filter_live"` 不变。
 - 证据：`.runtime/live02/juxing-page2-ui/results.json`。
+- 2026-11-04 追加核验（`keyword=美妆`）：在已登录页面内按 adapter 同一请求体重放第 5、6 页：
+  - 第 5 页 HTTP 200、`currentPage=5`、20 条、20 个唯一 `userId`、`total=588`；
+  - 第 6 页 HTTP 200、`currentPage=6`、20 条、20 个唯一 `userId`；
+  - 第 5/6 页 0 重复。
+  - 证据：`.runtime/live02/jx-pages56b/`（私有原始件）。
 
 ### 4.5 达人详情
 
@@ -297,7 +307,7 @@
 | 菜单/路由 | PASS | `#/star_plaza/live` |
 | 筛选标签/控件 | PASS（标签） | 请求映射未逐项验证 |
 | 列表/请求契约 | PASS | taskType=4、pathSource 真实捕获 |
-| 翻页 | PASS（第 2 页） | 20 条、0 重复、total=5000 |
+| 翻页 | PASS（第 2/5/6 页） | 每页 20 条、0 重复、total=5000（美妆 588） |
 | 详情/字段 | PASS（数据概览） | 其他标签页部分字段待验证 |
 | 身份交叉 | PASS | 同 userId、starId 单列 |
 | 直播筛选完整开发 | NOT_VERIFIED | 阶段一只调查 |

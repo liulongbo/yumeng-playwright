@@ -15,10 +15,21 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from redis import Redis
 from starlette.middleware.base import RequestResponseEndpoint
 
-from .adapter_factory import platform_adapter_available
+from .adapter_factory import (
+    platform_adapter_available,
+    platform_scene_adapter_available,
+)
 from .contracts import PlatformRegistry
 from .creator_update import CreatorUpdateService
-from .domain import CollectorError, PlatformId, ProfileRequirement, TaskKind, TaskStatus
+from .domain import (
+    CollectorError,
+    CreatorScene,
+    PlatformId,
+    ProfileRequirement,
+    TaskKind,
+    TaskStatus,
+)
+from .live_update import LiveCreatorUpdateService
 from .product_auth import AuthService, RedisLoginLimiter
 from .product_covers import ProductCoverConfig, ProductCoverReader
 from .product_models import (
@@ -92,6 +103,9 @@ class ProductSettings:
     remote_vnc_targets: dict[str, str] | None = None
     profile_requirement_path: Path = Path("contracts/profile_requirements.json")
     enable_kuaishou_juxing: bool = False
+    enable_live_square: bool = False
+    xingtu_live_registry_path: Path = Path("contracts/douyin_xingtu.live.verified.json")
+    juxing_live_registry_path: Path = Path("contracts/kuaishou_juxing.live.verified.json")
     juxing_observed_contract_path: Path = Path("contracts/kuaishou_juxing.observed.json")
     juxing_registry_path: Path = Path("contracts/kuaishou_juxing.verified.json")
     # Product ceiling shared with Xingtu. The previous stage-B default of 3 was a safety limit,
@@ -174,6 +188,20 @@ class ProductSettings:
             ),
             enable_kuaishou_juxing=os.environ.get("XINGTU_ENABLE_KUAISHOU_JUXING", "0").lower()
             in {"1", "true", "yes"},
+            enable_live_square=os.environ.get("XINGTU_ENABLE_LIVE_SQUARE", "0").lower()
+            in {"1", "true", "yes"},
+            xingtu_live_registry_path=Path(
+                os.environ.get(
+                    "XINGTU_LIVE_REGISTRY_PATH",
+                    "contracts/douyin_xingtu.live.verified.json",
+                )
+            ),
+            juxing_live_registry_path=Path(
+                os.environ.get(
+                    "XINGTU_JUXING_LIVE_REGISTRY_PATH",
+                    "contracts/kuaishou_juxing.live.verified.json",
+                )
+            ),
             juxing_observed_contract_path=Path(
                 os.environ.get(
                     "XINGTU_JUXING_OBSERVED_CONTRACT_PATH",
@@ -199,7 +227,9 @@ class ProductServices:
     covers: ProductCoverReader
     settings: ProductSettings
     updates: CreatorUpdateService | None = None
+    live_updates: LiveCreatorUpdateService | None = None
     platform_registries: dict[str, PlatformRegistry] = field(default_factory=dict)
+    live_registries: dict[str, PlatformRegistry] = field(default_factory=dict)
 
     def registry_for(self, platform: str) -> PlatformRegistry:
         if platform == "douyin_xingtu":
@@ -207,6 +237,15 @@ class ProductServices:
         registry = self.platform_registries.get(platform)
         if registry is None:
             raise CollectorError("UNSUPPORTED_FILTER", "PLATFORM_CONTRACT_NOT_AVAILABLE")
+        return registry
+
+    def registry_for_scene(self, platform: str, scene: CreatorScene | str) -> PlatformRegistry:
+        value = CreatorScene(scene) if isinstance(scene, str) else scene
+        if value == CreatorScene.VIDEO_SQUARE:
+            return self.registry_for(platform)
+        registry = self.live_registries.get(f"{platform}:{value.value}")
+        if registry is None:
+            raise CollectorError("UNSUPPORTED_FILTER", "LIVE_CONTRACT_NOT_AVAILABLE")
         return registry
 
 
@@ -237,6 +276,23 @@ def build_services(
             platform_registries["kuaishou_juxing"] = juxing_registry
     elif settings.enable_kuaishou_juxing:
         raise CollectorError("STORAGE_UNAVAILABLE", "KUAISHOU_JUXING_REGISTRY_INVALID")
+    live_registries: dict[str, PlatformRegistry] = {}
+    for platform, path in (
+        ("douyin_xingtu", settings.xingtu_live_registry_path),
+        ("kuaishou_juxing", settings.juxing_live_registry_path),
+    ):
+        if not path.is_file():
+            continue
+        try:
+            live_registry = PlatformRegistry.model_validate_json(path.read_text())
+            live_registry.require_enabled(live=True)
+        except (OSError, ValueError) as exc:
+            if settings.enable_live_square:
+                raise CollectorError(
+                    "STORAGE_UNAVAILABLE", f"{platform}_LIVE_REGISTRY_INVALID"
+                ) from exc
+            continue
+        live_registries[f"{platform}:{CreatorScene.LIVE_SQUARE.value}"] = live_registry
     requirement = (
         ProfileRequirement.model_validate_json(settings.profile_requirement_path.read_text())
         if settings.profile_requirement_path.is_file()
@@ -250,7 +306,9 @@ def build_services(
         covers=ProductCoverReader(settings.cover_config or ProductCoverConfig()),
         settings=settings,
         updates=CreatorUpdateService(repository, registry, requirement),
+        live_updates=LiveCreatorUpdateService(repository, live_registries),
         platform_registries=platform_registries,
+        live_registries=live_registries,
     )
 
 
@@ -425,20 +483,28 @@ def create_app(
     def capabilities(
         platform: Literal["douyin_xingtu", "kuaishou_juxing"],
         user: Annotated[AuthenticatedUser, Depends(current_user)],
+        creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE,
     ) -> dict[str, Any]:
         del user
         from .product_models import CapabilityDTO
 
         if platform == "kuaishou_juxing" and not services.settings.enable_kuaishou_juxing:
             raise CollectorError("UNSUPPORTED_FILTER", "KUAISHOU_JUXING_FEATURE_DISABLED")
-        registry = services.registry_for(platform)
+        if creator_scene == CreatorScene.LIVE_SQUARE and not services.settings.enable_live_square:
+            raise CollectorError("UNSUPPORTED_FILTER", "LIVE_SQUARE_FEATURE_DISABLED")
+        registry = services.registry_for_scene(platform, creator_scene)
         return CapabilityDTO.from_capabilities(
             registry.capabilities,
             platform=platform,
+            creator_scene=creator_scene,
             target_count_max=(
-                services.settings.kuaishou_juxing_max_target_count
-                if platform == "kuaishou_juxing"
-                else None
+                70
+                if creator_scene == CreatorScene.LIVE_SQUARE
+                else (
+                    services.settings.kuaishou_juxing_max_target_count
+                    if platform == "kuaishou_juxing"
+                    else None
+                )
             ),
         ).model_dump(mode="json")
 
@@ -479,6 +545,40 @@ def create_app(
             juxing_disabled_reason = "当前构建尚未包含可执行的磁力聚星 Adapter"
         else:
             juxing_disabled_reason = None
+        def scenes_for(platform: str, video_registry: PlatformRegistry) -> list[dict[str, Any]]:
+            live = services.live_registries.get(f"{platform}:live_square")
+            live_enabled = bool(
+                services.settings.enable_live_square
+                and live is not None
+                and platform_scene_adapter_available(platform, CreatorScene.LIVE_SQUARE)
+            )
+            if platform == "kuaishou_juxing" and not services.settings.enable_kuaishou_juxing:
+                live_enabled = False
+            reason = None
+            if not services.settings.enable_live_square:
+                reason = "直播广场功能开关当前关闭"
+            elif live is None:
+                reason = "直播广场可执行能力合同不可用"
+            elif not platform_scene_adapter_available(platform, CreatorScene.LIVE_SQUARE):
+                reason = "当前构建尚未包含可执行的直播 Adapter"
+            return [
+                {
+                    "scene": "video_square",
+                    "label": "短视频广场",
+                    "enabled": True,
+                    "capability_status": "verified",
+                    "contract_version": video_registry.contract_version,
+                },
+                {
+                    "scene": "live_square",
+                    "label": "直播广场",
+                    "enabled": live_enabled,
+                    "capability_status": "verified" if live is not None else "unavailable",
+                    "contract_version": live.contract_version if live is not None else None,
+                    "disabled_reason": reason,
+                },
+            ]
+
         return [
             {
                 "platform": "douyin_xingtu",
@@ -486,6 +586,7 @@ def create_app(
                 "enabled": True,
                 "capability_status": "verified",
                 "contract_version": services.registry.contract_version,
+                "scenes": scenes_for("douyin_xingtu", services.registry),
             },
             {
                 "platform": "kuaishou_juxing",
@@ -498,6 +599,10 @@ def create_app(
                     else observed_version
                 ),
                 "disabled_reason": juxing_disabled_reason,
+                "scenes": scenes_for(
+                    "kuaishou_juxing",
+                    executable_registry or services.registry,
+                ),
             },
         ]
 
@@ -508,6 +613,7 @@ def create_app(
     def profile_field_catalog(
         platform: Literal["douyin_xingtu", "kuaishou_juxing"],
         user: Annotated[AuthenticatedUser, Depends(current_user)],
+        creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE,
     ) -> ProfileFieldCatalog:
         """Display names, kinds and registered units for one platform's profile fields.
 
@@ -516,7 +622,9 @@ def create_app(
         """
 
         del user
-        return build_profile_field_catalog(services.registry_for(platform), platform)
+        return build_profile_field_catalog(
+            services.registry_for_scene(platform, creator_scene), platform
+        )
 
     @app.post("/api/tasks", response_model=CreateTaskResponse, status_code=202)
     def create_task(
@@ -530,7 +638,12 @@ def create_app(
                 raise CollectorError("UNSUPPORTED_FILTER", "KUAISHOU_JUXING_FEATURE_DISABLED")
             if form.target_count > services.settings.kuaishou_juxing_max_target_count:
                 raise CollectorError("UNSUPPORTED_FILTER", "KUAISHOU_JUXING_TARGET_ABOVE_LIMIT")
-        registry = services.registry_for(form.platform)
+        if form.creator_scene == CreatorScene.LIVE_SQUARE:
+            if not services.settings.enable_live_square:
+                raise CollectorError("UNSUPPORTED_FILTER", "LIVE_SQUARE_FEATURE_DISABLED")
+            if form.target_count > 70:
+                raise CollectorError("UNSUPPORTED_FILTER", "LIVE_TARGET_ABOVE_LIMIT")
+        registry = services.registry_for_scene(form.platform, form.creator_scene)
         return services.products.create_product_task(
             form,
             capability_version=registry.capabilities.version,
@@ -547,6 +660,7 @@ def create_app(
         status: TaskStatus | None = None,
         task_kind: TaskKind | None = None,
         platform: Literal["douyin_xingtu", "kuaishou_juxing"] | None = None,
+        creator_scene: CreatorScene | None = None,
         created_from: datetime | None = None,
         created_to: datetime | None = None,
         cursor: str | None = None,
@@ -557,6 +671,7 @@ def create_app(
             status=status,
             task_kind=task_kind,
             platform=PlatformId(platform) if platform else None,
+            creator_scene=creator_scene,
             created_from=created_from,
             created_to=created_to,
             cursor=cursor,
@@ -862,6 +977,7 @@ def create_app(
     def creator_library(
         user: Annotated[AuthenticatedUser, Depends(current_user)],
         platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu",
+        creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE,
         industry: str | None = None,
         creator_type: str | None = None,
         province: str | None = None,
@@ -906,6 +1022,7 @@ def create_app(
             raise CollectorError("INVALID_FORM", "INVALID_CREATOR_LIBRARY_RANGE")
         return services.queries.list_creator_library(
             platform=platform,
+            creator_scene=creator_scene,
             industry=industry,
             creator_type=creator_type,
             province=province,
@@ -932,10 +1049,12 @@ def create_app(
 
     @app.get("/api/creator-library/{creator_id}", response_model=CreatorLibraryDetail)
     def creator_library_detail(
-        creator_id: str, user: Annotated[AuthenticatedUser, Depends(current_user)]
+        creator_id: str,
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+        creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE,
     ) -> CreatorLibraryDetail:
         del user
-        return services.queries.get_creator_library(creator_id)
+        return services.queries.get_creator_library(creator_id, creator_scene)
 
     @app.post(
         "/api/creator-library/{creator_id}/updates",
@@ -965,6 +1084,36 @@ def create_app(
         updates = services.updates
         if updates is None:
             raise CollectorError("STORAGE_UNAVAILABLE", "UPDATER_NOT_CONFIGURED")
+        return updates.status(creator_id)
+
+    @app.post(
+        "/api/creator-library/{creator_id}/live-updates",
+        response_model=CreatorUpdateResponse,
+        status_code=202,
+    )
+    def request_creator_live_update(
+        creator_id: str,
+        user: Annotated[AuthenticatedUser, Depends(current_user_with_csrf)],
+        idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
+    ) -> CreatorUpdateResponse:
+        updates = services.live_updates
+        if updates is None:
+            raise CollectorError("UNSUPPORTED_FILTER", "LIVE_UPDATE_NOT_CONFIGURED")
+        return updates.create_manual_update(
+            creator_id, user_id=user.user_id, idempotency_key=idempotency_key
+        )
+
+    @app.get(
+        "/api/creator-library/{creator_id}/live-update",
+        response_model=CreatorUpdateStatus,
+    )
+    def creator_live_update_status(
+        creator_id: str, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    ) -> CreatorUpdateStatus:
+        del user
+        updates = services.live_updates
+        if updates is None:
+            raise CollectorError("UNSUPPORTED_FILTER", "LIVE_UPDATE_NOT_CONFIGURED")
         return updates.status(creator_id)
 
     @app.get("/api/creator-library/{creator_id}/history", response_model=CreatorLibraryHistory)

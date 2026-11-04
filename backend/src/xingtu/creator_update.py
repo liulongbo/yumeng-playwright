@@ -239,8 +239,8 @@ class CreatorUpdateService:
     ) -> None:
         conn.execute(
             """INSERT INTO root_tasks(
-            root_task_id,state,version,unit_id,payload,created_by,origin_root_task_id,task_kind,platform)
-            VALUES(%s,%s,%s,NULL,%s,%s,%s,%s,%s)""",
+            root_task_id,state,version,unit_id,payload,created_by,origin_root_task_id,task_kind,
+            platform,creator_scene) VALUES(%s,%s,%s,NULL,%s,%s,%s,%s,%s,%s)""",
             (
                 task.root_task_id,
                 task.state.value,
@@ -250,6 +250,7 @@ class CreatorUpdateService:
                 origin_root_task_id,
                 task.task_kind.value,
                 task.platform.value,
+                task.creator_scene.value,
             ),
         )
         conn.execute(

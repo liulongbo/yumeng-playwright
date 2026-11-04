@@ -331,7 +331,7 @@ class Activities:
                 current.failure_reason = "PLATFORM_BINDING_NOT_CONFIGURED"
             return TaskStatus.WAITING_FOR_RESOURCE
         try:
-            active_config = self.config.for_platform(task.platform)
+            active_config = self.config.for_scene(task.platform, task.creator_scene)
         except CollectorError as exc:
             with self.repo.edit(root) as (current, _):
                 current.state = TaskStatus.WAITING_FOR_RESOURCE
@@ -540,6 +540,7 @@ class Activities:
                                 registry,
                                 active_config.expected_account_id,
                                 guard,
+                                scene=task.creator_scene,
                                 on_session_health=host.observe_session,
                                 manually_attested_account_id=active_config.manually_attested_account_id,
                             )

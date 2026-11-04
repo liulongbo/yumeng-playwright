@@ -14,11 +14,12 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from .creator_library import CreatorLibraryWriter
+from .creator_library import CreatorLibraryWriter, CreatorLiveLibraryWriter
 from .domain import (
     Candidate,
     Checkpoint,
     CollectorError,
+    CreatorScene,
     ExecutionContext,
     FeaturedCard,
     FeaturedCollectionObservation,
@@ -1593,6 +1594,7 @@ class Repository:
                 task_id=uid(),
                 attempt_id=uid(),
                 plan=plan,
+                creator_scene=plan.creator_scene,
                 execution_unit_id=unit,
                 profile_requirement=profile_requirement,
                 checkpoint=Checkpoint(
@@ -1606,14 +1608,15 @@ class Repository:
                 ),
             )
             conn.execute(
-                """INSERT INTO root_tasks(root_task_id,state,version,unit_id,payload,platform)
-                VALUES(%s,%s,0,%s,%s,%s)""",
+                """INSERT INTO root_tasks(root_task_id,state,version,unit_id,payload,platform,
+                creator_scene) VALUES(%s,%s,0,%s,%s,%s,%s)""",
                 (
                     task.root_task_id,
                     task.state,
                     unit,
                     Jsonb(task.model_dump(mode="json", exclude={"checkpoint"})),
                     task.platform.value,
+                    task.creator_scene.value,
                 ),
             )
             conn.execute(
@@ -1678,7 +1681,8 @@ class Repository:
         # transition into a terminal state, and never overwritten afterwards (a retried task that
         # reaches a terminal state again keeps its first completion moment).
         conn.execute(
-            "UPDATE root_tasks SET state=%s,version=%s,payload=%s,unit_id=%s,updated_at=now()"
+            "UPDATE root_tasks SET state=%s,version=%s,payload=%s,unit_id=%s,"
+            "creator_scene=%s,updated_at=now()"
             + TERMINAL_COMPLETED_AT_CLAUSE
             + " WHERE root_task_id=%s",
             (
@@ -1686,6 +1690,7 @@ class Repository:
                 task.version,
                 Jsonb(task.model_dump(mode="json", exclude={"checkpoint"})),
                 task.execution_unit_id,
+                task.creator_scene.value,
                 task.state in TERMINAL_TASK_STATES,
                 task.root_task_id,
             ),
@@ -1741,7 +1746,11 @@ class Repository:
         # API command, CLI).  Reconcile the update schedule after the task transaction commits,
         # so manual updates do not depend on a later UI read or scheduler tick.  The call is
         # idempotent and only touches rows whose in-flight root is this task.
-        if task.task_kind != TaskKind.COLLECTION and task.state in TERMINAL_TASK_STATES:
+        if (
+            task.task_kind != TaskKind.COLLECTION
+            and task.creator_scene == CreatorScene.VIDEO_SQUARE
+            and task.state in TERMINAL_TASK_STATES
+        ):
             try:
                 from .creator_update import reconcile_update_task
 
@@ -1868,17 +1877,21 @@ class Repository:
             )
             if not publish:
                 continue
-            fields = row["projection"]
-            for module in candidate.modules.values():
-                for field in module.fields:
-                    key = f"{module.module_key}.{field.field_key}"
-                    old = fields.get(key)
-                    if field.status == FieldStatus.COLLECTED and (
-                        not old or field.observed_at > datetime.fromisoformat(old["observed_at"])
-                    ):
-                        fields[key] = field.model_dump(mode="json")
+            live = task.creator_scene == CreatorScene.LIVE_SQUARE
+            fields = row["projection"] if not live else {}
+            if not live:
+                for module in candidate.modules.values():
+                    for field in module.fields:
+                        key = f"{module.module_key}.{field.field_key}"
+                        old = fields.get(key)
+                        if field.status == FieldStatus.COLLECTED and (
+                            not old
+                            or field.observed_at > datetime.fromisoformat(old["observed_at"])
+                        ):
+                            fields[key] = field.model_dump(mode="json")
             snapshot: dict[str, Any] = {
                 "schema_version": "profile_snapshot.v1",
+                "creator_scene": task.creator_scene.value,
                 "modules": {
                     k: {**m.model_dump(mode="json"), "status": m.status, "complete": m.complete}
                     for k, m in candidate.modules.items()
@@ -1942,13 +1955,15 @@ class Repository:
                 self._persist_collection(conn, task, ref.creator_id, observation)
             snapshot_row = conn.execute(
                 "INSERT INTO creator_snapshots(snapshot_id,root_task_id,creator_id,"
-                "draft_revision,payload) VALUES(%s,%s,%s,%s,%s) RETURNING created_at",
+                "draft_revision,payload,creator_scene) VALUES(%s,%s,%s,%s,%s,%s) "
+                "RETURNING created_at",
                 (
                     snapshot_id,
                     task.root_task_id,
                     ref.creator_id,
                     task.checkpoint.revision,
                     Jsonb(snapshot),
+                    task.creator_scene.value,
                 ),
             ).fetchone()
             assert snapshot_row is not None
@@ -1971,20 +1986,33 @@ class Repository:
                 "WHERE root_task_id=%s AND creator_id=%s",
                 (snapshot_id, task.root_task_id, ref.creator_id),
             )
-            conn.execute(
-                "UPDATE platform_creators SET projection=%s WHERE creator_id=%s",
-                (Jsonb(fields), ref.creator_id),
-            )
-            if ref.platform == "douyin_xingtu":
-                CreatorLibraryWriter().sync(
+            if live:
+                CreatorLiveLibraryWriter().sync(
                     conn,
                     creator_id=ref.creator_id,
+                    platform=ref.platform,
                     platform_creator_id=ref.platform_creator_id,
-                    projection=fields,
                     snapshot_id=snapshot_id,
                     snapshot=snapshot,
                     captured_at=snapshot_row["created_at"],
+                    profile_complete=self.profile_complete(task, ref.platform_creator_id),
+                    pipeline_complete=self.pipeline_complete(task, ref.platform_creator_id),
                 )
+            else:
+                conn.execute(
+                    "UPDATE platform_creators SET projection=%s WHERE creator_id=%s",
+                    (Jsonb(fields), ref.creator_id),
+                )
+                if ref.platform == "douyin_xingtu":
+                    CreatorLibraryWriter().sync(
+                        conn,
+                        creator_id=ref.creator_id,
+                        platform_creator_id=ref.platform_creator_id,
+                        projection=fields,
+                        snapshot_id=snapshot_id,
+                        snapshot=snapshot,
+                        captured_at=snapshot_row["created_at"],
+                    )
 
     def _persist_collection(
         self,
@@ -2112,11 +2140,16 @@ class Repository:
 
         profile_complete = cls.profile_complete(task, creator)
         if (
-            task.platform == PlatformId.KUAISHOU_JUXING
-            and not task.checkpoint.featured_collection_types
+            not task.checkpoint.featured_collection_types
+            and (
+                task.platform == PlatformId.KUAISHOU_JUXING
+                or task.creator_scene == CreatorScene.LIVE_SQUARE
+            )
         ):
+            # Juxing video and every live-square contract register no featured collection and
+            # complete on their profile modules.  Xingtu video keeps its established two-collection
+            # requirement, including synthetic/legacy checkpoints that predate registration.
             return profile_complete
-        # Preserve the established Xingtu behaviour: both F06 default collections are required.
         return profile_complete and cls.featured_complete(task, creator)
 
     @classmethod
