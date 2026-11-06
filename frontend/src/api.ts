@@ -1,7 +1,8 @@
 import type {
   Capabilities, ContentPage, CreatorLibraryDetail, CreatorLibraryHistory, CreatorLibraryPage,
   CreatorLibraryQuote, CreatorPage, CreatorSummary, CreatorUpdateResponse, CreatorUpdateStatus,
-  CreatorScene, CreatorVideoPage, PlatformOption, ProductError, ProfileFieldCatalog,
+  CreatorScene, CreatorVideoPage, CreatorUpdateServicePage, CreatorUpdateServiceView,
+  PlatformOption, ProductError, ProfileFieldCatalog,
   BrowserTakeover, ExecutionUnit, RequirementForm, TaskDetail, TaskPage, UserView, VerificationEvent,
 } from "./types";
 
@@ -58,6 +59,14 @@ export const api = {
     ),
   listTasks: (params: URLSearchParams) => request<TaskPage>(`/api/tasks?${params.toString()}`),
   task: (id: string) => request<TaskDetail>(`/api/tasks/${id}`),
+  updateServices: () => request<CreatorUpdateServicePage>("/api/update-services"),
+  setUpdateService: (
+    platform: "douyin_xingtu" | "kuaishou_juxing",
+    scene: CreatorScene,
+    enabled: boolean,
+  ) => request<CreatorUpdateServiceView>(`/api/update-services/${platform}/${scene}`, {
+    method: "PUT", body: JSON.stringify({ enabled }),
+  }),
   executionUnits: () => request<ExecutionUnit[]>("/api/execution-units"),
   executionUnit: (id: string) => request<ExecutionUnit>(`/api/execution-units/${id}`),
   verificationEvents: () => request<VerificationEvent[]>("/api/verification-events"),

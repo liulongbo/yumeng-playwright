@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { liveMetricList, payloadDisplayName } from "./liveCreator";
+import { hasStructuredLiveModules, liveMetricList, payloadDisplayName } from "./liveCreator";
 
 const payload = {
   modules: {
@@ -31,5 +31,22 @@ describe("live creator presentation", () => {
     });
     expect(values.find((item) => item.key === "live.expect_viewer")?.label).toBe("预期观看人数");
     expect(values.find((item) => item.key === "live.room_cnt")).toBeUndefined();
+  });
+
+  it("treats a pre-LIVE-03 snapshot (basic+live only) as legacy", () => {
+    expect(hasStructuredLiveModules(payload)).toBe(false);
+    expect(hasStructuredLiveModules(undefined)).toBe(false);
+    expect(hasStructuredLiveModules({ modules: [] })).toBe(false);
+    // An empty structured module means the newer collection ran but returned nothing; it must not
+    // be mistaken for a legacy snapshot, whose correct presentation is the metric strip.
+    expect(hasStructuredLiveModules({ modules: { live_overview: { fields: [] } } })).toBe(false);
+  });
+
+  it("detects the structured live modules added by LIVE-03", () => {
+    expect(
+      hasStructuredLiveModules({
+        modules: { basic: { fields: [] }, live_overview: { fields: [{ field_key: "overview.general" }] } },
+      }),
+    ).toBe(true);
   });
 });

@@ -63,12 +63,49 @@ const profile: CapabilityField = {
   cooperation_forms: [],
 };
 
+const fanProfile: CapabilityField = {
+  ...profile,
+  incompatible_with: ["live_viewer_profile"],
+};
+
+const viewerProfile: CapabilityField = {
+  ...profile,
+  field: "live_viewer_profile",
+  label: "直播间观众画像",
+  incompatible_with: ["live_fan_profile"],
+};
+
 const fields = [content, followers, profile];
 
 describe("live filter form", () => {
   it("allows a filter-only live requirement and rejects an empty one", () => {
     expect(validateLiveFilters(form({ live_filters: [{ field: "live_content_type", values: ["fashion"] }] }), fields)).toBe("");
     expect(validateLiveFilters(form(), fields)).toContain("至少选择一项");
+  });
+
+  it("rejects Xingtu fan and viewer profiles together", () => {
+    const policy = {
+      fields: ["live_fan_profile", "live_viewer_profile"],
+      incompatible: [["live_viewer_profile", "live_fan_profile"]],
+    };
+    const both = form({
+      live_filters: [
+        { field: "live_fan_profile", values: [], profile: [{ key: "age", values: ["18-23"] }] },
+        { field: "live_viewer_profile", values: [], profile: [{ key: "age", values: ["18-23"] }] },
+      ],
+    });
+    expect(validateLiveFilters(both, [fanProfile, viewerProfile], policy)).toContain("不能同时使用");
+    expect(
+      validateLiveFilters(
+        form({
+          live_filters: [
+            { field: "live_fan_profile", values: [], profile: [{ key: "age", values: ["18-23"] }] },
+          ],
+        }),
+        [fanProfile, viewerProfile],
+        policy,
+      ),
+    ).toBe("");
   });
 
   it("rejects disabled fields and incompatible combinations", () => {

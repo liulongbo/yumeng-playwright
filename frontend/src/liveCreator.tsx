@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, ExternalLink, RefreshCcw, UserRound } from "lucide-react";
 import type { CreatorScene, LiveMetricEnvelope } from "./types";
 import { formatDate } from "./status";
+import { JuxingLiveSections } from "./liveJuxingDetail";
+import { XingtuLiveSections } from "./liveXingtuDetail";
 
 const platformLabel = { douyin_xingtu: "巨量星图", kuaishou_juxing: "磁力聚星" } as const;
 
@@ -123,6 +125,51 @@ export function liveMetricList(
   });
 }
 
+// LIVE-03 replaced the flat `live.*` strip with four structured modules.  Snapshots captured
+// before that change carry only `basic` and `live`, so they must keep rendering the
+// platform-native metrics they were actually collected with.  Without this branch the detail page
+// would show 基本资料 plus four "平台未返回…" sections, wrongly blaming the platform for data this
+// system never attempted to collect.
+const XINGTU_STRUCTURED_LIVE_MODULES = [
+  "live_overview",
+  "live_analysis",
+  "live_audience",
+  "live_pricing",
+] as const;
+
+export function hasStructuredLiveModules(payload: Record<string, unknown> | undefined): boolean {
+  const modules = payload?.modules;
+  if (!modules || typeof modules !== "object" || Array.isArray(modules)) return false;
+  const record = modules as Record<string, unknown>;
+  return XINGTU_STRUCTURED_LIVE_MODULES.some((key) => {
+    const module = record[key];
+    if (!module || typeof module !== "object") return false;
+    const fields = (module as { fields?: unknown }).fields;
+    return Array.isArray(fields) && fields.length > 0;
+  });
+}
+
+function LegacyLiveMetricsSection({
+  platform,
+  payload,
+  liveMetrics,
+  observedAt,
+  scopeLabel,
+}: {
+  platform: "douyin_xingtu" | "kuaishou_juxing";
+  payload?: Record<string, unknown>;
+  liveMetrics?: Record<string, LiveMetricEnvelope>;
+  observedAt?: string | null;
+  scopeLabel: string;
+}) {
+  const metrics = liveMetricList(platform, payload, liveMetrics);
+  return <section className="panel library-detail-panel">
+    <div className="panel-heading"><div><h2>直播表现</h2><p>{scopeLabel}{observedAt ? ` · 观测于 ${formatDate(observedAt)}` : ""}</p></div><span>平台原生口径</span></div>
+    <div className="metric-strip">{metrics.map((metric) => <div className="metric" key={metric.key}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.status === "COLLECTED" ? (metric.period || "已采集") : metric.status}</small></div>)}</div>
+    <p className="profile-empty">该快照采集于直播详情字段升级之前，仅展示当时已采集的平台原生直播指标；重新采集该达人后展示完整板块。</p>
+  </section>;
+}
+
 export function LiveCreatorDetailView({
   platform,
   creatorId,
@@ -154,14 +201,27 @@ export function LiveCreatorDetailView({
   videoHref?: string;
   liveHref?: string;
 }) {
-  const metrics = liveMetricList(platform, payload, liveMetrics);
   return <div className="page-wrap">
     <div className="detail-topline"><Link to={backTo} className="back-link"><ArrowLeft size={17} />{backLabel}</Link><span>/</span><span>{displayName || platformCreatorId}</span></div>
     <div className="creator-detail-head"><div><div className="creator-avatar">{displayName ? <UserRound size={24} /> : <UserRound size={24} />}</div><div><h1>{displayName || "未提供昵称"}</h1><p>{platformLabel[platform]} · 直播广场 · {platformCreatorId}</p></div></div><div className="creator-detail-actions">{liveHref && <Link className="button ghost" to={liveHref}>直播资料</Link>}{videoHref && <Link className="button ghost" to={videoHref}>短视频资料</Link>}{actions}</div></div>
-    <section className="panel library-detail-panel">
-      <div className="panel-heading"><div><h2>直播表现</h2><p>{scopeLabel}{observedAt ? ` · 观测于 ${formatDate(observedAt)}` : ""}</p></div><span>平台原生口径</span></div>
-      <div className="metric-strip">{metrics.map((metric) => <div className="metric" key={metric.key}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.status === "COLLECTED" ? (metric.period || "已采集") : metric.status}</small></div>)}</div>
-    </section>
+    {platform === "kuaishou_juxing" ? (
+      <JuxingLiveSections payload={payload} liveMetrics={liveMetrics} observedAt={observedAt} />
+    ) : hasStructuredLiveModules(payload) ? (
+      <XingtuLiveSections
+        platformCreatorId={platformCreatorId}
+        payload={payload}
+        observedAt={observedAt}
+        scopeLabel={scopeLabel}
+      />
+    ) : (
+      <LegacyLiveMetricsSection
+        platform={platform}
+        payload={payload}
+        liveMetrics={liveMetrics}
+        observedAt={observedAt}
+        scopeLabel={scopeLabel}
+      />
+    )}
     <section className="panel library-detail-panel">
       <div className="panel-heading"><div><h2>数据说明</h2><p>直播与短视频指标不混用；空值/无权限不显示为 0。</p></div></div>
       <ul className="condition-summary">

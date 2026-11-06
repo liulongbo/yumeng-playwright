@@ -355,8 +355,12 @@ export function LiveFilterFields({
     }
     return order.map((group) => ({ group, fields: grouped.get(group)! }));
   }, [fields]);
+  const hasIncompatible = fields.some((field) => field.incompatible_with.length > 0);
   return (
     <>
+      {hasIncompatible && (
+        <div className="profile-exclusion">部分画像条件互斥，选择一侧会清空另一侧。</div>
+      )}
       {groups.map(({ group, fields: groupFields }) => (
         <fieldset className="capability-group" key={group}>
           <legend>{group}</legend>
@@ -369,7 +373,19 @@ export function LiveFilterFields({
                   key={field.field}
                   field={field}
                   selection={selection}
-                  onChange={(next) => onChange(updateFilter(values, field.field, () => next))}
+                  onChange={(next) => {
+                    const updated = updateFilter(values, field.field, () => next);
+                    if (!next || field.incompatible_with.length === 0) {
+                      onChange(updated);
+                      return;
+                    }
+                    const incompatible = new Set(field.incompatible_with);
+                    onChange(
+                      updated.filter(
+                        (item) => item.field === field.field || !incompatible.has(item.field),
+                      ),
+                    );
+                  }}
                 />
               );
             })}

@@ -456,6 +456,44 @@ export interface CreatorUpdateResponse {
   reused: boolean;
 }
 
+export interface CreatorUpdateTaskSummary {
+  root_task_id: string;
+  state: TaskStatus;
+  stage: string | null;
+  created_at: string;
+  completed_at: string | null;
+  failure_reason: string | null;
+  target_count: number;
+  valid_count: number;
+  profile_complete_count: number;
+}
+
+export interface CreatorUpdateServiceView {
+  platform: "douyin_xingtu" | "kuaishou_juxing";
+  creator_scene: CreatorScene;
+  enabled: boolean;
+  effective_enabled: boolean;
+  scheduler_alive: boolean;
+  scheduler_last_tick_at: string | null;
+  registry_available: boolean | null;
+  unavailable_reason: string | null;
+  enrolled_count: number;
+  due_count: number;
+  in_flight_count: number;
+  missing_target_count: number;
+  next_due_at: string | null;
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_task: CreatorUpdateTaskSummary | null;
+}
+
+export interface CreatorUpdateServicePage {
+  items: CreatorUpdateServiceView[];
+  scheduler_alive: boolean;
+  scheduler_last_tick_at: string | null;
+  scheduler_tick_seconds: number | null;
+}
+
 export interface CreatorLibraryHistoryPoint {
   snapshot_id: string;
   captured_at: string;

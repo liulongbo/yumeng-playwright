@@ -1336,7 +1336,7 @@ function CreatorLibraryRow({ creator }: { creator: CreatorLibrarySummary }) {
       {/* Xingtu rows keep their original「达人类型 · 地区」line; juxing has no verified creator
           type taxonomy, so it states the platform instead of inventing one. */}
       <span>{live
-        ? `${platformLabel[creator.platform]} · 直播 · ${creator.creator_type_label || "类型暂无数据"} · ${[creator.province, creator.city].filter(Boolean).join(" / ") || "地区暂无数据"}`
+        ? `${platformLabel[creator.platform]} · 直播 · ${creator.creator_type_label || creator.content_theme_labels[0] || "类型暂无数据"} · ${[creator.province, creator.city].filter(Boolean).join(" / ") || "地区暂无数据"}`
         : `${juxing ? "磁力聚星" : (creator.creator_type_label || "类型暂无数据")} · ${[creator.province, creator.city].filter(Boolean).join(" / ") || "地区暂无数据"}`}</span>
       <em>{juxing
         ? (creator.content_theme_labels.length ? creator.content_theme_labels.join(" / ") : "内容类型暂无数据")
