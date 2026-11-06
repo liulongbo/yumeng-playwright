@@ -18,9 +18,7 @@ def platform_adapter_available(platform: PlatformId | str) -> bool:
     return PlatformId(platform) in {PlatformId.DOUYIN_XINGTU, PlatformId.KUAISHOU_JUXING}
 
 
-def platform_scene_adapter_available(
-    platform: PlatformId | str, scene: CreatorScene | str
-) -> bool:
+def platform_scene_adapter_available(platform: PlatformId | str, scene: CreatorScene | str) -> bool:
     """Whether this build contains an executable adapter for the platform/scene pair."""
 
     if CreatorScene(scene) == CreatorScene.VIDEO_SQUARE:
