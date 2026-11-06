@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from xingtu.contracts import PlatformRegistry
-from xingtu.domain import CollectorError, PlatformId, TaskStatus, uid, utcnow
+from xingtu.domain import CollectorError, CreatorScene, PlatformId, TaskStatus, uid, utcnow
 from xingtu.product_api import (
     ProductServices,
     ProductSettings,
@@ -16,6 +16,8 @@ from xingtu.product_covers import ProductCoverConfig
 from xingtu.product_models import (
     CreateTaskResponse,
     CreatorUpdateResponse,
+    CreatorUpdateServicePage,
+    CreatorUpdateServiceView,
     CreatorUpdateStatus,
     TaskPage,
 )
@@ -101,6 +103,36 @@ class FakeUpdates:
         return CreatorUpdateStatus(creator_id=creator_id)
 
 
+class FakeUpdateServices:
+    def __init__(self):
+        self.calls = []
+
+    @staticmethod
+    def _view(platform="douyin_xingtu", scene=CreatorScene.VIDEO_SQUARE, enabled=True):
+        return CreatorUpdateServiceView(
+            platform=platform,
+            creator_scene=scene,
+            enabled=enabled,
+            effective_enabled=False,
+            scheduler_alive=False,
+        )
+
+    def list_services(self):
+        return CreatorUpdateServicePage(
+            items=[
+                self._view("douyin_xingtu", CreatorScene.VIDEO_SQUARE, True),
+                self._view("douyin_xingtu", CreatorScene.LIVE_SQUARE, False),
+                self._view("kuaishou_juxing", CreatorScene.VIDEO_SQUARE, False),
+                self._view("kuaishou_juxing", CreatorScene.LIVE_SQUARE, False),
+            ],
+            scheduler_alive=False,
+        )
+
+    def set_enabled(self, platform, scene, enabled, *, user_id):
+        self.calls.append((platform, scene, enabled, user_id))
+        return self._view(platform, scene, enabled)
+
+
 def client_fixture(
     *,
     enable_juxing: bool = False,
@@ -138,6 +170,7 @@ def client_fixture(
         covers=FakeCovers(),
         settings=settings,
         updates=FakeUpdates(),
+        update_services=FakeUpdateServices(),
         platform_registries={
             "kuaishou_juxing": PlatformRegistry.model_validate_json(
                 settings.juxing_registry_path.read_text()
@@ -475,3 +508,51 @@ def test_creator_update_routes_use_csrf_and_are_authenticated():
     status = client.get("/api/creator-library/creator/update")
     assert status.status_code == 200
     assert status.json()["creator_id"] == "creator"
+
+
+def test_update_services_route_requires_auth_csrf_and_reports_four_groups():
+    client, _ = client_fixture()
+    assert client.get("/api/update-services").status_code == 401
+    login_response = login(client)
+    assert login_response.status_code == 200
+    csrf = login_response.json()["csrf_token"]
+    page = client.get("/api/update-services")
+    assert page.status_code == 200
+    items = page.json()["items"]
+    assert len(items) == 4
+    assert {(item["platform"], item["creator_scene"]) for item in items} == {
+        ("douyin_xingtu", "video_square"),
+        ("douyin_xingtu", "live_square"),
+        ("kuaishou_juxing", "video_square"),
+        ("kuaishou_juxing", "live_square"),
+    }
+    assert page.json()["scheduler_alive"] is False
+
+    missing_csrf = client.put(
+        "/api/update-services/douyin_xingtu/live_square",
+        headers={"Origin": "https://app.test"},
+        json={"enabled": True},
+    )
+    assert missing_csrf.status_code == 403
+    changed = client.put(
+        "/api/update-services/douyin_xingtu/live_square",
+        headers={"Origin": "https://app.test", "X-CSRF-Token": csrf},
+        json={"enabled": True},
+    )
+    assert changed.status_code == 200
+    assert changed.json()["enabled"] is True
+    fake = client.app.state.services.update_services  # type: ignore[attr-defined]
+    assert fake.calls[0][:3] == ("douyin_xingtu", CreatorScene.LIVE_SQUARE, True)
+
+    invalid_scene = client.put(
+        "/api/update-services/douyin_xingtu/unknown_scene",
+        headers={"Origin": "https://app.test", "X-CSRF-Token": csrf},
+        json={"enabled": True},
+    )
+    assert invalid_scene.status_code == 422
+    invalid_platform = client.put(
+        "/api/update-services/unknown_platform/video_square",
+        headers={"Origin": "https://app.test", "X-CSRF-Token": csrf},
+        json={"enabled": True},
+    )
+    assert invalid_platform.status_code == 422

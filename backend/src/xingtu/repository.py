@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 import os
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -660,6 +660,20 @@ class Repository:
                 (unit, platform),
             ).fetchone()
             return row is not None
+
+    def scheduled_update_enabled(self, platform: str, scene: str) -> bool:
+        """Whether the operator currently allows scheduled updates for one (platform, scene).
+
+        Missing configuration fails closed: a scheduled task must never run because an expected
+        service row was accidentally absent.
+        """
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT enabled FROM creator_update_service
+                WHERE platform=%s AND creator_scene=%s""",
+                (platform, scene),
+            ).fetchone()
+            return bool(row and row["enabled"])
 
     def observe_unit_platform_session(
         self, unit: str, platform: str, status: SessionHealthStatus, reason: str
@@ -1746,11 +1760,7 @@ class Repository:
         # API command, CLI).  Reconcile the update schedule after the task transaction commits,
         # so manual updates do not depend on a later UI read or scheduler tick.  The call is
         # idempotent and only touches rows whose in-flight root is this task.
-        if (
-            task.task_kind != TaskKind.COLLECTION
-            and task.creator_scene == CreatorScene.VIDEO_SQUARE
-            and task.state in TERMINAL_TASK_STATES
-        ):
+        if task.task_kind != TaskKind.COLLECTION and task.state in TERMINAL_TASK_STATES:
             try:
                 from .creator_update import reconcile_update_task
 
@@ -1784,7 +1794,10 @@ class Repository:
                 if action == "retry" and task.state == TaskStatus.PARTIAL_COMPLETED:
                     if challenge_blocks_retry(task):
                         raise CollectorError("INVALID_FORM", "ACTION_NOT_ALLOWED")
-                    if not any(self.retryable(c) for c in task.checkpoint.candidates):
+                    if not any(
+                        self.retryable(c, task.checkpoint.profile_module_keys)
+                        for c in task.checkpoint.candidates
+                    ):
                         raise CollectorError("INVALID_FORM", "NO_RETRYABLE_FAILURE")
                 scope = decide_retry_scope(task)
                 task.segment += 1
@@ -1857,10 +1870,20 @@ class Repository:
             # never be written into platform_creators/projection/snapshot for this task.
             if ref.platform != task.platform:
                 raise CollectorError("PLATFORM_PAGE_CHANGED", "CREATOR_PLATFORM_MISMATCH")
+            live = task.creator_scene == CreatorScene.LIVE_SQUARE
+            # The verified video detail route is part of the identity, not business data.  Juxing
+            # video is persisted by userId but its route needs starId, so the exact homepage is
+            # kept here; live publishes leave the video locator untouched.
             conn.execute(
-                """INSERT INTO platform_creators(creator_id,platform,platform_creator_id)
-                VALUES(%s,%s,%s) ON CONFLICT(platform,platform_creator_id) DO NOTHING""",
-                (ref.creator_id or uid(), ref.platform, ref.platform_creator_id),
+                """INSERT INTO platform_creators(
+                creator_id,platform,platform_creator_id,video_homepage)
+                VALUES(%s,%s,%s,%s) ON CONFLICT(platform,platform_creator_id) DO NOTHING""",
+                (
+                    ref.creator_id or uid(),
+                    ref.platform,
+                    ref.platform_creator_id,
+                    None if live else ref.verified_homepage,
+                ),
             )
             row = conn.execute(
                 """SELECT * FROM platform_creators
@@ -1877,7 +1900,6 @@ class Repository:
             )
             if not publish:
                 continue
-            live = task.creator_scene == CreatorScene.LIVE_SQUARE
             fields = row["projection"] if not live else {}
             if not live:
                 for module in candidate.modules.values():
@@ -2000,8 +2022,10 @@ class Repository:
                 )
             else:
                 conn.execute(
-                    "UPDATE platform_creators SET projection=%s WHERE creator_id=%s",
-                    (Jsonb(fields), ref.creator_id),
+                    """UPDATE platform_creators
+                    SET projection=%s,video_homepage=COALESCE(%s,video_homepage)
+                    WHERE creator_id=%s""",
+                    (Jsonb(fields), ref.verified_homepage, ref.creator_id),
                 )
                 if ref.platform == "douyin_xingtu":
                     CreatorLibraryWriter().sync(
@@ -2086,9 +2110,9 @@ class Repository:
         return str(row["content_id"]) if row else None
 
     @staticmethod
-    def retryable(candidate: Candidate) -> bool:
-        """A candidate is retryable when a step is failed or an attempted step is incomplete."""
-        return is_retryable(candidate)
+    def retryable(candidate: Candidate, expected_modules: Iterable[str] | None = None) -> bool:
+        """A candidate is retryable when a step is failed or an expected step is incomplete."""
+        return is_retryable(candidate, expected_modules)
 
     def cover_reference(self, root_task_id: str, object_id: str) -> dict[str, Any] | None:
         """Authenticated-access check: an object is only reachable through its own task's rows.
@@ -2139,12 +2163,9 @@ class Repository:
         """Require only the collection scopes registered for the task's platform contract."""
 
         profile_complete = cls.profile_complete(task, creator)
-        if (
-            not task.checkpoint.featured_collection_types
-            and (
-                task.platform == PlatformId.KUAISHOU_JUXING
-                or task.creator_scene == CreatorScene.LIVE_SQUARE
-            )
+        if not task.checkpoint.featured_collection_types and (
+            task.platform == PlatformId.KUAISHOU_JUXING
+            or task.creator_scene == CreatorScene.LIVE_SQUARE
         ):
             # Juxing video and every live-square contract register no featured collection and
             # complete on their profile modules.  Xingtu video keeps its established two-collection

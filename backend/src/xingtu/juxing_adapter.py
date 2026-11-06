@@ -420,15 +420,44 @@ class KuaishouJuxingAdapter(BrowserAdapter):
             raise CollectorError("CREATOR_INVALID", "UNVERIFIED_JUXING_HOMEPAGE")
         return int(match.group(1))
 
+    async def _ensure_search_page(self) -> Page:
+        """Establish the bound video-square page for a plan-less targeted update.
+
+        Normal collection always has a prepared search page.  A scheduled/manual update starts
+        directly at the creator detail, but Juxing's detail requests are posted from a page inside
+        the authenticated SPA, and the detail route itself omits the account markers.  Create and
+        verify the registered video-square page exactly as a manual update would, without running
+        search or P1.
+        """
+        if self.search_page is not None:
+            return self.search_page
+        search = self.registry.search
+        session = self.registry.session
+        assert search is not None and session is not None
+        page = await self.browser.new_page()
+        page.set_default_timeout(self.timeout_seconds() * 1000)
+        try:
+            await self.navigate(
+                page,
+                bind_account_to_url(
+                    search.entry_url,
+                    session.account_url_parameter,
+                    self.account,
+                ),
+            )
+        except Exception:
+            await page.close()
+            raise
+        self.search_page = page
+        return page
+
     @asynccontextmanager
     async def profile(self, creator: CreatorRef, ctx: ExecutionContext) -> AsyncIterator[None]:
         del ctx
-        if self.search_page is None:
-            raise CollectorError("SESSION_INDETERMINATE", "JUXING_SEARCH_PAGE_MISSING")
         # Juxing's detail route omits the child-account/protected markers that exist on the
         # creator-square page. Prove the exact account on that still-live page before opening the
         # detail tab, then use the detail page only for creator identity and registered data.
-        await self.check_session(self.search_page)
+        await self.check_session(await self._ensure_search_page())
         page = await self.browser.new_page()
         self.detail_page = page
         page.set_default_timeout(self.timeout_seconds() * 1000)

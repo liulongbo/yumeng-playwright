@@ -126,6 +126,11 @@ def test_retryable_covers_failed_and_incomplete_but_not_resolved_absences():
     assert not is_retryable(candidate("3", state="done", valid=True, complete=True))
     assert not is_retryable(candidate("4", state="pending", valid=False, complete=True))
     assert not is_retryable(candidate("5", state="invalid", valid=False, complete=False))
+    # A budget interruption can leave only the basic module in the checkpoint.  The missing
+    # expected module is retryable even though every present module is complete.
+    interrupted = candidate("6", state="done", valid=True, complete=True)
+    assert not is_retryable(interrupted, ["basic"])
+    assert is_retryable(interrupted, ["basic", "live"])
 
 
 def test_continue_leaves_every_counted_creator_alone(plan):

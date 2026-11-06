@@ -885,6 +885,9 @@ class CreatorLibraryDetail(CreatorLibrarySummary):
     failed_field_count: int = 0
     field_sources: dict[str, JsonValue] = Field(default_factory=dict)
     module_statuses: dict[str, str | None] = Field(default_factory=dict)
+    # Modules whose latest observation failed and whose data was read back from an older immutable
+    # snapshot.  Additive: an empty map means every module comes from the latest snapshot.
+    module_fallbacks: dict[str, JsonValue] = Field(default_factory=dict)
     # A presentation-safe, complete profile assembled from the current projection and the latest
     # immutable snapshot.  It deliberately keeps platform field envelopes (status/unit/period).
     profile_payload: dict[str, JsonValue] = Field(default_factory=dict)
@@ -911,6 +914,57 @@ class CreatorUpdateResponse(Model):
     root_task_id: str
     status: TaskStatus = TaskStatus.QUEUED
     reused: bool = False
+
+
+class CreatorUpdateTaskSummary(Model):
+    """Latest scheduled batch for one update service; counts come from the task payload."""
+
+    root_task_id: str
+    state: TaskStatus
+    stage: str | None = None
+    created_at: datetime
+    completed_at: datetime | None = None
+    failure_reason: str | None = None
+    target_count: int = 0
+    valid_count: int = 0
+    profile_complete_count: int = 0
+
+
+class CreatorUpdateServiceView(Model):
+    """One (platform, creator_scene) scheduled-update service and its observable state.
+
+    ``effective_enabled`` is the only field that claims actual automation: it requires the
+    persisted switch, a live scheduler heartbeat and an available contract.  Fields without a
+    reliable source stay empty instead of being invented.
+    """
+
+    platform: Literal["douyin_xingtu", "kuaishou_juxing"]
+    creator_scene: CreatorScene
+    enabled: bool
+    effective_enabled: bool
+    scheduler_alive: bool
+    scheduler_last_tick_at: datetime | None = None
+    registry_available: bool | None = None
+    unavailable_reason: str | None = None
+    enrolled_count: int = 0
+    due_count: int = 0
+    in_flight_count: int = 0
+    missing_target_count: int = 0
+    next_due_at: datetime | None = None
+    last_attempt_at: datetime | None = None
+    last_success_at: datetime | None = None
+    last_task: CreatorUpdateTaskSummary | None = None
+
+
+class CreatorUpdateServicePage(Model):
+    items: list[CreatorUpdateServiceView]
+    scheduler_alive: bool
+    scheduler_last_tick_at: datetime | None = None
+    scheduler_tick_seconds: float | None = None
+
+
+class CreatorUpdateServicePatch(Model):
+    enabled: bool
 
 
 class CreatorLibraryHistoryPoint(Model):

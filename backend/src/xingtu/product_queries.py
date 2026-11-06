@@ -65,6 +65,33 @@ from .retry_policy import (
 )
 from .worker_health import INTAKE_QUEUE, WorkerHealthMonitor
 
+# Detail-only live collections are large JSONB values (works, portraits, trends, reviews,
+# commerce graphs).  The library list response deliberately omits them; the detail endpoint
+# returns the complete live_metrics object.  Removing only these keys keeps every existing
+# summary metric (including Xingtu live metrics) untouched.
+LIVE_DETAIL_ONLY_METRICS = frozenset(
+    {
+        "live.quote_details",
+        "live.follower_trend_30d",
+        "live.follower_trend_90d",
+        "live.index_dimensions",
+        "live.index_trend",
+        "live.personal_live_works",
+        "live.commercial_live_works",
+        "live.recent_live_works",
+        "live.live_frequency",
+        "live.viewer_portrait",
+        "live.fan_portrait",
+        "live.commerce_7d",
+        "live.commerce_30d",
+        "live.commerce_90d",
+        "live.hot_brands",
+        "live.hot_categories",
+        "live.evaluation_reviews",
+    }
+)
+
+
 # The same terminal set the task write path uses to stamp `completed_at`; kept as the query layer's
 # public name because the API and result-action rules already refer to it.
 TERMINAL_STATES = set(TERMINAL_TASK_STATES)
@@ -120,7 +147,10 @@ def allowed_actions(status: TaskStatus, task: TaskRecord | None) -> list[str]:
         status == TaskStatus.PARTIAL_COMPLETED
         and task
         and not challenge_blocks_retry(task)
-        and any(Repository.retryable(candidate) for candidate in task.checkpoint.candidates)
+        and any(
+            Repository.retryable(candidate, task.checkpoint.profile_module_keys)
+            for candidate in task.checkpoint.candidates
+        )
     ):
         actions.append("retry")
     if status == TaskStatus.FAILED_VALIDATION:
@@ -859,7 +889,7 @@ class ProductQueries:
                         if challenge_blocks_retry(task):
                             raise CollectorError("INVALID_FORM", "ACTION_NOT_ALLOWED")
                         if not any(
-                            Repository.retryable(candidate)
+                            Repository.retryable(candidate, task.checkpoint.profile_module_keys)
                             for candidate in task.checkpoint.candidates
                         ):
                             raise CollectorError("INVALID_FORM", "NO_RETRYABLE_FAILURE")
@@ -986,7 +1016,7 @@ class ProductQueries:
         items: list[CreatorSummary] = []
         for row in visible:
             if row["snapshot_id"]:
-                payload = row["payload"]
+                payload = self._live_list_payload(row["payload"])
                 view_kind: Literal["draft", "published"] = "published"
                 observed_at = row["created_at"]
             else:
@@ -1441,9 +1471,7 @@ class ProductQueries:
             ),
         )
 
-    def _available_scenes(
-        self, conn: Any, creator_id: str, platform: str
-    ) -> list[CreatorScene]:
+    def _available_scenes(self, conn: Any, creator_id: str, platform: str) -> list[CreatorScene]:
         del conn
         scenes: list[CreatorScene] = []
         with self.repository.connect() as own:
@@ -1469,14 +1497,139 @@ class ProductQueries:
                 scenes.append(CreatorScene.LIVE_SQUARE)
         return scenes
 
+    @staticmethod
+    def _scalar_live_metrics(value: Any) -> dict[str, Any]:
+        """Only live.* scalar envelopes belong in the list/detail metric strip.
+
+        Structured live-detail modules are read from the immutable snapshot payload; they must not
+        bloat the creator-library list or be mistaken for a platform metric.
+        """
+
+        if not isinstance(value, dict):
+            return {}
+        result: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(item, dict):
+                continue
+            raw_value = item.get("value")
+            if isinstance(raw_value, dict) and raw_value.get("kind") == "structured":
+                continue
+            result[key] = item
+        return result
+
+    @staticmethod
+    def _live_list_payload(payload: dict[str, Any]) -> dict[str, Any]:
+        """Trim the task-result list to the modules it renders.
+
+        A live snapshot can contain the complete calendar, room list and audience distributions.
+        Returning all of it for every creator on a 70-creator task page is unnecessary; the single
+        creator endpoint still returns the full payload.
+        """
+
+        if payload.get("creator_scene") != "live_square":
+            return payload
+        modules = payload.get("modules")
+        if not isinstance(modules, dict):
+            return payload
+        trimmed: dict[str, Any] = {}
+        for key, value in modules.items():
+            if key not in {"basic", "live"}:
+                continue
+            if key == "basic" and isinstance(value, dict):
+                # The WeChat ID is contact information.  It is intentionally detail-only; the
+                # task-result list must not ship it for every creator.
+                basic = dict(value)
+                basic["fields"] = [
+                    field
+                    for field in value.get("fields") or []
+                    if not (isinstance(field, dict) and field.get("field_key") == "wechat")
+                ]
+                trimmed[key] = basic
+            else:
+                trimmed[key] = value
+        return {**payload, "modules": trimmed}
+
+    @staticmethod
+    def _module_text(modules: dict[str, Any], module_key: str, field_key: str) -> str | None:
+        module = modules.get(module_key)
+        if not isinstance(module, dict):
+            return None
+        fields = module.get("fields")
+        if not isinstance(fields, list):
+            return None
+        for field in fields:
+            if not isinstance(field, dict) or field.get("field_key") != field_key:
+                continue
+            if field.get("status") != "COLLECTED":
+                return None
+            value = field.get("value")
+            return value if isinstance(value, str) and value.strip() else None
+        return None
+
+    def _merge_live_modules(
+        self, conn: Any, creator_id: str, payload: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Read back the newest collected version of a failed module.
+
+        Snapshots are immutable; a failed latest observation never deletes an older collected one.
+        The merge is bounded to the three newest live snapshots and is reported explicitly so the
+        UI can say when a module is older than the snapshot's observation time.
+        """
+
+        if not isinstance(payload, dict):
+            return {}, {}
+        rows = conn.execute(
+            """SELECT snapshot_id,payload,created_at FROM creator_snapshots
+            WHERE creator_id=%s AND creator_scene='live_square'
+            ORDER BY created_at DESC LIMIT 3""",
+            (creator_id,),
+        ).fetchall()
+        merged = copy.deepcopy(payload)
+        modules = merged.get("modules")
+        if not isinstance(modules, dict) or not rows:
+            return merged, {}
+        fallbacks: dict[str, Any] = {}
+        for key, module in list(modules.items()):
+            if not isinstance(module, dict):
+                continue
+            if module.get("status") not in {"FAILED", "NOT_ATTEMPTED"}:
+                continue
+            for older in rows[1:]:
+                older_payload = older.get("payload") or {}
+                older_modules = (
+                    older_payload.get("modules") if isinstance(older_payload, dict) else None
+                )
+                older_module = older_modules.get(key) if isinstance(older_modules, dict) else None
+                if (
+                    isinstance(older_module, dict)
+                    and older_module.get("status") not in {"FAILED", "NOT_ATTEMPTED", None}
+                    and older_module.get("fields")
+                ):
+                    modules[key] = older_module
+                    created_at = older.get("created_at")
+                    fallbacks[key] = {
+                        "snapshot_id": str(older.get("snapshot_id")),
+                        "observed_at": created_at.isoformat() if created_at else None,
+                        "reason": "latest-observation-failed",
+                    }
+                    break
+        if fallbacks:
+            merged["module_fallbacks"] = fallbacks
+        return merged, fallbacks
+
     @classmethod
     def _live_library_summary(cls, row: dict[str, Any]) -> CreatorLibrarySummary:
+        metrics = {
+            key: value
+            for key, value in (row.get("live_metrics") or {}).items()
+            if key not in LIVE_DETAIL_ONLY_METRICS
+        }
         return CreatorLibrarySummary(
             creator_id=str(row["creator_id"]),
             platform=row["platform"],
             creator_scene=CreatorScene.LIVE_SQUARE,
             platform_creator_id=str(row["platform_creator_id"]),
-            live_metrics=row.get("live_metrics") or {},
+            live_metrics=metrics,
             display_name=row.get("display_name"),
             avatar_uri=row.get("avatar_uri"),
             creator_type_label=row.get("creator_type_label"),
@@ -1586,9 +1739,7 @@ class ProductQueries:
         if complete_only:
             clauses.append(sql.SQL("c.profile_complete AND c.pipeline_complete"))
         order_column = (
-            sql.SQL("c.data_updated_at")
-            if sort == "updated_at"
-            else sql.SQL("c.followers_count")
+            sql.SQL("c.data_updated_at") if sort == "updated_at" else sql.SQL("c.followers_count")
         )
         order_direction = sql.SQL("ASC") if direction == "asc" else sql.SQL("DESC")
         query = (
@@ -1632,25 +1783,38 @@ class ProductQueries:
         if not row:
             raise CollectorError("INVALID_FORM", "CREATOR_NOT_FOUND")
         payload = row.get("latest_payload") or {}
+        payload, module_fallbacks = self._merge_live_modules(conn, creator_id, payload)
         modules = payload.get("modules") if isinstance(payload, dict) else None
         module_statuses = {
             str(key): (module.get("status") if isinstance(module, dict) else None)
             for key, module in (modules.items() if isinstance(modules, dict) else [])
         }
+        introduction = (
+            self._module_text(modules, "basic", "introduction")
+            if isinstance(modules, dict)
+            else None
+        )
+        summary = self._live_library_summary(row)
         return CreatorLibraryDetail(
-            **self._live_library_summary(row).model_dump(),
+            **{
+                **summary.model_dump(),
+                # The detail page needs the full collections even though the list response is
+                # deliberately trimmed.
+                "live_metrics": row.get("live_metrics") or {},
+            },
             available_scenes=self._available_scenes(conn, creator_id, platform),
             latest_snapshot_id=str(row["latest_snapshot_id"])
             if row["latest_snapshot_id"]
             else None,
             platform_star_id=row.get("platform_star_id"),
             mcn_name=row.get("mcn_name"),
-            introduction=None,
+            introduction=introduction,
             gender=row.get("gender"),
             collected_field_count=int(row["collected_field_count"]),
             failed_field_count=int(row["failed_field_count"]),
             field_sources=row.get("field_sources") or {},
             module_statuses=module_statuses,
+            module_fallbacks=module_fallbacks,
             profile_payload=payload,
         )
 

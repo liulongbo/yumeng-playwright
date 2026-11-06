@@ -11,14 +11,14 @@ import uvicorn
 from pydantic import ValidationError
 
 from .contracts import PlatformRegistry
-from .creator_update import CreatorUpdateService
-from .domain import CollectorError, ProfileRequirement
+from .creator_update import CreatorUpdateService, UpdateScope, scope_key
+from .domain import CollectorError, CreatorScene, PlatformId, ProfileRequirement
 from .intake import DeepSeekAdapter
 from .intake_worker import IntakeProcessor, run_intake_worker
 from .product_auth import PasswordService, normalize_username
 from .product_repository import ProductRepository
 from .repository import Repository
-from .runtime import load_unit
+from .runtime import UnitConfig, load_unit
 
 ROOT = Path(__file__).resolve().parents[3]
 logger = logging.getLogger(__name__)
@@ -49,6 +49,82 @@ def run_api() -> None:
     )
 
 
+def _update_registry(path: Path | None, *, reason: str) -> PlatformRegistry:
+    if path is None or not path.is_file():
+        raise CollectorError("RESOURCE_UNAVAILABLE", reason)
+    try:
+        registry = PlatformRegistry.model_validate_json(path.read_text())
+        registry.require_enabled(live=True)
+    except (OSError, ValidationError) as exc:
+        raise CollectorError("RESOURCE_UNAVAILABLE", reason) from exc
+    return registry
+
+
+def _path_or_env(path: Path | None, env_key: str) -> Path | None:
+    if path is not None:
+        return path
+    raw = os.environ.get(env_key)
+    return Path(raw) if raw else None
+
+
+def update_scopes(
+    config: UnitConfig, requirement: ProfileRequirement | None
+) -> tuple[dict[str, UpdateScope], dict[str, str]]:
+    """Resolve every (platform, scene) update lane available to this scheduler process.
+
+    The scheduler is intentionally one process.  A platform's registry may live in the primary
+    unit config or in another unit's platform binding; missing optional contracts only disable
+    that lane and never stop the others.
+    """
+    active_platform = config.active_platform
+    video_paths: dict[PlatformId, Path | None] = {active_platform: config.registry_path}
+    live_paths: dict[PlatformId, Path | None] = {active_platform: config.live_registry_path}
+    for binding in config.platform_bindings:
+        # A dedicated juxing unit has no top-level live path; its binding still carries one.
+        # Prefer every available path without replacing a non-null active-platform value.
+        if video_paths.get(binding.platform) is None:
+            video_paths[binding.platform] = binding.registry_path
+        if live_paths.get(binding.platform) is None:
+            live_paths[binding.platform] = binding.live_registry_path
+    video_env = {
+        "douyin_xingtu": "XINGTU_REGISTRY_PATH",
+        "kuaishou_juxing": "XINGTU_JUXING_REGISTRY_PATH",
+    }
+    live_env = {
+        "douyin_xingtu": "XINGTU_LIVE_REGISTRY_PATH",
+        "kuaishou_juxing": "XINGTU_JUXING_LIVE_REGISTRY_PATH",
+    }
+    scopes: dict[str, UpdateScope] = {}
+    errors: dict[str, str] = {}
+    for platform in (PlatformId.DOUYIN_XINGTU, PlatformId.KUAISHOU_JUXING):
+        video_key = scope_key(platform, CreatorScene.VIDEO_SQUARE)
+        try:
+            video_registry = _update_registry(
+                _path_or_env(video_paths.get(platform), video_env[platform.value]),
+                reason="UPDATE_VIDEO_REGISTRY_UNAVAILABLE",
+            )
+        except CollectorError as exc:
+            errors[video_key] = exc.reason
+        else:
+            scopes[video_key] = UpdateScope(
+                platform,
+                CreatorScene.VIDEO_SQUARE,
+                video_registry,
+                requirement if platform == PlatformId.DOUYIN_XINGTU else None,
+            )
+        live_key = scope_key(platform, CreatorScene.LIVE_SQUARE)
+        try:
+            live_registry = _update_registry(
+                _path_or_env(live_paths.get(platform), live_env[platform.value]),
+                reason="UPDATE_LIVE_REGISTRY_UNAVAILABLE",
+            )
+        except CollectorError as exc:
+            errors[live_key] = exc.reason
+        else:
+            scopes[live_key] = UpdateScope(platform, CreatorScene.LIVE_SQUARE, live_registry)
+    return scopes, errors
+
+
 async def _run_update_scheduler(
     unit_config: Path,
     profile_requirement_path: Path | None,
@@ -61,31 +137,46 @@ async def _run_update_scheduler(
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     config = load_unit(unit_config)
-    registry = PlatformRegistry.model_validate_json(config.registry_path.read_text())
-    registry.require_enabled(live=True)
     requirement = (
         ProfileRequirement.model_validate_json(profile_requirement_path.read_text())
         if profile_requirement_path
         else None
     )
+    scopes, scope_errors = update_scopes(config, requirement)
+    primary = scope_key(config.active_platform, CreatorScene.VIDEO_SQUARE)
+    if primary not in scopes:
+        raise CollectorError(
+            "RESOURCE_UNAVAILABLE",
+            scope_errors.get(primary) or "UPDATE_PRIMARY_SCOPE_UNAVAILABLE",
+        )
+    for key, reason in scope_errors.items():
+        logger.warning("creator update scope unavailable scope=%s reason=%s", key, reason)
     dsn = os.environ.get("XINGTU_DATABASE_URL")
     if not dsn:
         raise CollectorError("STORAGE_UNAVAILABLE", "XINGTU_DATABASE_URL_REQUIRED")
-    service = CreatorUpdateService(Repository(dsn), registry, requirement, batch_size=batch_size)
+    service = CreatorUpdateService(
+        Repository(dsn),
+        scopes=scopes,
+        scope_errors=scope_errors,
+        batch_size=batch_size,
+        tick_seconds=tick_seconds,
+    )
     while True:
         try:
             result = service.scheduler_tick()
-            if result["created"]:
-                logging.getLogger(__name__).info(
-                    "creator update batch created=%s reconciled=%s enrolled=%s",
+            if result["created"] or result["errors"]:
+                logger.info(
+                    "creator update tick created=%s reconciled=%s enrolled=%s skipped=%s "
+                    "groups=%s errors=%s",
                     result["created"],
                     result["reconciled"],
                     result["enrolled"],
+                    result["skipped"],
+                    result["groups"],
+                    result["errors"],
                 )
         except Exception as exc:  # noqa: BLE001 - the scheduler must survive any tick error
-            logging.getLogger(__name__).warning(
-                "creator update scheduler tick failed: %s", type(exc).__name__
-            )
+            logger.warning("creator update scheduler tick failed: %s", type(exc).__name__)
         await asyncio.sleep(tick_seconds)
 
 
@@ -139,9 +230,7 @@ async def _run_intake(unit_config: Path, profile_requirement: Path | None) -> No
             live_registry = PlatformRegistry.model_validate_json(live_path.read_text())
             live_registry.require_enabled(live=True)
         except (OSError, ValidationError) as exc:
-            logger.warning(
-                "live registry unavailable: %s (%s)", platform, type(exc).__name__
-            )
+            logger.warning("live registry unavailable: %s (%s)", platform, type(exc).__name__)
             continue
         scene_registries[f"{platform}:live_square"] = live_registry
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")

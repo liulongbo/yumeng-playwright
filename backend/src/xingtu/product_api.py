@@ -21,6 +21,7 @@ from .adapter_factory import (
 )
 from .contracts import PlatformRegistry
 from .creator_update import CreatorUpdateService
+from .creator_update_services import CreatorUpdateServiceAdmin
 from .domain import (
     CollectorError,
     CreatorScene,
@@ -44,6 +45,9 @@ from .product_models import (
     CreatorPage,
     CreatorSummary,
     CreatorUpdateResponse,
+    CreatorUpdateServicePage,
+    CreatorUpdateServicePatch,
+    CreatorUpdateServiceView,
     CreatorUpdateStatus,
     CreatorVideoPage,
     ExecutionUnitView,
@@ -228,6 +232,7 @@ class ProductServices:
     settings: ProductSettings
     updates: CreatorUpdateService | None = None
     live_updates: LiveCreatorUpdateService | None = None
+    update_services: CreatorUpdateServiceAdmin | None = None
     platform_registries: dict[str, PlatformRegistry] = field(default_factory=dict)
     live_registries: dict[str, PlatformRegistry] = field(default_factory=dict)
 
@@ -307,6 +312,7 @@ def build_services(
         settings=settings,
         updates=CreatorUpdateService(repository, registry, requirement),
         live_updates=LiveCreatorUpdateService(repository, live_registries),
+        update_services=CreatorUpdateServiceAdmin(repository),
         platform_registries=platform_registries,
         live_registries=live_registries,
     )
@@ -545,6 +551,7 @@ def create_app(
             juxing_disabled_reason = "当前构建尚未包含可执行的磁力聚星 Adapter"
         else:
             juxing_disabled_reason = None
+
         def scenes_for(platform: str, video_registry: PlatformRegistry) -> list[dict[str, Any]]:
             live = services.live_registries.get(f"{platform}:live_square")
             live_enabled = bool(
@@ -829,6 +836,31 @@ def create_app(
     ) -> ExecutionUnitView:
         del user
         return services.queries.execution_unit(unit_id)
+
+    @app.get("/api/update-services", response_model=CreatorUpdateServicePage)
+    def update_services(
+        user: Annotated[AuthenticatedUser, Depends(current_user)],
+    ) -> CreatorUpdateServicePage:
+        del user
+        admin = services.update_services
+        if admin is None:
+            raise CollectorError("STORAGE_UNAVAILABLE", "UPDATE_SERVICES_NOT_CONFIGURED")
+        return admin.list_services()
+
+    @app.put(
+        "/api/update-services/{platform}/{creator_scene}",
+        response_model=CreatorUpdateServiceView,
+    )
+    def set_update_service(
+        platform: Literal["douyin_xingtu", "kuaishou_juxing"],
+        creator_scene: CreatorScene,
+        body: CreatorUpdateServicePatch,
+        user: Annotated[AuthenticatedUser, Depends(current_user_with_csrf)],
+    ) -> CreatorUpdateServiceView:
+        admin = services.update_services
+        if admin is None:
+            raise CollectorError("STORAGE_UNAVAILABLE", "UPDATE_SERVICES_NOT_CONFIGURED")
+        return admin.set_enabled(platform, creator_scene, body.enabled, user_id=user.user_id)
 
     @app.get("/api/verification-events", response_model=list[VerificationEventView])
     def verification_events(
