@@ -1,5 +1,13 @@
 # 开发任务索引
 
+> **2026-11-06 发布记录**：LIVE-02G/02H/02I、LIVE-03/70/wechat、UPD-06 批次已完成审核并发布到
+> GitHub `main`（来源分支 `1104-llb`，代码最终 commit `2206b94`，合并 commit `2c03c7d`）。
+> 审核期间修复：星图直播旧快照详情回退、测试中的真实达人微信值移除、时间戳越界与可选模块
+> schema 隔离、评价摘要不再因列表失败丢弃已采分数。Windows 部署步骤与遗留风险见
+> [DEPLOY-WIN-02 发布交接](../handovers/DEPLOY-WIN-02-release-2026-11-06.md)。
+> 自动化结果：unit 456、contract 43、integration 149/1 skip、frontend 132、tsc/build 通过；
+> `make test-e2e` 6/14（其余因本机缺少 Temporal dev server 二进制）。
+
 # 2026-11-06 LIVE-02I：星图直播观众/粉丝画像互斥修复（已完成，PASS）
 
 [LIVE-02I](LIVE-02I.md) 定位并修复星图直播「粉丝画像 + 直播间观众画像」同时选择导致任务 `39c37496…` 失败：平台实际为二选一，第二画像覆盖第一画像，请求缺少 `fans_age_rate_most`。修复：契约双向 `incompatible_with` + policy pair、P1 拒绝并给出字段级错误、前端按 `incompatible_with` 自动清除并提示；不升能力版本、无迁移、未改聚星/短视频。真实任务 `fdb68678…` 被 P1 `FAILED_VALIDATION` 拒绝（0 浏览器）；单画像 `43d0405e…`/`9fa50b63…`、认证+画像 `29001a9b…`、画像+表现 `afe3da51…`、聚星双画像 `948b046c…` 均 COMPLETED 1/1；历史 `39c37496…` 保持 FAILED。自动化：全量 unit 452、contract 43、integration 149/1 skip、E2E 14、frontend 128、mypy 46、Ruff 均通过。证据：[验收](../evidence/LIVE-02I-live-filter-compatibility.md)。
