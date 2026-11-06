@@ -36,7 +36,21 @@ def test_live_contracts_are_enabled_with_filters(name, platform):
     live = registry(name)
     live.require_enabled(live=True)
     assert live.sample_kind == "live"
-    assert [item.key for item in live.modules] == ["basic", "live"]
+    expected_modules = (
+        ["basic", "live", "live_pricing", "live_analysis", "live_audience", "live_overview"]
+        if platform == "douyin_xingtu"
+        else [
+            "basic",
+            "live",
+            "fans_trend",
+            "index",
+            "works",
+            "audience",
+            "commerce",
+            "cooperation",
+        ]
+    )
+    assert [item.key for item in live.modules] == expected_modules
     fields = [field.field for field in live.capabilities.fields]
     assert fields[0] == "keyword"
     assert len(fields) > 1
@@ -66,6 +80,21 @@ def test_live_contracts_are_enabled_with_filters(name, platform):
             "live_max_online",
             "live_expected_cpm",
         ]
+    policy = live.capabilities.combination_policy
+    assert policy is not None
+    if platform == "douyin_xingtu":
+        assert policy.incompatible == [["live_viewer_profile", "live_fan_profile"]]
+        incompatible = {
+            field.field: field.incompatible_with
+            for field in live.capabilities.fields
+            if field.field in {"live_viewer_profile", "live_fan_profile"}
+        }
+        assert incompatible == {
+            "live_viewer_profile": ["live_fan_profile"],
+            "live_fan_profile": ["live_viewer_profile"],
+        }
+    else:
+        assert policy.incompatible == []
     candidate = plan(platform, CreatorScene.LIVE_SQUARE)
     candidate.capability_version = live.capabilities.version
     live.capabilities.validate_plan(candidate, live=True)

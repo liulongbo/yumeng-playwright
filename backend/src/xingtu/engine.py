@@ -485,10 +485,14 @@ class Engine:
                             self.ctx.contract_version, f"profile_module:{key}"
                         )
                     except CollectorError as exc:
+                        # An optional module whose payload does not match the registered schema must
+                        # fail that module, not the whole creator/task.  Adapters may append their
+                        # own diagnostic suffix after the recognised reason.
                         optional_schema_failure = (
                             key != self.adapter.module_keys[0]
                             and exc.code == "PLATFORM_PAGE_CHANGED"
-                            and exc.reason == "RESPONSE_SCHEMA_MISMATCH"
+                            and isinstance(exc.reason, str)
+                            and exc.reason.startswith("RESPONSE_SCHEMA_MISMATCH")
                         )
                         if exc.code != "MODULE_COLLECTION_FAILED" and not optional_schema_failure:
                             raise

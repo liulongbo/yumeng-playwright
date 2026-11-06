@@ -538,3 +538,24 @@ async def test_basic_module_adds_gender_profile_forms_and_settlement():
     assert offer["price_yuan"] == 1000
     assert offer["original_price_yuan"] == 2000
     assert offer["price_start_ms"] is None
+
+
+async def test_plan_less_update_establishes_the_bound_video_square_page():
+    """UPD-06: a scheduled Juxing video update has no search/prepare step.
+
+    The detail page alone cannot prove the child account, so the adapter must create the same
+    registered video-square page a manual update uses before checking the session.
+    """
+
+    subject = adapter()
+    browser = Mock()
+    browser_page = Mock(url="https://k.kuaishou.com/?__accountId__=60821564#/star_plaza/video")
+    browser.new_page = AsyncMock(return_value=browser_page)
+    subject.browser = browser
+    subject.search_page = None
+    subject.navigate = AsyncMock()
+    assert await subject._ensure_search_page() is browser_page
+    assert subject.search_page is browser_page
+    subject.navigate.assert_awaited_once()
+    bound_url = subject.navigate.await_args.args[1]
+    assert "__accountId__=60821564" in bound_url.split("#", 1)[0]

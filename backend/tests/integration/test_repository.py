@@ -267,7 +267,8 @@ def test_network_mode_is_persisted_and_immutable(repo):
     # creator video/metric fields, 016 their backfilled provenance and 017 the correction that
     # drops provenance entries describing a NULL column (DATA-02), 018 the creator update task
     # kinds and scheduling state (UPD), 019 the independent Collection Worker liveness
-    # generation/heartbeat records, and 020 the additive task-platform/unit-platform binding:
+    # generation/heartbeat records, 020 the additive task-platform/unit-platform binding,
+    # 021 the live-square creator scene, and 022 the per-scene update plans/service switches:
     # the set is asserted exhaustively so a migration that silently stops being applied is caught.
     assert [row["version"] for row in versions] == [
         1,
@@ -291,6 +292,7 @@ def test_network_mode_is_persisted_and_immutable(repo):
         19,
         20,
         21,
+        22,
     ]
     with repo.connect() as conn:
         binding = conn.execute(

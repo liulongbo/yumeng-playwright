@@ -251,13 +251,15 @@ def validate_xingtu_live_request(payload: Any, expectation: LiveRequestExpectati
             matches = [entry for entry in relevant if entry.field_name in profile.allowed_fields]
             if not matches:
                 raise CollectorError(
-                    "PLATFORM_CONDITION_MISMATCH", f"LIVE_PROFILE_MISSING:{profile.dimension}"
+                    "PLATFORM_CONDITION_MISMATCH",
+                    f"LIVE_PROFILE_MISSING:{profile.field}:{profile.dimension}",
                 )
             if profile.exact_value is not None and not any(
                 entry.field_value == profile.exact_value for entry in matches
             ):
                 raise CollectorError(
-                    "PLATFORM_CONDITION_MISMATCH", f"LIVE_PROFILE_VALUE:{profile.dimension}"
+                    "PLATFORM_CONDITION_MISMATCH",
+                    f"LIVE_PROFILE_VALUE:{profile.field}:{profile.dimension}",
                 )
     elif any(entry.field_name in profile_fields for entry in actual):
         raise CollectorError("PLATFORM_CONDITION_MISMATCH", "LIVE_UNEXPECTED_PROFILE")

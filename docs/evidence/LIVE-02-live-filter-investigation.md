@@ -1,7 +1,7 @@
 # LIVE-02F 直播广场筛选真实调查
 
-状态：进行中（2026-11-05）  
-环境：本机开发栈，Playwright MCP + 系统 Chrome，隔离 storage_state；星图账号 `ID: 1807978499337419`，聚星子账号 `60821564`。  
+状态：进行中（2026-11-05）
+环境：本机开发栈，Playwright MCP + 系统 Chrome，隔离 storage_state；星图账号 `ID: 1807978499337419`，聚星子账号 `60821564`。
 原始证据：`.runtime/live02filters/`（gitignored，私有原件）；本文只保留脱敏摘要与真实请求字段。
 
 ## 1. 巨量星图 `/ad/creator/market/live`
@@ -88,6 +88,8 @@
 - 粉丝性别 `fansGender`：`{"queryName":"FEMALE","from":"0.00","to":"1.00"}`
 - 粉丝设备 `fansMobile`：`{"queryName":"IOS","from":"0.00","to":"1.00"}`
 - 粉丝九大人群 `fansNineMajorGroupsList`：数组对象（同 `queryName/from/to`）
+
+**互斥补充（2026-11-06）**：星图直播「粉丝画像」与「直播间观众画像」为同一组件的二选一控件。真实 UI 先选粉丝年龄 24-30、再选观众年龄 24-30+女性>50% 后，粉丝 chip 消失，请求仅含 `watcher_age_rate_most` 与 `live_watcher_gender_female_rate__ge`，不含 `fans_age_rate_most`。已由 LIVE-02I 在契约登记互斥并在前端自动清除；聚星两画像为独立控件，真实 UI/请求可同时存在。
 
 **限制**：粉丝地域/观众地域在真实页面上是「按省市 / 按城市等级 + 占比」的两级面板，不是简单下拉；本轮没有完成其请求体映射与可用性验证，因此契约**不登记** `area` 维度，前端不展示，避免把未验证能力呈现为可用。该限制在最终报告中标记「未完成/平台支持但本轮未实现」。
 

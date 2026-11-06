@@ -138,6 +138,41 @@ def test_xingtu_performance_metrics_use_distinct_fields():
     }
 
 
+def test_xingtu_live_profiles_are_mutually_exclusive():
+    form = xingtu_form(
+        live_filters=[
+            {
+                "field": "live_fan_profile",
+                "profile": [{"key": "age", "values": ["age_24_30"]}],
+            },
+            {
+                "field": "live_viewer_profile",
+                "profile": [
+                    {"key": "age", "values": ["age_24_30"]},
+                    {"key": "gender", "values": ["female_50"]},
+                ],
+            },
+        ]
+    )
+    with pytest.raises(CollectorError, match="incompatible filters"):
+        build_expected_plan(form, XINGTU.capabilities)
+    for field, profile in (
+        ("live_fan_profile", [{"key": "age", "values": ["age_24_30"]}]),
+        (
+            "live_viewer_profile",
+            [
+                {"key": "age", "values": ["age_24_30"]},
+                {"key": "gender", "values": ["female_50"]},
+            ],
+        ),
+    ):
+        plan = build_expected_plan(
+            xingtu_form(live_filters=[{"field": field, "profile": profile}]),
+            XINGTU.capabilities,
+        )
+        assert [item.field for item in plan.filters] == [field]
+
+
 def test_xingtu_profile_request_validation_accepts_exact_profile_fields():
     form = xingtu_form(
         live_filters=[
@@ -159,9 +194,9 @@ def test_xingtu_profile_request_validation_accepts_exact_profile_fields():
         ]
     }
     validate_xingtu_live_request(payload, expectation)
-    with pytest.raises(CollectorError, match="LIVE_PROFILE_MISSING"):
+    with pytest.raises(CollectorError, match="LIVE_PROFILE_MISSING:live_viewer_profile:age"):
         validate_xingtu_live_request({"attribute_filter": []}, expectation)
-    with pytest.raises(CollectorError, match="LIVE_PROFILE_VALUE"):
+    with pytest.raises(CollectorError, match="LIVE_PROFILE_VALUE:live_viewer_profile:gender"):
         validate_xingtu_live_request(
             {
                 "attribute_filter": [
@@ -257,6 +292,25 @@ def test_juxing_profile_body_uses_real_field_names_and_shapes():
         "fansMobile": {"queryName": "IOS", "from": "0.00", "to": "1.00"},
         "fansNineMajorGroupsList": [{"queryName": "精致妈妈", "from": "0.00", "to": "1.00"}],
     }
+
+
+def test_juxing_fan_and_viewer_profiles_compose():
+    form = juxing_form(
+        live_filters=[
+            {
+                "field": "live_fan_profile",
+                "profile": [{"key": "gender", "values": ["FEMALE"]}],
+            },
+            {
+                "field": "live_viewer_profile",
+                "profile": [{"key": "gender", "values": ["男"]}],
+            },
+        ]
+    )
+    plan = build_expected_plan(form, JUXING.capabilities)
+    body = juxing_live_filter_body(plan, JUXING.capabilities)
+    assert body["fansGender"] == {"queryName": "FEMALE", "from": "0.00", "to": "1.00"}
+    assert body["viewerGender"] == {"queryName": "男", "from": "0.00", "to": "1.00"}
 
 
 def test_cross_platform_filter_fields_are_rejected():

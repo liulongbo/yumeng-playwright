@@ -1,1030 +1,1790 @@
 {
- "schema_version": "platform_registry.v1",
- "contract_version": "juxing-live-square-v2",
- "adapter_version": "juxing-live-browser-v2",
- "status": "VERIFIED",
- "sample_kind": "live",
- "verified_at": "2026-11-04T21:30:00+08:00",
- "account_permission_type": "已登录且具备直播广场访问权限的平台账号（阶段一真实页面验证）",
- "evidence_refs": [
-  "docs/evidence/LIVE-02-live-square-investigation.md",
-  "docs/tasks/LIVE-02.md"
- ],
- "capabilities": {
-  "version": "juxing-live-square-capability-v2",
+  "schema_version": "platform_registry.v1",
+  "contract_version": "juxing-live-square-v3",
+  "adapter_version": "juxing-live-browser-v3",
   "status": "VERIFIED",
   "sample_kind": "live",
+  "verified_at": "2026-11-05T21:30:00+08:00",
+  "account_permission_type": "已登录且具备直播广场访问权限的平台账号（阶段一真实页面验证）",
   "evidence_refs": [
-   "docs/evidence/LIVE-02-live-filter-investigation.md"
+    "docs/evidence/LIVE-02G-juxing-live-detail-investigation.md",
+    "docs/evidence/LIVE-02G-acceptance.md",
+    "docs/tasks/LIVE-02G.md"
   ],
-  "fields": [
-   {
-    "field": "keyword",
-    "label": "内容关键词",
-    "operators": [
-     "eq"
+  "capabilities": {
+    "version": "juxing-live-square-capability-v2",
+    "status": "VERIFIED",
+    "sample_kind": "live",
+    "evidence_refs": [
+      "docs/evidence/LIVE-02-live-filter-investigation.md"
     ],
-    "keyword_mode": "content",
-    "control": "text"
-   },
-   {
-    "field": "live_content_category",
-    "label": "内容分类",
-    "group": "内容分类",
-    "operators": [
-     "in"
-    ],
-    "control": "multi-select",
-    "enum": [
-     "beauty",
-     "food",
-     "fashion"
-    ],
-    "options": [
-     {
-      "value": "beauty",
-      "label": "美妆"
-     },
-     {
-      "value": "food",
-      "label": "美食"
-     },
-     {
-      "value": "fashion",
-      "label": "时尚"
-     }
-    ],
-    "request_mapping": {
-     "mode": "content_tags",
-     "field": "contentTagIdList",
-     "tags": {
-      "beauty": {
-       "id": "670",
-       "subIds": [
-        "707",
-        "708",
-        "709",
-        "710",
-        "711",
-        "712"
-       ],
-       "selectFirstLevelId": true
+    "fields": [
+      {
+        "field": "keyword",
+        "label": "内容关键词",
+        "operators": [
+          "eq"
+        ],
+        "keyword_mode": "content",
+        "control": "text"
       },
-      "food": {
-       "id": "673",
-       "subIds": [
-        "718",
-        "719",
-        "720",
-        "721",
-        "722",
-        "723",
-        "724"
-       ],
-       "selectFirstLevelId": true
+      {
+        "field": "live_content_category",
+        "label": "内容分类",
+        "group": "内容分类",
+        "operators": [
+          "in"
+        ],
+        "control": "multi-select",
+        "enum": [
+          "beauty",
+          "food",
+          "fashion"
+        ],
+        "options": [
+          {
+            "value": "beauty",
+            "label": "美妆"
+          },
+          {
+            "value": "food",
+            "label": "美食"
+          },
+          {
+            "value": "fashion",
+            "label": "时尚"
+          }
+        ],
+        "request_mapping": {
+          "mode": "content_tags",
+          "field": "contentTagIdList",
+          "tags": {
+            "beauty": {
+              "id": "670",
+              "subIds": [
+                "707",
+                "708",
+                "709",
+                "710",
+                "711",
+                "712"
+              ],
+              "selectFirstLevelId": true
+            },
+            "food": {
+              "id": "673",
+              "subIds": [
+                "718",
+                "719",
+                "720",
+                "721",
+                "722",
+                "723",
+                "724"
+              ],
+              "selectFirstLevelId": true
+            },
+            "fashion": {
+              "id": "675",
+              "subIds": [
+                "735",
+                "736",
+                "737",
+                "738",
+                "739"
+              ],
+              "selectFirstLevelId": true
+            }
+          }
+        },
+        "automation": {
+          "mode": "category_tag"
+        }
       },
-      "fashion": {
-       "id": "675",
-       "subIds": [
-        "735",
-        "736",
-        "737",
-        "738",
-        "739"
-       ],
-       "selectFirstLevelId": true
+      {
+        "field": "live_fan_profile",
+        "label": "粉丝画像",
+        "group": "受众人群",
+        "operators": [
+          "compound"
+        ],
+        "control": "profile-group",
+        "dimensions": [
+          {
+            "key": "age",
+            "label": "粉丝年龄",
+            "control": "multi-select",
+            "options": [
+              {
+                "value": "18-23",
+                "label": "18-23岁居多"
+              },
+              {
+                "value": "24-30",
+                "label": "24-30岁居多"
+              },
+              {
+                "value": "31-40",
+                "label": "31-40岁居多"
+              },
+              {
+                "value": "41-49",
+                "label": "41-49岁居多"
+              },
+              {
+                "value": "50+",
+                "label": "50岁以上居多"
+              }
+            ]
+          },
+          {
+            "key": "gender",
+            "label": "粉丝性别",
+            "control": "single-select",
+            "options": [
+              {
+                "value": "MALE",
+                "label": "男性"
+              },
+              {
+                "value": "FEMALE",
+                "label": "女性"
+              }
+            ]
+          },
+          {
+            "key": "mobile",
+            "label": "粉丝设备",
+            "control": "single-select",
+            "options": [
+              {
+                "value": "IOS",
+                "label": "苹果"
+              },
+              {
+                "value": "ANDROID",
+                "label": "安卓"
+              }
+            ]
+          },
+          {
+            "key": "crowd",
+            "label": "粉丝九大人群",
+            "control": "multi-select",
+            "options": [
+              {
+                "value": "小镇青年",
+                "label": "小镇青年"
+              },
+              {
+                "value": "小镇中年",
+                "label": "小镇中年"
+              },
+              {
+                "value": "小镇老年",
+                "label": "小镇老年"
+              },
+              {
+                "value": "Z时代",
+                "label": "Z时代"
+              },
+              {
+                "value": "都市蓝领",
+                "label": "都市蓝领"
+              },
+              {
+                "value": "精致妈妈",
+                "label": "精致妈妈"
+              },
+              {
+                "value": "新锐白领",
+                "label": "新锐白领"
+              },
+              {
+                "value": "资深中产",
+                "label": "资深中产"
+              },
+              {
+                "value": "都市银发",
+                "label": "都市银发"
+              }
+            ]
+          }
+        ],
+        "request_mapping": {
+          "mode": "profile",
+          "age_field": "fansAgeList",
+          "gender_field": "fansGender",
+          "mobile_field": "fansMobile",
+          "crowd_field": "fansNineMajorGroupsList",
+          "seed_from": "0.50",
+          "seed_to": "1.00"
+        },
+        "automation": {
+          "mode": "profile_popover",
+          "opener_text": "粉丝画像",
+          "confirm_text": "确 认"
+        }
+      },
+      {
+        "field": "live_viewer_profile",
+        "label": "观众画像",
+        "group": "受众人群",
+        "operators": [
+          "compound"
+        ],
+        "control": "profile-group",
+        "dimensions": [
+          {
+            "key": "age",
+            "label": "观众年龄",
+            "control": "multi-select",
+            "options": [
+              {
+                "value": "18-23",
+                "label": "18-23岁居多"
+              },
+              {
+                "value": "24-30",
+                "label": "24-30岁居多"
+              },
+              {
+                "value": "31-40",
+                "label": "31-40岁居多"
+              },
+              {
+                "value": "41-49",
+                "label": "41-49岁居多"
+              },
+              {
+                "value": "50+",
+                "label": "50岁以上居多"
+              }
+            ]
+          },
+          {
+            "key": "gender",
+            "label": "观众性别",
+            "control": "single-select",
+            "options": [
+              {
+                "value": "男",
+                "label": "男性"
+              },
+              {
+                "value": "女",
+                "label": "女性"
+              }
+            ]
+          },
+          {
+            "key": "mobile",
+            "label": "观众设备",
+            "control": "single-select",
+            "options": [
+              {
+                "value": "IOS",
+                "label": "苹果"
+              },
+              {
+                "value": "ANDROID",
+                "label": "安卓"
+              }
+            ]
+          },
+          {
+            "key": "crowd",
+            "label": "观众九大人群",
+            "control": "multi-select",
+            "options": [
+              {
+                "value": "小镇青年",
+                "label": "小镇青年"
+              },
+              {
+                "value": "小镇中年",
+                "label": "小镇中年"
+              },
+              {
+                "value": "小镇老年",
+                "label": "小镇老年"
+              },
+              {
+                "value": "Z时代",
+                "label": "Z时代"
+              },
+              {
+                "value": "都市蓝领",
+                "label": "都市蓝领"
+              },
+              {
+                "value": "精致妈妈",
+                "label": "精致妈妈"
+              },
+              {
+                "value": "新锐白领",
+                "label": "新锐白领"
+              },
+              {
+                "value": "资深中产",
+                "label": "资深中产"
+              },
+              {
+                "value": "都市银发",
+                "label": "都市银发"
+              }
+            ]
+          }
+        ],
+        "request_mapping": {
+          "mode": "profile",
+          "age_field": "viewerAgeList",
+          "gender_field": "viewerGender",
+          "mobile_field": "viewerMobileType",
+          "crowd_field": "viewNineMajorGroupsList",
+          "seed_from": "0.50",
+          "seed_to": "1.00"
+        },
+        "automation": {
+          "mode": "profile_popover",
+          "opener_text": "观众画像",
+          "confirm_text": "确 认"
+        }
+      },
+      {
+        "field": "live_expected_viewers",
+        "label": "预期观看人数",
+        "group": "内容表现",
+        "operators": [
+          "range"
+        ],
+        "control": "range",
+        "unit": "ten_thousand_count",
+        "range_constraints": {
+          "min": 0,
+          "max": 100000,
+          "unit": "ten_thousand_count"
+        },
+        "options": [
+          {
+            "value": "liveExpectViewer_top",
+            "label": "1000万以上",
+            "range": {
+              "min": 1000,
+              "max": null
+            }
+          },
+          {
+            "value": "liveExpectViewer_500_1000",
+            "label": "500万-1000万",
+            "range": {
+              "min": 500,
+              "max": 1000
+            }
+          },
+          {
+            "value": "liveExpectViewer_300_500",
+            "label": "300万-500万",
+            "range": {
+              "min": 300,
+              "max": 500
+            }
+          },
+          {
+            "value": "liveExpectViewer_100_300",
+            "label": "100万-300万",
+            "range": {
+              "min": 100,
+              "max": 300
+            }
+          },
+          {
+            "value": "liveExpectViewer_10_100",
+            "label": "10万-100万",
+            "range": {
+              "min": 10,
+              "max": 100
+            }
+          },
+          {
+            "value": "liveExpectViewer_low",
+            "label": "10万以下",
+            "range": {
+              "min": null,
+              "max": 10
+            }
+          }
+        ],
+        "request_mapping": {
+          "mode": "range",
+          "field": "liveExpectViewer",
+          "nested": true,
+          "scale": 10000
+        }
+      },
+      {
+        "field": "live_max_online",
+        "label": "最高在线人数",
+        "group": "内容表现",
+        "operators": [
+          "range"
+        ],
+        "control": "range",
+        "unit": "ten_thousand_count",
+        "range_constraints": {
+          "min": 0,
+          "max": 100000,
+          "unit": "ten_thousand_count"
+        },
+        "options": [
+          {
+            "value": "liveMaxViewer_top",
+            "label": "1000万以上",
+            "range": {
+              "min": 1000,
+              "max": null
+            }
+          },
+          {
+            "value": "liveMaxViewer_500_1000",
+            "label": "500万-1000万",
+            "range": {
+              "min": 500,
+              "max": 1000
+            }
+          },
+          {
+            "value": "liveMaxViewer_300_500",
+            "label": "300万-500万",
+            "range": {
+              "min": 300,
+              "max": 500
+            }
+          },
+          {
+            "value": "liveMaxViewer_100_300",
+            "label": "100万-300万",
+            "range": {
+              "min": 100,
+              "max": 300
+            }
+          },
+          {
+            "value": "liveMaxViewer_10_100",
+            "label": "10万-100万",
+            "range": {
+              "min": 10,
+              "max": 100
+            }
+          },
+          {
+            "value": "liveMaxViewer_low",
+            "label": "10万以下",
+            "range": {
+              "min": null,
+              "max": 10
+            }
+          }
+        ],
+        "request_mapping": {
+          "mode": "range",
+          "min_field": "liveMaxViewerMinNum",
+          "max_field": "liveMaxViewerMaxNum",
+          "scale": 10000
+        }
+      },
+      {
+        "field": "live_expected_cpm",
+        "label": "预期CPM",
+        "group": "内容表现",
+        "operators": [
+          "range"
+        ],
+        "control": "range",
+        "unit": "yuan",
+        "range_constraints": {
+          "min": 0,
+          "max": 100000,
+          "unit": "yuan"
+        },
+        "options": [
+          {
+            "value": "expectCpm_top",
+            "label": "100以上",
+            "range": {
+              "min": 100,
+              "max": null
+            }
+          },
+          {
+            "value": "expectCpm_50_100",
+            "label": "50-100",
+            "range": {
+              "min": 50,
+              "max": 100
+            }
+          },
+          {
+            "value": "expectCpm_30_50",
+            "label": "30-50",
+            "range": {
+              "min": 30,
+              "max": 50
+            }
+          },
+          {
+            "value": "expectCpm_10_30",
+            "label": "10-30",
+            "range": {
+              "min": 10,
+              "max": 30
+            }
+          },
+          {
+            "value": "expectCpm_5_10",
+            "label": "5-10",
+            "range": {
+              "min": 5,
+              "max": 10
+            }
+          },
+          {
+            "value": "expectCpm_low",
+            "label": "5以下",
+            "range": {
+              "min": null,
+              "max": 5
+            }
+          }
+        ],
+        "request_mapping": {
+          "mode": "range",
+          "min_field": "expectCpmMinNum",
+          "max_field": "expectCpmMaxNum",
+          "scale": 1
+        }
       }
-     }
+    ],
+    "sorts": [
+      "platform_default"
+    ],
+    "combinations": [],
+    "combination_policy": {
+      "schema_version": "combination_policy.v2",
+      "mode": "composable",
+      "fields": [
+        "keyword",
+        "live_content_category",
+        "live_fan_profile",
+        "live_viewer_profile",
+        "live_expected_viewers",
+        "live_max_online",
+        "live_expected_cpm"
+      ],
+      "incompatible": []
     },
-    "automation": {
-     "mode": "category_tag"
-    }
-   },
-   {
-    "field": "live_fan_profile",
-    "label": "粉丝画像",
-    "group": "受众人群",
-    "operators": [
-     "compound"
-    ],
-    "control": "profile-group",
-    "dimensions": [
-     {
-      "key": "age",
-      "label": "粉丝年龄",
-      "control": "multi-select",
-      "options": [
-       {
-        "value": "18-23",
-        "label": "18-23岁居多"
-       },
-       {
-        "value": "24-30",
-        "label": "24-30岁居多"
-       },
-       {
-        "value": "31-40",
-        "label": "31-40岁居多"
-       },
-       {
-        "value": "41-49",
-        "label": "41-49岁居多"
-       },
-       {
-        "value": "50+",
-        "label": "50岁以上居多"
-       }
-      ]
-     },
-     {
-      "key": "gender",
-      "label": "粉丝性别",
-      "control": "single-select",
-      "options": [
-       {
-        "value": "MALE",
-        "label": "男性"
-       },
-       {
-        "value": "FEMALE",
-        "label": "女性"
-       }
-      ]
-     },
-     {
-      "key": "mobile",
-      "label": "粉丝设备",
-      "control": "single-select",
-      "options": [
-       {
-        "value": "IOS",
-        "label": "苹果"
-       },
-       {
-        "value": "ANDROID",
-        "label": "安卓"
-       }
-      ]
-     },
-     {
-      "key": "crowd",
-      "label": "粉丝九大人群",
-      "control": "multi-select",
-      "options": [
-       {
-        "value": "小镇青年",
-        "label": "小镇青年"
-       },
-       {
-        "value": "小镇中年",
-        "label": "小镇中年"
-       },
-       {
-        "value": "小镇老年",
-        "label": "小镇老年"
-       },
-       {
-        "value": "Z时代",
-        "label": "Z时代"
-       },
-       {
-        "value": "都市蓝领",
-        "label": "都市蓝领"
-       },
-       {
-        "value": "精致妈妈",
-        "label": "精致妈妈"
-       },
-       {
-        "value": "新锐白领",
-        "label": "新锐白领"
-       },
-       {
-        "value": "资深中产",
-        "label": "资深中产"
-       },
-       {
-        "value": "都市银发",
-        "label": "都市银发"
-       }
-      ]
-     }
-    ],
-    "request_mapping": {
-     "mode": "profile",
-     "age_field": "fansAgeList",
-     "gender_field": "fansGender",
-     "mobile_field": "fansMobile",
-     "crowd_field": "fansNineMajorGroupsList",
-     "seed_from": "0.50",
-     "seed_to": "1.00"
-    },
-    "automation": {
-     "mode": "profile_popover",
-     "opener_text": "粉丝画像",
-     "confirm_text": "确 认"
-    }
-   },
-   {
-    "field": "live_viewer_profile",
-    "label": "观众画像",
-    "group": "受众人群",
-    "operators": [
-     "compound"
-    ],
-    "control": "profile-group",
-    "dimensions": [
-     {
-      "key": "age",
-      "label": "观众年龄",
-      "control": "multi-select",
-      "options": [
-       {
-        "value": "18-23",
-        "label": "18-23岁居多"
-       },
-       {
-        "value": "24-30",
-        "label": "24-30岁居多"
-       },
-       {
-        "value": "31-40",
-        "label": "31-40岁居多"
-       },
-       {
-        "value": "41-49",
-        "label": "41-49岁居多"
-       },
-       {
-        "value": "50+",
-        "label": "50岁以上居多"
-       }
-      ]
-     },
-     {
-      "key": "gender",
-      "label": "观众性别",
-      "control": "single-select",
-      "options": [
-       {
-        "value": "男",
-        "label": "男性"
-       },
-       {
-        "value": "女",
-        "label": "女性"
-       }
-      ]
-     },
-     {
-      "key": "mobile",
-      "label": "观众设备",
-      "control": "single-select",
-      "options": [
-       {
-        "value": "IOS",
-        "label": "苹果"
-       },
-       {
-        "value": "ANDROID",
-        "label": "安卓"
-       }
-      ]
-     },
-     {
-      "key": "crowd",
-      "label": "观众九大人群",
-      "control": "multi-select",
-      "options": [
-       {
-        "value": "小镇青年",
-        "label": "小镇青年"
-       },
-       {
-        "value": "小镇中年",
-        "label": "小镇中年"
-       },
-       {
-        "value": "小镇老年",
-        "label": "小镇老年"
-       },
-       {
-        "value": "Z时代",
-        "label": "Z时代"
-       },
-       {
-        "value": "都市蓝领",
-        "label": "都市蓝领"
-       },
-       {
-        "value": "精致妈妈",
-        "label": "精致妈妈"
-       },
-       {
-        "value": "新锐白领",
-        "label": "新锐白领"
-       },
-       {
-        "value": "资深中产",
-        "label": "资深中产"
-       },
-       {
-        "value": "都市银发",
-        "label": "都市银发"
-       }
-      ]
-     }
-    ],
-    "request_mapping": {
-     "mode": "profile",
-     "age_field": "viewerAgeList",
-     "gender_field": "viewerGender",
-     "mobile_field": "viewerMobileType",
-     "crowd_field": "viewNineMajorGroupsList",
-     "seed_from": "0.50",
-     "seed_to": "1.00"
-    },
-    "automation": {
-     "mode": "profile_popover",
-     "opener_text": "观众画像",
-     "confirm_text": "确 认"
-    }
-   },
-   {
-    "field": "live_expected_viewers",
-    "label": "预期观看人数",
-    "group": "内容表现",
-    "operators": [
-     "range"
-    ],
-    "control": "range",
-    "unit": "ten_thousand_count",
-    "range_constraints": {
-     "min": 0,
-     "max": 100000,
-     "unit": "ten_thousand_count"
-    },
-    "options": [
-     {
-      "value": "liveExpectViewer_top",
-      "label": "1000万以上",
-      "range": {
-       "min": 1000,
-       "max": null
-      }
-     },
-     {
-      "value": "liveExpectViewer_500_1000",
-      "label": "500万-1000万",
-      "range": {
-       "min": 500,
-       "max": 1000
-      }
-     },
-     {
-      "value": "liveExpectViewer_300_500",
-      "label": "300万-500万",
-      "range": {
-       "min": 300,
-       "max": 500
-      }
-     },
-     {
-      "value": "liveExpectViewer_100_300",
-      "label": "100万-300万",
-      "range": {
-       "min": 100,
-       "max": 300
-      }
-     },
-     {
-      "value": "liveExpectViewer_10_100",
-      "label": "10万-100万",
-      "range": {
-       "min": 10,
-       "max": 100
-      }
-     },
-     {
-      "value": "liveExpectViewer_low",
-      "label": "10万以下",
-      "range": {
-       "min": null,
-       "max": 10
-      }
-     }
-    ],
-    "request_mapping": {
-     "mode": "range",
-     "field": "liveExpectViewer",
-     "nested": true,
-     "scale": 10000
-    }
-   },
-   {
-    "field": "live_max_online",
-    "label": "最高在线人数",
-    "group": "内容表现",
-    "operators": [
-     "range"
-    ],
-    "control": "range",
-    "unit": "ten_thousand_count",
-    "range_constraints": {
-     "min": 0,
-     "max": 100000,
-     "unit": "ten_thousand_count"
-    },
-    "options": [
-     {
-      "value": "liveMaxViewer_top",
-      "label": "1000万以上",
-      "range": {
-       "min": 1000,
-       "max": null
-      }
-     },
-     {
-      "value": "liveMaxViewer_500_1000",
-      "label": "500万-1000万",
-      "range": {
-       "min": 500,
-       "max": 1000
-      }
-     },
-     {
-      "value": "liveMaxViewer_300_500",
-      "label": "300万-500万",
-      "range": {
-       "min": 300,
-       "max": 500
-      }
-     },
-     {
-      "value": "liveMaxViewer_100_300",
-      "label": "100万-300万",
-      "range": {
-       "min": 100,
-       "max": 300
-      }
-     },
-     {
-      "value": "liveMaxViewer_10_100",
-      "label": "10万-100万",
-      "range": {
-       "min": 10,
-       "max": 100
-      }
-     },
-     {
-      "value": "liveMaxViewer_low",
-      "label": "10万以下",
-      "range": {
-       "min": null,
-       "max": 10
-      }
-     }
-    ],
-    "request_mapping": {
-     "mode": "range",
-     "min_field": "liveMaxViewerMinNum",
-     "max_field": "liveMaxViewerMaxNum",
-     "scale": 10000
-    }
-   },
-   {
-    "field": "live_expected_cpm",
-    "label": "预期CPM",
-    "group": "内容表现",
-    "operators": [
-     "range"
-    ],
-    "control": "range",
-    "unit": "yuan",
-    "range_constraints": {
-     "min": 0,
-     "max": 100000,
-     "unit": "yuan"
-    },
-    "options": [
-     {
-      "value": "expectCpm_top",
-      "label": "100以上",
-      "range": {
-       "min": 100,
-       "max": null
-      }
-     },
-     {
-      "value": "expectCpm_50_100",
-      "label": "50-100",
-      "range": {
-       "min": 50,
-       "max": 100
-      }
-     },
-     {
-      "value": "expectCpm_30_50",
-      "label": "30-50",
-      "range": {
-       "min": 30,
-       "max": 50
-      }
-     },
-     {
-      "value": "expectCpm_10_30",
-      "label": "10-30",
-      "range": {
-       "min": 10,
-       "max": 30
-      }
-     },
-     {
-      "value": "expectCpm_5_10",
-      "label": "5-10",
-      "range": {
-       "min": 5,
-       "max": 10
-      }
-     },
-     {
-      "value": "expectCpm_low",
-      "label": "5以下",
-      "range": {
-       "min": null,
-       "max": 5
-      }
-     }
-    ],
-    "request_mapping": {
-     "mode": "range",
-     "min_field": "expectCpmMinNum",
-     "max_field": "expectCpmMaxNum",
-     "scale": 1
-    }
-   }
+    "compatible_plan_versions": [
+      "filter_plan.v3"
+    ]
+  },
+  "allowed_hosts": [
+    "k.kuaishou.com"
   ],
-  "sorts": [
-   "platform_default"
+  "homepage_path_prefixes": [
+    "/"
   ],
-  "combinations": [],
-  "combination_policy": {
-   "schema_version": "combination_policy.v2",
-   "mode": "composable",
-   "fields": [
-    "keyword",
-    "live_content_category",
-    "live_fan_profile",
-    "live_viewer_profile",
-    "live_expected_viewers",
-    "live_max_online",
-    "live_expected_cpm"
-   ],
-   "incompatible": []
-  },
-  "compatible_plan_versions": [
-   "filter_plan.v3"
-  ]
- },
- "allowed_hosts": [
-  "k.kuaishou.com"
- ],
- "homepage_path_prefixes": [
-  "/"
- ],
- "action_interval_seconds": 0.5,
- "operation_timeout_seconds": 30,
- "response_body_max_bytes": 8000000,
- "session_boot_timeout_seconds": 120,
- "session": {
-  "entry_url": "https://k.kuaishou.com/#/star_plaza/live",
-  "account": {
-   "selector": "iframe[src*='aid=']",
-   "attribute": "src",
-   "capture_regex": "[?&]aid=(\\d+)"
-  },
-  "account_url_parameter": "__accountId__",
-  "protected_ready": {
-   "selector": "input[placeholder='请输入达人快手ID、快手昵称或MCN机构名称']"
-  },
-  "error_selectors": {
-   "ACCOUNT_SELECTION_REQUIRED": {
-    "selector": "div.account-component"
-   }
-  },
-  "identity": {
-   "selector": "div.id-and-location > div:first-child",
-   "capture_regex": "^ID\\s*[:：]?\\s*(\\d+)$"
-  },
-  "business_urls": [
-   "https://k.kuaishou.com/#/star_plaza/live"
-  ]
- },
- "search": {
-  "entry_url": "https://k.kuaishou.com/#/star_plaza/live",
-  "default_bindings": {},
-  "reset_actions": [],
-  "apply_actions": [],
-  "final_actions": [],
-  "ready": {
-   "selector": "input[placeholder='请输入达人快手ID、快手昵称或MCN机构名称']"
-  },
-  "ready_hidden": [],
-  "readback": {
-   "keyword": {
-    "selector": "input[placeholder='请输入达人快手ID、快手昵称或MCN机构名称']",
-    "property": "value"
-   }
-  },
-  "requests": [
-   {
-    "key": "search",
-    "method": "POST",
-    "host": "k.kuaishou.com",
-    "path": "/rest/web/star/list",
-    "request_match": {
-     "currentPage": "$cursor",
-     "userName": "$keyword"
+  "action_interval_seconds": 0.5,
+  "operation_timeout_seconds": 30,
+  "response_body_max_bytes": 8000000,
+  "session_boot_timeout_seconds": 120,
+  "session": {
+    "entry_url": "https://k.kuaishou.com/#/star_plaza/live",
+    "account": {
+      "selector": "iframe[src*='aid=']",
+      "attribute": "src",
+      "capture_regex": "[?&]aid=(\\d+)"
     },
-    "response_match": {},
-    "required": true
-   }
+    "account_url_parameter": "__accountId__",
+    "protected_ready": {
+      "selector": "input[placeholder='请输入达人快手ID、快手昵称或MCN机构名称']"
+    },
+    "error_selectors": {
+      "ACCOUNT_SELECTION_REQUIRED": {
+        "selector": "div.account-component"
+      }
+    },
+    "identity": {
+      "selector": "div.id-and-location > div:first-child",
+      "capture_regex": "^ID\\s*[:：]?\\s*(\\d+)$"
+    },
+    "business_urls": [
+      "https://k.kuaishou.com/#/star_plaza/live"
+    ]
+  },
+  "search": {
+    "entry_url": "https://k.kuaishou.com/#/star_plaza/live",
+    "default_bindings": {},
+    "reset_actions": [],
+    "apply_actions": [],
+    "final_actions": [],
+    "ready": {
+      "selector": "input[placeholder='请输入达人快手ID、快手昵称或MCN机构名称']"
+    },
+    "ready_hidden": [],
+    "readback": {
+      "keyword": {
+        "selector": "input[placeholder='请输入达人快手ID、快手昵称或MCN机构名称']",
+        "property": "value"
+      }
+    },
+    "requests": [
+      {
+        "key": "search",
+        "method": "POST",
+        "host": "k.kuaishou.com",
+        "path": "/rest/web/star/list",
+        "request_match": {
+          "currentPage": "$cursor",
+          "userName": "$keyword"
+        },
+        "response_match": {},
+        "required": true
+      }
+    ],
+    "result_request_key": "search",
+    "candidates_path": "starList",
+    "id_path": "userId",
+    "homepage_path": null,
+    "homepage_template": "https://k.kuaishou.com/#/live-promotion/star/{platform_creator_id}?openBy=user",
+    "next_path": "currentPage",
+    "exhausted_path": "total",
+    "exhausted_value": "0",
+    "pagination": "page",
+    "next_page_mode": "page_fetch",
+    "page_fetch_max_verified": 6,
+    "resume_supported": true,
+    "initial_cursor": "1",
+    "fixed_sort": true,
+    "single_page_only": false,
+    "binding_values": {},
+    "coverage_gaps": [
+      "直播筛选器未实现；仅关键词/ID + 目标数",
+      "homepage 由 adapter 使用列表 starId 构造，不使用模板 userId"
+    ]
+  },
+  "modules": [
+    {
+      "key": "basic",
+      "basic": true,
+      "entry": null,
+      "actions": [],
+      "ready": {
+        "selector": "body"
+      },
+      "ready_hidden": [],
+      "requests": [
+        {
+          "key": "star_profile",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/star/starProfile",
+          "request_match": {
+            "starId": "$star_id",
+            "starType": "4"
+          },
+          "response_match": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "platform_creator_id",
+          "name": "快手ID",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.userId"
+          }
+        },
+        {
+          "key": "platform_star_id",
+          "name": "starId",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.starId"
+          }
+        },
+        {
+          "key": "nickname",
+          "name": "昵称",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.name"
+          }
+        },
+        {
+          "key": "avatar_uri",
+          "name": "头像",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.headUrl"
+          }
+        },
+        {
+          "key": "gender",
+          "name": "性别",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.gender"
+          }
+        },
+        {
+          "key": "province",
+          "name": "省份",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.address"
+          }
+        },
+        {
+          "key": "city",
+          "name": "城市",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.address"
+          }
+        },
+        {
+          "key": "followers",
+          "name": "粉丝数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.fansNumber"
+          },
+          "unit": "count"
+        },
+        {
+          "key": "creator_type_label",
+          "name": "达人类型",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.starTagStr"
+          }
+        },
+        {
+          "key": "industry_labels",
+          "name": "所属行业",
+          "kind": "tags",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.industryTag"
+          }
+        },
+        {
+          "key": "mcn_name",
+          "name": "所属机构",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.govName"
+          }
+        },
+        {
+          "key": "content_type_labels",
+          "name": "内容分类及标签",
+          "kind": "tags",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.contentTypeTag"
+          }
+        },
+        {
+          "key": "content_form_labels",
+          "name": "内容形式标签",
+          "kind": "tags",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.contentFormTag"
+          }
+        },
+        {
+          "key": "verified_info",
+          "name": "认证信息",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.verifiedInfo"
+          }
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "内容分类/内容形式/行业标签/认证信息由已登记响应解析；旧快照无这些字段。",
+        "达人类型 starTagStr 在样本中为空，不能用内容分类冒充达人类型。"
+      ]
+    },
+    {
+      "key": "live",
+      "basic": false,
+      "entry": null,
+      "actions": [],
+      "ready": {
+        "selector": "body"
+      },
+      "ready_hidden": [],
+      "requests": [
+        {
+          "key": "star_profile",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/star/starProfile",
+          "request_match": {
+            "starId": "$star_id",
+            "starType": "4"
+          },
+          "response_match": {}
+        },
+        {
+          "key": "star_works",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/star/starWorksInfo",
+          "request_match": {
+            "starId": "$star_id",
+            "starType": "4"
+          },
+          "response_match": {}
+        },
+        {
+          "key": "commerce_live",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/commerce/live",
+          "request_match": {
+            "starId": "$star_id",
+            "duration": "$duration"
+          },
+          "response_match": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "platform_star_id",
+          "name": "starId",
+          "kind": "text",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.starId"
+          }
+        },
+        {
+          "key": "live.expect_viewer",
+          "name": "预期观看人数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.livePlayCntExpectancy"
+          },
+          "unit": "count"
+        },
+        {
+          "key": "live.max_online",
+          "name": "最高在线人数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.livePcuCnt"
+          },
+          "unit": "count"
+        },
+        {
+          "key": "live.expect_cpm",
+          "name": "预期CPM",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.liveCpmExpectancy"
+          },
+          "unit": "cpm"
+        },
+        {
+          "key": "live.weekly_sessions",
+          "name": "周均直播场次",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.liveWeeklyTimesCnt"
+          },
+          "unit": "count"
+        },
+        {
+          "key": "live.avg_people",
+          "name": "平均观看人数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.liveAvgPeopleNum"
+          },
+          "unit": "count"
+        },
+        {
+          "key": "live.avg_like",
+          "name": "场均点赞",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.liveAvgLikeCnt"
+          },
+          "unit": "count"
+        },
+        {
+          "key": "live.week_release",
+          "name": "直播周发布",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_works",
+            "path": "starWorksInfo.starWorkReport.liveWeekRelease"
+          },
+          "unit": "count"
+        },
+        {
+          "key": "live.interaction_rate",
+          "name": "直播互动率",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "star_works",
+            "path": "starWorksInfo.starWorkReport.liveInteractionRate"
+          },
+          "unit": "ratio"
+        },
+        {
+          "key": "live.quote_hour",
+          "name": "直播按小时报价",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.priceShowInfo[type=1]"
+          },
+          "unit": "yuan"
+        },
+        {
+          "key": "live.quote_day",
+          "name": "直播按天报价",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.priceShowInfo[type=2]"
+          },
+          "unit": "yuan"
+        },
+        {
+          "key": "live.quote_goods",
+          "name": "直播按商品报价",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.priceShowInfo[type=3]"
+          },
+          "unit": "yuan"
+        },
+        {
+          "key": "live.quote_details",
+          "name": "达人报价明细",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.priceShowInfo"
+          }
+        },
+        {
+          "key": "live.expect_max_online",
+          "name": "预期最高在线人数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.liveMaxExpectOnlineViewer"
+          },
+          "unit": "count"
+        },
+        {
+          "key": "live.credit_score",
+          "name": "近30天信用分",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.creditScore"
+          },
+          "period_label": "近30天",
+          "unit": "score"
+        },
+        {
+          "key": "live.cooperation_industries",
+          "name": "历史合作行业",
+          "kind": "tags",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.liveBusinessReport.advertiserFirstIndustries"
+          }
+        },
+        {
+          "key": "live.viewer_feature_tags",
+          "name": "观众特征摘要",
+          "kind": "tags",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.viewerFeatureTag"
+          }
+        },
+        {
+          "key": "live.viewer_device_tags",
+          "name": "观众设备摘要",
+          "kind": "tags",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.viewerDeviceTag"
+          }
+        },
+        {
+          "key": "live.viewer_area_tags",
+          "name": "观众地域摘要",
+          "kind": "tags",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.viewerAreaTag"
+          }
+        },
+        {
+          "key": "live.accept_order_rate_30d",
+          "name": "近30天接单率",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.liveBusinessReport.acceptOrderRateData.30"
+          },
+          "unit": "ratio",
+          "period_label": "近30天"
+        },
+        {
+          "key": "live.complete_order_rate_30d",
+          "name": "近30天完单率",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.liveBusinessReport.completeOrderRateData.30"
+          },
+          "unit": "ratio",
+          "period_label": "近30天"
+        },
+        {
+          "key": "live.completed_orders_30d",
+          "name": "近30天订单完成数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.liveBusinessReport.completeOrderCntData.30"
+          },
+          "unit": "count",
+          "period_label": "近30天"
+        },
+        {
+          "key": "live.accept_order_rate_90d",
+          "name": "近90天接单率",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.liveBusinessReport.acceptOrderRateData.90"
+          },
+          "unit": "ratio",
+          "period_label": "近90天"
+        },
+        {
+          "key": "live.complete_order_rate_90d",
+          "name": "近90天完单率",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.liveBusinessReport.completeOrderRateData.90"
+          },
+          "unit": "ratio",
+          "period_label": "近90天"
+        },
+        {
+          "key": "live.completed_orders_90d",
+          "name": "近90天订单完成数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.liveBusinessReport.completeOrderCntData.90"
+          },
+          "unit": "count",
+          "period_label": "近90天"
+        },
+        {
+          "key": "live.commerce_sessions",
+          "name": "带货直播场次",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_live",
+            "path": "commerce/live.data.liveCnt"
+          },
+          "unit": "count",
+          "period_label": "近7天"
+        },
+        {
+          "key": "live.commerce_watch_median",
+          "name": "观看人数中位数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_live",
+            "path": "commerce/live.data.liveWatchCntMedian"
+          },
+          "unit": "count",
+          "period_label": "近7天"
+        },
+        {
+          "key": "live.commerce_max_online_median",
+          "name": "最高在线人数中位数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_live",
+            "path": "commerce/live.data.liveMaxOnlineCntMedian"
+          },
+          "unit": "count",
+          "period_label": "近7天"
+        },
+        {
+          "key": "live.commerce_goods",
+          "name": "带货商品数量",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_live",
+            "path": "commerce/live.data.goodsCnt"
+          },
+          "unit": "count",
+          "period_label": "近7天"
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "近30天信用分为 null 时必须是 NO_DATA；不能用评价信用评分补。",
+        "最高在线人数 livePcuCnt 与预期最高在线 liveMaxExpectOnlineViewer 分开。",
+        "commerce 全 0 时平台页面显示 '-'；保留 raw 0 并记 NO_DATA。",
+        "合作 30/90 的 Data 为 null/0 时页面显示 '-'；保留原值并记 NO_DATA。",
+        "数据概览时间范围由观测日推导，接口不返回起止日期。"
+      ]
+    },
+    {
+      "key": "fans_trend",
+      "basic": false,
+      "entry": null,
+      "actions": [],
+      "ready": {
+        "selector": "body"
+      },
+      "ready_hidden": [],
+      "requests": [
+        {
+          "key": "star_profile",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/star/starProfile",
+          "request_match": {
+            "starId": "$star_id",
+            "starType": "4"
+          },
+          "response_match": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "live.follower_growth_30d",
+          "name": "近30天涨粉数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.fansIncreaseNum.30"
+          },
+          "unit": "count",
+          "period_label": "近30天"
+        },
+        {
+          "key": "live.follower_growth_rate_30d",
+          "name": "近30天涨粉率",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.fansIncreaseRateIn30"
+          },
+          "unit": "ratio",
+          "period_label": "近30天"
+        },
+        {
+          "key": "live.follower_trend_30d",
+          "name": "近30天粉丝趋势",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.trendData.30+trendDiffData.30"
+          },
+          "period_label": "近30天"
+        },
+        {
+          "key": "live.follower_growth_90d",
+          "name": "近90天涨粉数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.fansIncreaseNum.90"
+          },
+          "unit": "count",
+          "period_label": "近90天"
+        },
+        {
+          "key": "live.follower_growth_rate_90d",
+          "name": "近90天涨粉率",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.fansIncreaseRateIn90"
+          },
+          "unit": "ratio",
+          "period_label": "近90天"
+        },
+        {
+          "key": "live.follower_trend_90d",
+          "name": "近90天粉丝趋势",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.trendData.90+trendDiffData.90"
+          },
+          "period_label": "近90天"
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "近30/90天序列按平台原 label（YYYYMMDD）保存并转 ISO 日期。",
+        "平台涨粉率是 0-1 小数；0.0% 是有效值，不是缺失。"
+      ]
+    },
+    {
+      "key": "index",
+      "basic": false,
+      "entry": null,
+      "actions": [],
+      "ready": {
+        "selector": "body"
+      },
+      "ready_hidden": [],
+      "requests": [
+        {
+          "key": "star_profile",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/star/starProfile",
+          "request_match": {
+            "starId": "$star_id",
+            "starType": "4"
+          },
+          "response_match": {}
+        },
+        {
+          "key": "star_index_radar",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/starIndex/starRadarGraph",
+          "request_match": {
+            "userId": "$user_id",
+            "starType": "4"
+          },
+          "response_match": {}
+        },
+        {
+          "key": "star_index_trend",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/starIndex/starTrendGraph",
+          "request_match": {
+            "userId": "$user_id",
+            "starType": "4"
+          },
+          "response_match": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "live.index_score",
+          "name": "达人综合指数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_index_radar",
+            "path": "starRadarGraphVO.starIndexCurrent.starIndexCurr"
+          },
+          "unit": "score"
+        },
+        {
+          "key": "live.index_dimensions",
+          "name": "达人指数维度",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "star_index_radar",
+            "path": "starRadarGraphVO.starIndexCurrent+starIndexAvg"
+          }
+        },
+        {
+          "key": "live.index_industry_rank",
+          "name": "同行业达人排名",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_index_trend",
+            "path": "starTrendGraphVO.starIndexRank.bizStarRank"
+          },
+          "unit": "count"
+        },
+        {
+          "key": "live.index_industry_percent",
+          "name": "超越同行业达人比例",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "star_index_trend",
+            "path": "starTrendGraphVO.starIndexPercent.bizStarPercent"
+          },
+          "unit": "ratio"
+        },
+        {
+          "key": "live.index_fans_rank",
+          "name": "同粉丝段达人排名",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "star_index_trend",
+            "path": "starTrendGraphVO.starIndexRank.fansStarRank"
+          },
+          "unit": "count"
+        },
+        {
+          "key": "live.index_fans_percent",
+          "name": "同粉丝段排名比例",
+          "kind": "ratio",
+          "source": {
+            "kind": "response",
+            "request_key": "star_index_trend",
+            "path": "starTrendGraphVO.starIndexPercent.fansStarPercent"
+          },
+          "unit": "ratio"
+        },
+        {
+          "key": "live.index_trend",
+          "name": "同类型达人指数趋势",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "star_index_trend",
+            "path": "starTrendGraphVO.starIndexHistory"
+          }
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "雷达同粉段均值没有综合指数维度，不用 0 补。",
+        "趋势响应含 10 条序列，页面选择器只暴露 6 条；全部保存，selectable 标出 6 条。",
+        "样本趋势全部为 0.0；保留原值并标 all_zero，不伪造历史指数。",
+        "starIndex/info 在直播页为全 null，未作为本模块来源。"
+      ]
+    },
+    {
+      "key": "works",
+      "basic": false,
+      "entry": null,
+      "actions": [],
+      "ready": {
+        "selector": "body"
+      },
+      "ready_hidden": [],
+      "requests": [
+        {
+          "key": "star_works",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/star/starWorksInfo",
+          "request_match": {
+            "starId": "$star_id",
+            "starType": "4"
+          },
+          "response_match": {}
+        },
+        {
+          "key": "query_video_play_cnt",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/star/queryVideoPlayCnt",
+          "request_match": {
+            "starId": "$star_id",
+            "type": "4"
+          },
+          "response_match": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "live.personal_live_works",
+          "name": "个人作品",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "star_works",
+            "path": "starWorksInfo.personLiveWorks"
+          },
+          "period_label": "近30天"
+        },
+        {
+          "key": "live.commercial_live_works",
+          "name": "聚星作品",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "star_works",
+            "path": "starWorksInfo.adSocialLiveWorks"
+          }
+        },
+        {
+          "key": "live.recent_live_works",
+          "name": "最近15个直播",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "star_works",
+            "path": "starWorksInfo.recentLiveWorks"
+          },
+          "period_label": "最近15个直播"
+        },
+        {
+          "key": "live.live_frequency",
+          "name": "直播频次分布",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "query_video_play_cnt",
+            "path": "queryVideoPlayCnt.data.starWorkPlayMonthInfo|WeekInfo|HourInfo"
+          },
+          "period_label": "近三个月"
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "个人/聚星作品取 personLiveWorks/adSocialLiveWorks；personWorks/adSocialWorks 为空且为视频口径。",
+        "作品 url 是带 auth_key 的有时效播放地址，不是稳定公开作品页；coverUrl 不进入对象存储。",
+        "只看电商带货由前端按 hasSkuInfo 过滤；服务端保存全量作品。",
+        "直播频次分布来自 queryVideoPlayCnt type=4，按月/周/时保存；周 0=周日。"
+      ]
+    },
+    {
+      "key": "audience",
+      "basic": false,
+      "entry": null,
+      "actions": [],
+      "ready": {
+        "selector": "body"
+      },
+      "ready_hidden": [],
+      "requests": [
+        {
+          "key": "list_portrait",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/star/listPortrait",
+          "request_match": {
+            "starId": "$star_id",
+            "starType": "4"
+          },
+          "response_match": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "live.viewer_portrait",
+          "name": "观众画像",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "list_portrait",
+            "path": "listPortrait.data.viewerPortrait"
+          }
+        },
+        {
+          "key": "live.fan_portrait",
+          "name": "粉丝画像",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "list_portrait",
+            "path": "listPortrait.data.fansPortrait"
+          }
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "cityPercentage=城市等级、cityLevelPercentage=城市名；语义 key 已纠正并保留 raw_label。",
+        "mobilePercentage 样本为空；设备类型仅平台文字摘要（SUMMARY_ONLY），设备品牌/价格有完整分布。",
+        "九大人群/兴趣在部分账号为空时如实 NO_DATA，不补造。"
+      ]
+    },
+    {
+      "key": "commerce",
+      "basic": false,
+      "entry": null,
+      "actions": [],
+      "ready": {
+        "selector": "body"
+      },
+      "ready_hidden": [],
+      "requests": [
+        {
+          "key": "commerce_live",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/commerce/live",
+          "request_match": {
+            "starId": "$star_id",
+            "duration": "$duration"
+          },
+          "response_match": {}
+        },
+        {
+          "key": "star_profile",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/star/starProfile",
+          "request_match": {
+            "starId": "$star_id",
+            "starType": "4"
+          },
+          "response_match": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "live.commerce_7d",
+          "name": "近7日带货数据",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_live",
+            "path": "commerce/live.data[7]"
+          },
+          "period_label": "近7日"
+        },
+        {
+          "key": "live.commerce_30d",
+          "name": "近30日带货数据",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_live",
+            "path": "commerce/live.data[30]"
+          },
+          "period_label": "近30日"
+        },
+        {
+          "key": "live.commerce_90d",
+          "name": "近90日带货数据",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "commerce_live",
+            "path": "commerce/live.data[90]"
+          },
+          "period_label": "近90日"
+        },
+        {
+          "key": "live.hot_brands",
+          "name": "热销Top品牌",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.hotBrandInfo"
+          }
+        },
+        {
+          "key": "live.hot_categories",
+          "name": "优势类目",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "star_profile",
+            "path": "starProfile.hotChannelInfo"
+          }
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "commerce/live 请求 duration=7/30/90；7 日返回全 0 且页面显示 '-'，按 NO_DATA 保存并保留 raw 0。",
+        "goodsGraph 区间字符串与次数原样保存；带货分析由前端用 goodsGraph 绘制。",
+        "热销品牌/优势类目来自 starProfile.hotBrandInfo/hotChannelInfo，与周期无关。"
+      ]
+    },
+    {
+      "key": "cooperation",
+      "basic": false,
+      "entry": null,
+      "actions": [],
+      "ready": {
+        "selector": "body"
+      },
+      "ready_hidden": [],
+      "requests": [
+        {
+          "key": "star_profile",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/star/starProfile",
+          "request_match": {
+            "starId": "$star_id",
+            "starType": "4"
+          },
+          "response_match": {}
+        },
+        {
+          "key": "evaluation_score",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/evaluation/star/score",
+          "request_match": {
+            "starId": "$star_id",
+            "promotionType": "2"
+          },
+          "response_match": {}
+        },
+        {
+          "key": "evaluation_list",
+          "method": "POST",
+          "host": "k.kuaishou.com",
+          "path": "/rest/web/evaluation/star/list",
+          "request_match": {
+            "starId": "$star_id",
+            "promotionType": "2",
+            "page": "$page",
+            "size": "10"
+          },
+          "response_match": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "live.evaluation_summary",
+          "name": "客户评价汇总",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "evaluation_score",
+            "path": "evaluation/star/score.data"
+          }
+        },
+        {
+          "key": "live.evaluation_total",
+          "name": "客户评价总数",
+          "kind": "number",
+          "source": {
+            "kind": "response",
+            "request_key": "evaluation_list",
+            "path": "evaluation/star/list.data.total"
+          },
+          "unit": "count"
+        },
+        {
+          "key": "live.evaluation_reviews",
+          "name": "客户评价明细",
+          "kind": "structured",
+          "source": {
+            "kind": "response",
+            "request_key": "evaluation_list",
+            "path": "evaluation/star/list.data.data"
+          }
+        }
+      ],
+      "checkpoint_version": 1,
+      "coverage_gaps": [
+        "评价无平台 ID；使用 starId+promotionType+timestamp+评分+content+hiddenName+productName(非隐藏) 生成稳定 review_key。",
+        "evaluation/star/list 的 pageNum/pageSize 返回 0；分页按 total 与返回行数判断。",
+        "total=0 时页面显示暂无评价，即使 score 接口返回 5.0 也不能当有效评分。",
+        "hiddenName=true 时不保存原始 productName；评价内容联系方式脱敏。",
+        "合作 30/90 统计在 live 模块；评价汇总/明细在本模块。"
+      ]
+    }
   ],
-  "result_request_key": "search",
-  "candidates_path": "starList",
-  "id_path": "userId",
-  "homepage_path": null,
-  "homepage_template": "https://k.kuaishou.com/#/live-promotion/star/{platform_creator_id}?openBy=user",
-  "next_path": "currentPage",
-  "exhausted_path": "total",
-  "exhausted_value": "0",
-  "pagination": "page",
-  "next_page_mode": "page_fetch",
-  "page_fetch_max_verified": 6,
-  "resume_supported": true,
-  "initial_cursor": "1",
-  "fixed_sort": true,
-  "single_page_only": false,
-  "binding_values": {},
+  "featured": [],
+  "direct_api_enabled": false,
+  "raw_har_trace_enabled": false,
   "coverage_gaps": [
-   "直播筛选器未实现；仅关键词/ID + 目标数",
-   "homepage 由 adapter 使用列表 starId 构造，不使用模板 userId"
+    "直播筛选仅覆盖用户指定字段；聚星九大人群等平台配置随账号配置变化，未选择时不发送",
+    "page 7+ 与真实终点未验证",
+    "详情标签页通过已登记响应直取，不依赖 UI Tab 点击；新增字段均来自真实页面已加载接口",
+    "部分达人设备类型 mobilePercentage 为空，仅有 viewerDeviceTag 文字摘要",
+    "达人指数月度趋势样本返回全 0，平台未提供有效历史指数",
+    "雷达同粉丝段均值没有综合指数维度",
+    "作品播放地址为有时效签名 URL；作品封面不进入对象存储",
+    "客户评价无平台评价 ID；隐藏评价不保存原始 productName",
+    "commerce 7 日全 0 与合作 30/90 null/0 在平台页面显示为 '-'，系统按 NO_DATA 处理并保留 raw 0/null"
   ]
- },
- "modules": [
-  {
-   "key": "basic",
-   "basic": true,
-   "entry": null,
-   "actions": [],
-   "ready": {
-    "selector": "body"
-   },
-   "ready_hidden": [],
-   "requests": [],
-   "fields": [
-    {
-     "key": "platform_creator_id",
-     "name": "快手ID",
-     "kind": "text",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     }
-    },
-    {
-     "key": "platform_star_id",
-     "name": "starId",
-     "kind": "text",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     }
-    },
-    {
-     "key": "nickname",
-     "name": "昵称",
-     "kind": "text",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     }
-    },
-    {
-     "key": "avatar_uri",
-     "name": "头像",
-     "kind": "text",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     }
-    },
-    {
-     "key": "gender",
-     "name": "性别",
-     "kind": "text",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     }
-    },
-    {
-     "key": "province",
-     "name": "省份",
-     "kind": "text",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     }
-    },
-    {
-     "key": "city",
-     "name": "城市",
-     "kind": "text",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     }
-    },
-    {
-     "key": "followers",
-     "name": "粉丝数",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "count"
-    },
-    {
-     "key": "creator_type_label",
-     "name": "达人类型",
-     "kind": "text",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     }
-    },
-    {
-     "key": "industry_labels",
-     "name": "所属行业",
-     "kind": "text",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     }
-    },
-    {
-     "key": "mcn_name",
-     "name": "所属机构",
-     "kind": "text",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     }
-    }
-   ],
-   "checkpoint_version": 1,
-   "coverage_gaps": [
-    "live fields are parsed by the live adapter from registered platform responses; DOM sources are contract placeholders for completeness/labels"
-   ]
-  },
-  {
-   "key": "live",
-   "basic": false,
-   "entry": null,
-   "actions": [],
-   "ready": {
-    "selector": "body"
-   },
-   "ready_hidden": [],
-   "requests": [],
-   "fields": [
-    {
-     "key": "platform_star_id",
-     "name": "starId",
-     "kind": "text",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     }
-    },
-    {
-     "key": "live.expect_viewer",
-     "name": "预期观看人数",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "count"
-    },
-    {
-     "key": "live.max_online",
-     "name": "最高在线人数",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "count"
-    },
-    {
-     "key": "live.expect_cpm",
-     "name": "预期CPM",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "cpm"
-    },
-    {
-     "key": "live.weekly_sessions",
-     "name": "周均直播场次",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "count"
-    },
-    {
-     "key": "live.avg_people",
-     "name": "平均观看人数",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "count"
-    },
-    {
-     "key": "live.avg_like",
-     "name": "场均点赞",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "count"
-    },
-    {
-     "key": "live.week_release",
-     "name": "直播周发布",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "count"
-    },
-    {
-     "key": "live.interaction_rate",
-     "name": "直播互动率",
-     "kind": "ratio",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "ratio"
-    },
-    {
-     "key": "live.quote_hour",
-     "name": "直播按小时报价",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "yuan"
-    },
-    {
-     "key": "live.quote_day",
-     "name": "直播按天报价",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "yuan"
-    },
-    {
-     "key": "live.quote_goods",
-     "name": "直播按商品报价",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "yuan"
-    },
-    {
-     "key": "live.commerce_sessions",
-     "name": "带货直播场次",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "count"
-    },
-    {
-     "key": "live.commerce_watch_median",
-     "name": "观看人数中位数",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "count"
-    },
-    {
-     "key": "live.commerce_max_online_median",
-     "name": "最高在线人数中位数",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "count"
-    },
-    {
-     "key": "live.commerce_goods",
-     "name": "带货商品数量",
-     "kind": "number",
-     "source": {
-      "kind": "dom",
-      "locator": {
-       "selector": "body"
-      }
-     },
-     "unit": "count"
-    }
-   ],
-   "checkpoint_version": 1,
-   "coverage_gaps": [
-    "live fields are parsed by the live adapter from registered platform responses; DOM sources are contract placeholders for completeness/labels"
-   ]
-  }
- ],
- "featured": [],
- "direct_api_enabled": false,
- "raw_har_trace_enabled": false,
- "coverage_gaps": [
-  "直播筛选仅覆盖用户指定字段；聚星九大人群等平台配置随账号配置变化，未选择时不发送",
-  "page 7+ 与真实终点未验证"
- ]
 }

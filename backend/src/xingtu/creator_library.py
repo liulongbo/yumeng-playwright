@@ -717,7 +717,10 @@ class CreatorLiveLibraryWriter:
             "city": self._text(self._collected(snapshot, "city")),
             "creator_type_label": self._text(self._collected(snapshot, "creator_type_label")),
             "industry_labels": self._labels(self._collected(snapshot, "industry_labels")),
-            "content_theme_labels": self._labels(self._collected(snapshot, "content_type")),
+            "content_theme_labels": (
+                self._labels(self._collected(snapshot, "content_type_labels"))
+                or self._labels(self._collected(snapshot, "content_type"))
+            ),
             "mcn_name": self._text(self._collected(snapshot, "mcn_name")),
             "followers_count": self._amount(self._collected(snapshot, "followers")),
             "followers_raw": (self._collected(snapshot, "followers") or {}).get("raw_value"),

@@ -37,7 +37,7 @@
 
 ## 3. 状态与类型定义
 
-状态：`PASS` / `FAIL` / `BLOCKED` / `NOT_RUN` / `NOT_APPLICABLE`。  
+状态：`PASS` / `FAIL` / `BLOCKED` / `NOT_RUN` / `NOT_APPLICABLE`。
 类型：
 
 - **单元/组件**：纯逻辑/前端组件，离线。
@@ -233,7 +233,7 @@
 
 第三阶段已执行与 70 位任务、双平台小样本、自动化测试直接对应的用例；`PASS` 表示有真实任务/DB/自动化或 UI 证据。`BLOCKED` 表示受授权/时间/账号隔离限制未完成真实双场景或异常注入；`NOT_RUN` 表示本轮未执行。不得将 `BLOCKED`/`NOT_RUN` 计为通过。
 
-统计：PASS 67 / FAIL 0 / BLOCKED 6 / NOT_RUN 12。
+统计：PASS 80 / FAIL 0 / BLOCKED 6 / NOT_RUN 12（含 LIVE-02I Q01—Q13）。
 
 ---
 
@@ -271,3 +271,23 @@
 | TC-P26 | 70 兼容 | 既有 70 + 筛选多页 | 70 机制不变 | PASS（既有 70 证据；筛选多页到第 2 页） |
 | TC-P27 | 短视频回归 | 既有自动化 + 小样本 | 无变化 | PASS（单元/契约/集成/前端；真实小样本见验收） |
 | TC-P28 | 聚星地域 | 粉丝/观众地域 | 两级面板映射 | BLOCKED/OUT_OF_SCOPE：未登记，前端不展示 |
+
+---
+
+## 22. Q. LIVE-02I 星图画像互斥修复专项（2026-11-06）
+
+| ID | 场景 | 步骤/断言 | 结果 |
+|---|---|---|---|
+| TC-Q01 | 任务失败定位 | 查 `39c37496…` 计划/失败原因/证据 | PASS：双画像计划，`LIVE_PROFILE_MISSING:age` |
+| TC-Q02 | 平台单选复现 | 真实星图先选粉丝 24-30，再选观众 24-30/女>50% | PASS：只剩观众 chip；请求无 `fans_age_rate_most` |
+| TC-Q03 | 契约互斥 | 星图 policy pair + 双向 `incompatible_with` | PASS |
+| TC-Q04 | P1 拒绝 | 双画像任务 `fdb68678…` | PASS：FAILED_VALIDATION、INVALID_FORM、无浏览器 |
+| TC-Q05 | 前端正向清除 | 先粉丝后观众 | PASS：粉丝 checkbox 清除，摘要只剩观众 |
+| TC-Q06 | 前端反向清除 | 先观众后粉丝 | PASS：观众 checkbox 清除，摘要只剩粉丝 |
+| TC-Q07 | 星图仅粉丝 | `43d0405e…` target 1 | PASS：COMPLETED 1/1 |
+| TC-Q08 | 星图仅观众 | `9fa50b63…` target 1 | PASS：COMPLETED 1/1 |
+| TC-Q09 | 认证+单画像 | `29001a9b…` | PASS：COMPLETED 1/1 |
+| TC-Q10 | 单画像+表现 | `afe3da51…` | PASS：COMPLETED 1/1 |
+| TC-Q11 | 聚星双画像不误伤 | `948b046c…` | PASS：COMPLETED 1/1，详情同时显示两个画像 |
+| TC-Q12 | 历史失败任务 | 重查 `39c37496…` | PASS：保持 FAILED；未自动重试 |
+| TC-Q13 | 自动化 | 目标 unit/contract/integration/E2E/frontend/mypy/ruff | PASS；unit 452、contract 43、integration 149/1 skip、E2E 14、frontend 128 |

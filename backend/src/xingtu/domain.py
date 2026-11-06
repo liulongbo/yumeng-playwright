@@ -577,8 +577,14 @@ class Capabilities(Model):
         if plan.schema_version in {"filter_plan.v2", "filter_plan.v3"} and self.combination_policy:
             if not plan_fields <= set(self.combination_policy.fields):
                 raise CollectorError("UNSUPPORTED_FILTER", "unverified combination")
-            if any(set(pair) <= plan_fields for pair in self.combination_policy.incompatible):
-                raise CollectorError("INVALID_FORM", "incompatible filters")
+            incompatible = next(
+                (pair for pair in self.combination_policy.incompatible if set(pair) <= plan_fields),
+                None,
+            )
+            if incompatible is not None:
+                raise CollectorError(
+                    "INVALID_FORM", "incompatible filters: " + ", ".join(incompatible)
+                )
         elif sorted(plan_fields) not in [sorted(c) for c in self.combinations]:
             raise CollectorError("UNSUPPORTED_FILTER", "unverified combination")
         specs = {f.field: f for f in self.fields}
