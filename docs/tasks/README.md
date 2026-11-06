@@ -1,5 +1,29 @@
 # 开发任务索引
 
+# 2026-11-06 LIVE-02I：星图直播观众/粉丝画像互斥修复（已完成，PASS）
+
+[LIVE-02I](LIVE-02I.md) 定位并修复星图直播「粉丝画像 + 直播间观众画像」同时选择导致任务 `39c37496…` 失败：平台实际为二选一，第二画像覆盖第一画像，请求缺少 `fans_age_rate_most`。修复：契约双向 `incompatible_with` + policy pair、P1 拒绝并给出字段级错误、前端按 `incompatible_with` 自动清除并提示；不升能力版本、无迁移、未改聚星/短视频。真实任务 `fdb68678…` 被 P1 `FAILED_VALIDATION` 拒绝（0 浏览器）；单画像 `43d0405e…`/`9fa50b63…`、认证+画像 `29001a9b…`、画像+表现 `afe3da51…`、聚星双画像 `948b046c…` 均 COMPLETED 1/1；历史 `39c37496…` 保持 FAILED。自动化：全量 unit 452、contract 43、integration 149/1 skip、E2E 14、frontend 128、mypy 46、Ruff 均通过。证据：[验收](../evidence/LIVE-02I-live-filter-compatibility.md)。
+
+# 2026-11-06 LIVE-02H：磁力聚星直播广场单任务 70 位真实采集验收（已完成，PASS）
+
+[LIVE-02H](LIVE-02H.md) 通过 Playwright MCP + Chrome 从前端真实创建磁力聚星「直播广场 / 时尚 / target 70」任务 `0b37dedf…`，4 页 80 个唯一候选、0 重复，最终 **70/70 有效、70/70 资料完整、COMPLETED、0 FAILED 字段**；79 份快照/70 distinct creator，task_creators 70、current 70，选中达人 projection 0/70、Xingtu current 0、schedule 0/70。初次在 60/70 因 page 4 候选 browser action 超时失败，前端同一 root 继续补 10 位，再补采 9 位 index 达人，未重建任务/未重采已完成。期间发现平台 `errMsg=查询为空` + VO null 被误判 FAILED，已在 Juxing live adapter 做最小修复（9 位/63 字段→NO_DATA；真正 schema 异常仍 FAILED）。回归：unit 444、contract 43、targeted integration 44、frontend 123、build、mypy 44；71 仍 422；聚星短视频/星图直播页面正常。证据：[验收](../evidence/LIVE-02H-acceptance.md)、[测试用例](../evidence/LIVE-02H-test-cases.md)、[最终任务截图](../evidence/assets/LIVE-02H/live02h-final-task.png)。
+
+# 2026-11-06 LIVE-03-WECHAT：巨量星图直播达人微信字段（已完成，PASS）
+
+[LIVE-03-WECHAT](LIVE-03-wechat.md) 仅补充星图直播达人详情微信字段：真实页面「联系」hover →「查看微信」→ `.el-dialog[aria-label="达人微信"] .wechat`，不点复制/不点联系授权确认；快照 `basic.wechat`，详情 API/前端展示，任务列表移除。契约 v4；真实有微信达人 `759404…`（任务 `edc50b13…`，COLLECTED len11/hash `64862f5b`）与无微信达人 `7620…`（任务 `2e2ae8f0…`，NO_DATA）均 COMPLETED；无迁移，视频/聚星未改；unit+contract 495、integration 149/1、frontend 128。证据：[验收](../evidence/LIVE-03-wechat-acceptance.md)、[调查](../evidence/LIVE-03-wechat-investigation.md)。
+
+# 2026-11-06 LIVE-03-70：巨量星图直播「时尚」70 位单任务真实验收（已完成，PASS）
+
+[LIVE-03-70](LIVE-03-70.md) 用 Playwright MCP + Chrome 从前端创建「巨量星图直播广场 + 内容类型时尚 + 目标 70」任务 `149be43e-320f-48bb-a9a9-739d90e631e9`：4 页/80 候选/0 重复，最终 **COMPLETED 70/70 valid、70/70 profile complete**、70 latest 快照/70 current、0 FAILED；2 次恢复（预算 continue + PARTIAL retry backfill）。测试中发现并最小修复「中断达人缺失预期模块不可重试」的 retry policy 缺陷（共享组件，新增保护单测）；unit+contract 487、integration 135/1、product M3 21、frontend 123 + build。证据：[验收](../evidence/LIVE-03-70-acceptance.md)、[测试用例](../evidence/LIVE-03-70-test-cases.md)、[截图](../evidence/assets/LIVE-03-70/)。
+
+# 2026-11-05 LIVE-03：巨量星图直播达人详情字段补全（已完成，CONDITIONAL GO）
+
+[LIVE-03](LIVE-03.md) 在 LIVE-02/02F 之上补齐巨量星图直播达人详情：基本资料扩展（抖音号/内容标签/商单类型/介绍）、直播服务报价、分直播类型 × 30/90 天 × 统计口径的数据概览（含转化表现/区间/缺失原因）、直播月历/近15场/近90天场次列表、按类型粉丝画像。真实 Playwright MCP + Chrome 产品 UI 创建「巨量星图 + 直播广场 + 内容类型时尚 + 无关键词」任务 `803e59eb-2deb-460e-b1e7-ed70db5663a2`，target 2 → COMPLETED 2/2、20 候选、2 快照、96/4 场列表；手动更新 `b334d954-3fd0-4cd9-b245-7c2df538cdd1` 新快照且不写 schedule。新增 4 模块 + 4 basic 字段（快照存储，无迁移）；视频/聚星契约未改；71 拒绝、70 接受；后端 485 unit/contract + 135 integration、前端 123 + build。受限：观众画像（live_crowd_type=1）与 flow=0 替代口径在持久 profile UI 切换不稳定，记 NO_DATA/not_captured，未伪造。证据：[调查](../evidence/LIVE-03-live-detail-investigation.md)、[字段差异](../evidence/LIVE-03-field-diff.md)、[测试用例](../evidence/LIVE-03-test-cases.md)、[验收](../evidence/LIVE-03-acceptance.md)。
+
+# 2026-11-05 LIVE-02G：磁力聚星直播达人详情字段补全（已完成，CONDITIONAL GO）
+
+[LIVE-02G](LIVE-02G.md) 在 LIVE-02 直播采集之上，为磁力聚星直播达人详情补齐基础/报价/数据概览/达人指数/代表作品/粉丝趋势/受众画像/带货数据/合作数据/客户评价 10 个业务模块。真实任务 `397b46dc…`（9104，王者荣耀王小贱）与 `0e1e01c3…`（451066，桐桐就酱）均 COMPLETED，分别 62/49 个字段 COLLECTED、0 FAILED；手动更新 `56592cc0…` 生成新快照且不写定时更新。新增 8 模块契约、纯解析器、评价分页/去重/隐私、作品 19/57/15 条、画像完整分布、带货 7/30/90（7日 NO_DATA、30/90 有值）、合作 30/90、评价 18 条两页。自动化：unit 442、contract 43、integration 133/1 skip、frontend 119 + build、mypy 44；E2E 6/8 BLOCKED（Temporal ephemeral server 下载被网络阻止）；未重跑 70 全量。证据：[调查](../evidence/LIVE-02G-juxing-live-detail-investigation.md)、[验收](../evidence/LIVE-02G-acceptance.md)、[字段字典](../design/LIVE-02G-juxing-live-field-dictionary.md)。
+
 # 2026-11-05 LIVE-02F：直播广场筛选能力扩展（LIVE-02 增量；核心闭环通过，CONDITIONAL GO）
 
 [LIVE-02F](LIVE-02F.md) 在 LIVE-02 直播采集之上实现两平台直播筛选：前端可选择/清除/提交，后端计划与契约校验，星图 Adapter 真实 UI 应用并逐请求校验，聚星 Adapter 构造真实列表请求体。真实产品 UI 完成巨量星图「时尚」`593cd747…` 2/2、磁力聚星「时尚」`472e7739…` 2/2；源平台候选身份与任务达人一致。其他已真实验证：星图女性/100w-300w/个人/广东省组合、深圳市、观众画像 18-23、场次/平均观看/ACU/PCU；聚星粉丝年龄/性别/设备、九大人群、预期观看/CPM、美妆/美食映射。直播允许仅筛选创建（关键词可选），全空拒绝，短视频规则不变。遗留：聚星粉丝/观众地域（两级占比面板）未实现且不展示；真实 Worker 恢复 BLOCKED；target 25 多页任务到第 2 页后取消；自定义区间未真实任务验证。证据：[调查](../evidence/LIVE-02-live-filter-investigation.md)、[验收](../evidence/LIVE-02-live-filter-acceptance.md)、[测试用例](../evidence/LIVE-02-test-cases.md)。
@@ -359,6 +383,12 @@ B3/C 最终证明自动选号在当前 Playwright 环境中不可靠：目标条
 | UPD-03 | 单达人手动更新闭环 | 待验收 | [UPD-03.md](UPD-03.md) |
 | UPD-04 | 达人周期性更新调度器 | 待验收 | [UPD-04.md](UPD-04.md) |
 | UPD-05 | 任务中心统一展示、文档与验收 | 待验收 | [UPD-05.md](UPD-05.md) |
+
+## 2026-11-06 四场景定时更新与独立开关（UPD-06）
+
+| ID | 标题 | 状态 | 卡片 |
+|---|---|---|---|
+| UPD-06 | 巨量星图/磁力聚星短视频与直播定时更新及独立开关 | 已完成（隔离真实四组，CONDITIONAL GO） | [UPD-06.md](UPD-06.md) |
 
 ## 2026-10-14 前端优化任务
 
