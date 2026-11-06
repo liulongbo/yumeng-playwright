@@ -99,11 +99,14 @@ def test_juxing_identity_projection_and_snapshot_stay_platform_isolated(repo):
 
     with repo.connect() as conn:
         identity = conn.execute(
-            """SELECT creator_id,platform,platform_creator_id,projection
+            """SELECT creator_id,platform,platform_creator_id,projection,video_homepage
             FROM platform_creators WHERE platform=%s AND platform_creator_id=%s""",
             ("kuaishou_juxing", "576757970"),
         ).fetchone()
         assert identity is not None
+        assert identity["video_homepage"] == (
+            "https://k.kuaishou.com/#/promotion/star/196223?openBy=user"
+        )
         assert identity["projection"]["basic.nickname"]["value"] == "真实样本昵称已脱敏"
         assert identity["projection"]["basic.followers"]["raw_value"] == "21686076"
         snapshot = conn.execute(

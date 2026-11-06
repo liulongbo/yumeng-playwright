@@ -666,7 +666,7 @@ async def test_juxing_task_and_task_creator_detail_render_in_chromium(frontend_u
         await page.route("**/api/**", juxing_api)
 
         await page.goto(f"{frontend_url}/tasks/{TASK_ID}")
-        await expect(page.get_by_text("磁力聚星")).to_be_visible()
+        await expect(page.get_by_text("磁力聚星 · 短视频广场", exact=True)).to_be_visible()
         await expect(page.get_by_text("精选完整")).to_have_count(0)
         await expect(page.get_by_text("F06 双集合")).to_have_count(0)
         await expect(page.get_by_text("聚星同名达人")).to_be_visible()

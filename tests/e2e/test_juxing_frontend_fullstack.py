@@ -19,6 +19,7 @@ import urllib.request
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 import psycopg
@@ -39,6 +40,22 @@ JUXING_CONTRACT = "juxing-video-creator-stage-b-v1"
 JUXING_ADAPTER = "juxing-browser-v1"
 USERNAME = "ui-media"
 PASSWORD = "ui-media-password"
+
+
+def _isolated_redis_url() -> str:
+    """Use the configured Redis endpoint on a dedicated logical database.
+
+    The local development Redis lives on a non-default port and requires the credentials from
+    ``XINGTU_REDIS_URL``.  Hard-coding ``127.0.0.1:6379`` made this check fail with
+    ``LOGIN_LIMITER_UNAVAILABLE`` on every machine that runs the documented local stack.  The
+    database index is still pinned so the rate-limit keys of this check stay isolated.
+    """
+
+    configured = os.environ.get("XINGTU_REDIS_URL")
+    if not configured:
+        return "redis://127.0.0.1:6379/15"
+    parts = urlsplit(configured)
+    return urlunsplit((parts.scheme, parts.netloc, "/15", "", ""))
 
 
 def _number(amount: str) -> dict[str, object]:
@@ -269,7 +286,7 @@ def full_stack() -> Iterator[dict[str, object]]:
     api_env = dict(
         os.environ,
         XINGTU_DATABASE_URL=dsn,
-        XINGTU_REDIS_URL="redis://127.0.0.1:6379/15",
+        XINGTU_REDIS_URL=_isolated_redis_url(),
         XINGTU_LOGIN_HMAC_KEY="kjx-ui-fullstack-hmac-key-0123456789",
         XINGTU_ENABLE_KUAISHOU_JUXING="1",
         XINGTU_SECURE_COOKIE="0",
@@ -346,7 +363,7 @@ async def test_real_api_ui_serves_juxing_library_and_task(full_stack):
         )
 
         await page.goto(f"{url}/tasks/{root}")
-        await expect(page.get_by_text("磁力聚星")).to_be_visible()
+        await expect(page.get_by_text("磁力聚星 · 短视频广场", exact=True)).to_be_visible()
         await expect(page.get_by_text("精选完整")).to_have_count(0)
         await expect(page.get_by_text("聚星同名达人")).to_be_visible()
         await page.get_by_text("聚星同名达人").click()

@@ -7,6 +7,17 @@ export type TaskStatus =
 
 export type TaskKind = "collection" | "manual_update" | "scheduled_update";
 
+export type CreatorScene = "video_square" | "live_square";
+
+export interface SceneOption {
+  scene: CreatorScene;
+  label: string;
+  enabled: boolean;
+  capability_status: "verified" | "observed" | "documented" | "unavailable";
+  contract_version: string | null;
+  disabled_reason?: string | null;
+}
+
 export interface UserView {
   user_id: string;
   username: string;
@@ -28,12 +39,13 @@ export interface CapabilityField {
   label: string;
   operators: string[];
   group?: string | null;
-  control?: "text" | "single-select" | "cascader" | "range" | "range-group" | "profile-group" | null;
+  control?: "text" | "single-select" | "multi-select" | "cascader" | "range" | "range-group" | "profile-group" | null;
   options: CapabilityOption[];
   dimensions: CapabilityDimension[];
   region_tree: RegionNode[];
   range_constraints?: RangeConstraint | null;
   incompatible_with: string[];
+  disabled_reason?: string | null;
   unit?: string | null;
   currencies: string[];
   cooperation_forms: string[];
@@ -60,6 +72,7 @@ export interface RegionNode { value: string; label: string; children: RegionNode
 
 export interface Capabilities {
   platform: "douyin_xingtu" | "kuaishou_juxing";
+  creator_scene?: CreatorScene;
   capability_version: string;
   fields: CapabilityField[];
   combinations: string[][];
@@ -78,6 +91,7 @@ export interface PlatformOption {
   capability_status: "verified" | "observed" | "documented" | "unavailable";
   contract_version: string | null;
   disabled_reason?: string | null;
+  scenes?: SceneOption[];
 }
 
 export interface RequirementFormV1 {
@@ -103,10 +117,26 @@ export interface AudienceProfile {
   crowd: string[];
 }
 
+export interface LiveFilterRange {
+  min: number | null;
+  max: number | null;
+  unit: "count" | "ten_thousand_count" | "yuan";
+}
+
+export interface LiveFilterSelection {
+  field: string;
+  values: string[];
+  range?: LiveFilterRange;
+  regions?: Array<{ province_code: string; city?: string | null }>;
+  profile?: Array<{ key: string; values: string[] }>;
+}
+
 export interface RequirementFormV2 {
   schema_version: "requirement_form.v2";
   platform: "douyin_xingtu";
+  creator_scene?: CreatorScene;
   keyword: string | null;
+  live_filters?: LiveFilterSelection[];
   creator_types: [];
   followers: RangeValue | null;
   creator_gender: "male" | "female" | null;
@@ -130,7 +160,9 @@ export interface JuxingRange {
 export interface RequirementFormV3 {
   schema_version: "requirement_form.v3";
   platform: "kuaishou_juxing";
+  creator_scene?: CreatorScene;
   keyword: string | null;
+  live_filters?: LiveFilterSelection[];
   content_types: string[];
   creator_types: [];
   followers: CountRangeValue | null;
@@ -151,7 +183,16 @@ export interface RequirementFormV3 {
   target_count: number;
 }
 
-export type RequirementForm = RequirementFormV1 | RequirementFormV2 | RequirementFormV3;
+export interface LiveRequirementForm {
+  schema_version: "requirement_form.v2" | "requirement_form.v3";
+  platform: "douyin_xingtu" | "kuaishou_juxing";
+  creator_scene: "live_square";
+  keyword: string | null;
+  live_filters: LiveFilterSelection[];
+  target_count: number;
+}
+
+export type RequirementForm = RequirementFormV1 | RequirementFormV2 | RequirementFormV3 | LiveRequirementForm;
 
 export interface TaskCounts {
   target_count: number;
@@ -166,6 +207,7 @@ export interface TaskSummary {
   root_task_id: string;
   /** Optional only for compatibility with pre-migration fixtures; API responses always include it. */
   platform?: "douyin_xingtu" | "kuaishou_juxing";
+  creator_scene?: CreatorScene;
   task_kind: TaskKind;
   status: TaskStatus;
   stage: string;
@@ -329,9 +371,24 @@ export interface LibraryMetric {
   observed_at: string | null;
 }
 
+export interface LiveMetricEnvelope {
+  field_key?: string;
+  value?: unknown;
+  raw_value?: string | null;
+  unit?: string | null;
+  period_label?: string | null;
+  status?: string;
+  source_kind?: string | null;
+  source_contract?: string | null;
+  path_ref?: string | null;
+  observed_at?: string | null;
+}
+
 export interface CreatorLibrarySummary {
   creator_id: string;
   platform: "douyin_xingtu" | "kuaishou_juxing";
+  creator_scene?: CreatorScene;
+  live_metrics?: Record<string, LiveMetricEnvelope>;
   platform_creator_id: string;
   display_name: string | null;
   avatar_uri: string | null;
@@ -364,6 +421,8 @@ export interface CreatorLibrarySummary {
 export interface CreatorLibraryPage { items: CreatorLibrarySummary[]; next_cursor: string | null }
 
 export interface CreatorLibraryDetail extends CreatorLibrarySummary {
+  available_scenes?: CreatorScene[];
+  platform_star_id?: string | null;
   latest_snapshot_id: string | null;
   mcn_name: string | null;
   introduction: string | null;
@@ -395,6 +454,44 @@ export interface CreatorUpdateResponse {
   root_task_id: string;
   status: TaskStatus;
   reused: boolean;
+}
+
+export interface CreatorUpdateTaskSummary {
+  root_task_id: string;
+  state: TaskStatus;
+  stage: string | null;
+  created_at: string;
+  completed_at: string | null;
+  failure_reason: string | null;
+  target_count: number;
+  valid_count: number;
+  profile_complete_count: number;
+}
+
+export interface CreatorUpdateServiceView {
+  platform: "douyin_xingtu" | "kuaishou_juxing";
+  creator_scene: CreatorScene;
+  enabled: boolean;
+  effective_enabled: boolean;
+  scheduler_alive: boolean;
+  scheduler_last_tick_at: string | null;
+  registry_available: boolean | null;
+  unavailable_reason: string | null;
+  enrolled_count: number;
+  due_count: number;
+  in_flight_count: number;
+  missing_target_count: number;
+  next_due_at: string | null;
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_task: CreatorUpdateTaskSummary | null;
+}
+
+export interface CreatorUpdateServicePage {
+  items: CreatorUpdateServiceView[];
+  scheduler_alive: boolean;
+  scheduler_last_tick_at: string | null;
+  scheduler_tick_seconds: number | null;
 }
 
 export interface CreatorLibraryHistoryPoint {

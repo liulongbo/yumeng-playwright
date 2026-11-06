@@ -54,7 +54,8 @@
 | `make api` | 已迁移业务库；`XINGTU_DATABASE_URL`、Redis、登录 HMAC、允许 Origin 等 M3 环境变量 | 启动 FastAPI 产品 API；自动加载 `.runtime/m3-app.env`；不会自动创建任务 |
 | `make intake-worker UNIT_CONFIG=<file>` | 产品 API 环境、Temporal、live 注册表、有效执行单元和 `DEEPSEEK_API_KEY` | 校验模型后消费 `intake_dispatches`；成功才派发现有 P2 |
 | `make collection-worker UNIT_CONFIG=<file>` | 同上 + 真实浏览器与采集授权 | 消费 `xingtu-<unit>` 队列并执行 F04/F05/F06 采集；也执行手动/定时更新任务 |
-| `make update-scheduler [UNIT_CONFIG=<file>] [BATCH_SIZE=5]` | 已迁移业务库、live 注册表、执行单元；不需要模型密钥或浏览器 | 按粉丝档位生成 `scheduled_update` 批次任务；不运行则定时更新暂停，正常采集与手动更新不受影响 |
+| `make update-scheduler [UNIT_CONFIG=<file>] [BATCH_SIZE=5]` | 已迁移业务库、四份 live/video registry、执行单元；不需要模型密钥或浏览器 | 一个进程服务四个 `(platform, creator_scene)` 组，按组生成 `scheduled_update` 批次；组开关在 `creator_update_service`，管理页 `/settings`；不运行则定时更新暂停，正常采集与手动更新不受影响 |
+| `python scripts/backfill_video_homepage.py [--apply]` | 已迁移业务库；默认只读 | 从历史 checkpoint 回填聚星短视频 `platform_creators.video_homepage`；`--apply` 才写入，幂等、不覆盖已有值 |
 | `make frontend-dev` | 已执行 `make frontend-install`；本地 API 默认在 `127.0.0.1:8000` | 启动 Vite 界面并同源代理 `/api` |
 | `make frontend-build` | Node.js/npm | TypeScript strict 检查并生成 `frontend/dist/` |
 | `make test-product-e2e` | 前端依赖与 Chromium | 真实 Chromium + 合成 API 验证登录、提交、进度和结果；不访问平台 |

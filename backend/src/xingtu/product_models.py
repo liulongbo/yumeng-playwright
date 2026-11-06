@@ -8,7 +8,11 @@ from pydantic import Field, JsonValue, model_validator
 
 from .domain import (
     CONNECTION_USERS_MAX_W,
+    LIVE_OPTION_FIELDS,
+    LIVE_PROFILE_FIELDS,
+    LIVE_RANGE_FIELDS,
     Capabilities,
+    CreatorScene,
     FilterPlan,
     Model,
     TaskKind,
@@ -153,6 +157,75 @@ class JuxingVideoQuotes(Model):
         return self
 
 
+LiveFilterField = Literal[
+    "live_content_type",
+    "live_content_category",
+    "live_gender",
+    "live_certification",
+    "live_region",
+    "live_followers",
+    "live_recent_sessions",
+    "live_avg_viewers",
+    "live_avg_view_visits",
+    "live_acu",
+    "live_pcu",
+    "live_expected_viewers",
+    "live_max_online",
+    "live_expected_cpm",
+    "live_viewer_profile",
+    "live_fan_profile",
+]
+
+
+class LiveProfileDimensionRequirement(Model):
+    key: str = Field(min_length=1)
+    values: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def nonblank_and_unique(self) -> Self:
+        if not self.key.strip() or any(not value.strip() for value in self.values):
+            raise ValueError("live profile values cannot be blank")
+        if len(self.values) != len(set(self.values)):
+            raise ValueError("live profile values must be unique")
+        return self
+
+
+class LiveFilterRequirement(Model):
+    field: LiveFilterField
+    values: list[str] = Field(default_factory=list)
+    range: RequirementRange | None = None
+    regions: list[RegionSelection] = Field(default_factory=list)
+    profile: list[LiveProfileDimensionRequirement] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def shape(self) -> Self:
+        payloads = {
+            "values": bool(self.values),
+            "range": self.range is not None,
+            "regions": bool(self.regions),
+            "profile": bool(self.profile),
+        }
+        if sum(payloads.values()) != 1:
+            raise ValueError("live filter requires exactly one value shape")
+        if self.field in LIVE_OPTION_FIELDS and not payloads["values"]:
+            raise ValueError("live option filter requires values")
+        if self.field in LIVE_RANGE_FIELDS and not payloads["range"]:
+            raise ValueError("live range filter requires a range")
+        if self.field in LIVE_PROFILE_FIELDS and not payloads["profile"]:
+            raise ValueError("live profile filter requires profile dimensions")
+        if self.field == "live_region" and not payloads["regions"]:
+            raise ValueError("live region filter requires regions")
+        if len(self.values) != len(set(self.values)):
+            raise ValueError("live filter values must be unique")
+        keys = [(value.province_code, value.city) for value in self.regions]
+        if len(keys) != len(set(keys)):
+            raise ValueError("live region paths must be unique")
+        profile_keys = [value.key for value in self.profile]
+        if len(profile_keys) != len(set(profile_keys)):
+            raise ValueError("live profile dimensions must be unique")
+        return self
+
+
 class RequirementForm(Model):
     """The user-authored requirement, deliberately separate from ``FilterPlan``."""
 
@@ -160,7 +233,9 @@ class RequirementForm(Model):
         "requirement_form.v2"
     )
     platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
+    creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE
     keyword: str | None = None
+    live_filters: list[LiveFilterRequirement] = Field(default_factory=list)
     content_types: list[str] = Field(default_factory=list)
     creator_types: list[str] = Field(default_factory=list)
     followers: RequirementRange | None = None
@@ -182,6 +257,33 @@ class RequirementForm(Model):
     def meaningful_and_unique(self) -> Self:
         if self.keyword is not None and not self.keyword.strip():
             raise ValueError("keyword cannot be blank")
+        if self.creator_scene != CreatorScene.LIVE_SQUARE and self.live_filters:
+            raise ValueError("live filters are only valid for live_square")
+        if self.creator_scene == CreatorScene.LIVE_SQUARE:
+            if self.target_count > 70:
+                raise ValueError("live target_count exceeds 70")
+            if (self.keyword is None or not self.keyword.strip()) and not self.live_filters:
+                raise ValueError("live collection requires a keyword, creator id or filter")
+            if any(
+                (
+                    self.content_types,
+                    self.creator_types,
+                    self.followers,
+                    self.creator_gender,
+                    self.creator_regions,
+                    self.creator_education,
+                    self.yellow_v_certification,
+                    self.connection_users,
+                    self.viewer_profile,
+                    self.fan_profile,
+                    self.quote,
+                    self.juxing_video_quotes,
+                )
+            ):
+                raise ValueError("live collection does not support video filters yet")
+            live_fields = [value.field for value in self.live_filters]
+            if len(live_fields) != len(set(live_fields)):
+                raise ValueError("live filter fields must be unique")
         if any(not value.strip() for value in self.creator_types):
             raise ValueError("filter options cannot be blank")
         if len(self.creator_types) != len(set(self.creator_types)):
@@ -275,6 +377,7 @@ class RequirementForm(Model):
                 self.connection_users is not None,
                 self.viewer_profile is not None,
                 self.fan_profile is not None,
+                bool(self.live_filters),
             )
         ):
             raise ValueError("at least one business filter is required")
@@ -308,6 +411,32 @@ class RequirementForm(Model):
             data["creator_gender"] = self.creator_gender.strip()
         if self.sort_key is not None:
             data["sort_key"] = self.sort_key.strip()
+        normalized_live: list[dict[str, object]] = []
+        for item in self.live_filters:
+            value = item.model_dump(mode="json")
+            value["values"] = sorted(part.strip() for part in item.values)
+            value["regions"] = sorted(
+                (
+                    {
+                        "province_code": region.province_code.strip(),
+                        "city": region.city.strip() if region.city else None,
+                    }
+                    for region in item.regions
+                ),
+                key=lambda region: (region["province_code"], region["city"] or ""),
+            )
+            value["profile"] = sorted(
+                (
+                    {
+                        "key": profile.key.strip(),
+                        "values": sorted(part.strip() for part in profile.values),
+                    }
+                    for profile in item.profile
+                ),
+                key=lambda profile: profile["key"],
+            )
+            normalized_live.append(value)
+        data["live_filters"] = sorted(normalized_live, key=lambda value: value["field"])
         return RequirementForm.model_validate(data)
 
 
@@ -322,6 +451,7 @@ class CapabilityFieldDTO(Model):
     region_tree: list[dict[str, JsonValue]] = Field(default_factory=list)
     range_constraints: dict[str, JsonValue] | None = None
     incompatible_with: list[str] = Field(default_factory=list)
+    disabled_reason: str | None = None
     unit: str | None = None
     currencies: list[str] = Field(default_factory=list)
     cooperation_forms: list[str] = Field(default_factory=list)
@@ -330,6 +460,7 @@ class CapabilityFieldDTO(Model):
 
 class CapabilityDTO(Model):
     platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
+    creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE
     capability_version: str
     fields: list[CapabilityFieldDTO]
     combinations: list[list[str]]
@@ -346,6 +477,7 @@ class CapabilityDTO(Model):
         capabilities: Capabilities,
         *,
         platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu",
+        creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE,
         target_count_max: int | None = None,
     ) -> CapabilityDTO:
         if capabilities.status != "VERIFIED" or capabilities.sample_kind != "live":
@@ -362,6 +494,7 @@ class CapabilityDTO(Model):
             raise ValueError("M3 requires one verified platform default sort")
         return cls(
             platform=platform,
+            creator_scene=creator_scene,
             capability_version=capabilities.version,
             fields=[
                 CapabilityFieldDTO(
@@ -377,6 +510,7 @@ class CapabilityDTO(Model):
                     if item.range_constraints
                     else None,
                     incompatible_with=item.incompatible_with,
+                    disabled_reason=item.disabled_reason,
                     unit=item.unit,
                     currencies=item.currencies,
                     cooperation_forms=item.cooperation_forms,
@@ -389,10 +523,18 @@ class CapabilityDTO(Model):
             if capabilities.combination_policy
             else None,
             target_count_default=(
-                min(20, max(1, target_count_max or 200)) if platform == "kuaishou_juxing" else 20
+                20
+                if creator_scene == CreatorScene.LIVE_SQUARE
+                else (
+                    min(20, max(1, target_count_max or 200))
+                    if platform == "kuaishou_juxing"
+                    else 20
+                )
             ),
             target_count_max=(
-                max(1, target_count_max or 200) if platform == "kuaishou_juxing" else 200
+                70
+                if creator_scene == CreatorScene.LIVE_SQUARE
+                else (max(1, target_count_max or 200) if platform == "kuaishou_juxing" else 200)
             ),
             fixed_sort_key=capabilities.sorts[0],
         )
@@ -563,6 +705,7 @@ class ExecutionUnitView(Model):
 class TaskSummary(Model):
     root_task_id: str
     platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
+    creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE
     task_kind: TaskKind = TaskKind.COLLECTION
     status: TaskStatus
     stage: str
@@ -687,7 +830,9 @@ class LibraryMetric(Model):
 class CreatorLibrarySummary(Model):
     creator_id: str
     platform: Literal["douyin_xingtu", "kuaishou_juxing"] = "douyin_xingtu"
+    creator_scene: CreatorScene = CreatorScene.VIDEO_SQUARE
     platform_creator_id: str
+    live_metrics: dict[str, JsonValue] = Field(default_factory=dict)
     display_name: str | None = None
     avatar_uri: str | None = None
     creator_type_label: str | None = None
@@ -727,6 +872,8 @@ class CreatorLibraryPage(Model):
 
 
 class CreatorLibraryDetail(CreatorLibrarySummary):
+    available_scenes: list[CreatorScene] = Field(default_factory=list)
+    platform_star_id: str | None = None
     latest_snapshot_id: str | None = None
     mcn_name: str | None = None
     introduction: str | None = None
@@ -738,6 +885,9 @@ class CreatorLibraryDetail(CreatorLibrarySummary):
     failed_field_count: int = 0
     field_sources: dict[str, JsonValue] = Field(default_factory=dict)
     module_statuses: dict[str, str | None] = Field(default_factory=dict)
+    # Modules whose latest observation failed and whose data was read back from an older immutable
+    # snapshot.  Additive: an empty map means every module comes from the latest snapshot.
+    module_fallbacks: dict[str, JsonValue] = Field(default_factory=dict)
     # A presentation-safe, complete profile assembled from the current projection and the latest
     # immutable snapshot.  It deliberately keeps platform field envelopes (status/unit/period).
     profile_payload: dict[str, JsonValue] = Field(default_factory=dict)
@@ -764,6 +914,57 @@ class CreatorUpdateResponse(Model):
     root_task_id: str
     status: TaskStatus = TaskStatus.QUEUED
     reused: bool = False
+
+
+class CreatorUpdateTaskSummary(Model):
+    """Latest scheduled batch for one update service; counts come from the task payload."""
+
+    root_task_id: str
+    state: TaskStatus
+    stage: str | None = None
+    created_at: datetime
+    completed_at: datetime | None = None
+    failure_reason: str | None = None
+    target_count: int = 0
+    valid_count: int = 0
+    profile_complete_count: int = 0
+
+
+class CreatorUpdateServiceView(Model):
+    """One (platform, creator_scene) scheduled-update service and its observable state.
+
+    ``effective_enabled`` is the only field that claims actual automation: it requires the
+    persisted switch, a live scheduler heartbeat and an available contract.  Fields without a
+    reliable source stay empty instead of being invented.
+    """
+
+    platform: Literal["douyin_xingtu", "kuaishou_juxing"]
+    creator_scene: CreatorScene
+    enabled: bool
+    effective_enabled: bool
+    scheduler_alive: bool
+    scheduler_last_tick_at: datetime | None = None
+    registry_available: bool | None = None
+    unavailable_reason: str | None = None
+    enrolled_count: int = 0
+    due_count: int = 0
+    in_flight_count: int = 0
+    missing_target_count: int = 0
+    next_due_at: datetime | None = None
+    last_attempt_at: datetime | None = None
+    last_success_at: datetime | None = None
+    last_task: CreatorUpdateTaskSummary | None = None
+
+
+class CreatorUpdateServicePage(Model):
+    items: list[CreatorUpdateServiceView]
+    scheduler_alive: bool
+    scheduler_last_tick_at: datetime | None = None
+    scheduler_tick_seconds: float | None = None
+
+
+class CreatorUpdateServicePatch(Model):
+    enabled: bool
 
 
 class CreatorLibraryHistoryPoint(Model):

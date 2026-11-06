@@ -30,6 +30,7 @@ class IntakeProcessor:
         execution_unit_id: str,
         profile_requirement: ProfileRequirement | None = None,
         platform_registries: dict[str, PlatformRegistry] | None = None,
+        scene_registries: dict[str, PlatformRegistry] | None = None,
         platform_profile_requirements: dict[str, ProfileRequirement] | None = None,
     ) -> None:
         self.repository = repository
@@ -41,6 +42,7 @@ class IntakeProcessor:
             "douyin_xingtu": registry,
             **(platform_registries or {}),
         }
+        self.scene_registries = dict(scene_registries or {})
         # `profile_requirement` is the Xingtu full-homepage field inventory.  It must never be
         # attached to another platform: a juxing task would then be required to collect Xingtu-only
         # modules and could never become COMPLETED.  Juxing P0 completeness is defined by its own
@@ -48,7 +50,13 @@ class IntakeProcessor:
         # per-platform inventory exists.
         self.platform_profile_requirements = dict(platform_profile_requirements or {})
 
-    def _profile_requirement_for(self, platform: str) -> ProfileRequirement | None:
+    def _profile_requirement_for(
+        self, platform: str, creator_scene: str = "video_square"
+    ) -> ProfileRequirement | None:
+        if creator_scene == "live_square":
+            # Live completeness is defined by the live registry modules; the Xingtu video field
+            # inventory must never be attached to a live task.
+            return None
         if platform in self.platform_profile_requirements:
             return self.platform_profile_requirements[platform]
         if platform == "douyin_xingtu":
@@ -57,12 +65,18 @@ class IntakeProcessor:
 
     async def process(self, root_task_id: str) -> str:
         state = self.repository.load_intake(root_task_id)
-        registry = self.platform_registries.get(state.requirement_form.platform)
+        platform = state.requirement_form.platform
+        scene = state.requirement_form.creator_scene.value
+        registry = (
+            self.scene_registries.get(f"{platform}:{scene}")
+            if scene == "live_square"
+            else self.platform_registries.get(platform)
+        )
         if registry is None:
             error = FieldError(
                 code="PLATFORM_CONTRACT_NOT_AVAILABLE",
-                path="platform",
-                message=state.requirement_form.platform,
+                path="creator_scene" if scene == "live_square" else "platform",
+                message=f"{platform}:{scene}",
             )
             failed = state.model_copy(update={"outcome": "failed_model", "final_error": [error]})
             self.repository.fail_intake(failed, TaskStatus.FAILED_VALIDATION, [error])
@@ -107,7 +121,6 @@ class IntakeProcessor:
             return TaskStatus.FAILED
         if result.outcome == "succeeded" and result.final_plan:
             try:
-                platform = state.requirement_form.platform
                 # Dedicated execution units: the platform, not the ingestion worker's own unit
                 # config, decides where the task may run. Falling back to the configured unit
                 # keeps single-unit and internal-tool behaviour unchanged.
@@ -117,7 +130,7 @@ class IntakeProcessor:
                     result.final_plan,
                     unit_id=platform_unit or self.execution_unit_id,
                     registry=registry,
-                    profile_requirement=self._profile_requirement_for(platform),
+                    profile_requirement=self._profile_requirement_for(platform, scene),
                 )
             except CollectorError as exc:
                 if exc.code == "TASK_CANCELLED":

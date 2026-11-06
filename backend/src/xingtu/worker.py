@@ -297,6 +297,22 @@ class Activities:
                     return "timeout"
                 await asyncio.sleep(0.5)
 
+    def cancel_disabled_scheduled_update(self, task: TaskRecord) -> str | None:
+        """Refuse to start a scheduled batch whose service was switched off while queued.
+
+        The check runs before any unit/browser work, so a stale plan created just before the
+        operator flipped the switch never opens Chrome.  Running tasks are untouched: this method
+        only sees the task before execution starts.
+        """
+        if task.task_kind != TaskKind.SCHEDULED_UPDATE:
+            return None
+        if self.repo.scheduled_update_enabled(task.platform.value, task.creator_scene.value):
+            return None
+        with self.repo.edit(task.root_task_id) as (current, _):
+            current.state = TaskStatus.CANCELLED
+            current.failure_reason = "UPDATE_SERVICE_DISABLED"
+        return TaskStatus.CANCELLED
+
     @activity.defn(name="collect_segment_v1")
     async def collect(self, root: str) -> str:
         task = self.repo.get(root)
@@ -312,6 +328,9 @@ class Activities:
             TaskStatus.FAILED,
         }:
             return task.state
+        disabled = self.cancel_disabled_scheduled_update(task)
+        if disabled is not None:
+            return disabled
         unit = self.repo.unit(task.execution_unit_id)
         # A challenge timeout closes the verification event but can leave the shared unit in
         # NEEDS_VERIFICATION.  The next task (possibly for the other platform) must not inherit
@@ -331,7 +350,7 @@ class Activities:
                 current.failure_reason = "PLATFORM_BINDING_NOT_CONFIGURED"
             return TaskStatus.WAITING_FOR_RESOURCE
         try:
-            active_config = self.config.for_platform(task.platform)
+            active_config = self.config.for_scene(task.platform, task.creator_scene)
         except CollectorError as exc:
             with self.repo.edit(root) as (current, _):
                 current.state = TaskStatus.WAITING_FOR_RESOURCE
@@ -540,6 +559,7 @@ class Activities:
                                 registry,
                                 active_config.expected_account_id,
                                 guard,
+                                scene=task.creator_scene,
                                 on_session_health=host.observe_session,
                                 manually_attested_account_id=active_config.manually_attested_account_id,
                             )

@@ -15,6 +15,7 @@ without PostgreSQL.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from enum import StrEnum
 
 from .domain import Candidate, TaskRecord, TaskStatus
@@ -25,12 +26,20 @@ class RetryScope(StrEnum):
     BACKFILL = "backfill"
 
 
-def is_retryable(candidate: Candidate) -> bool:
-    """A candidate is retryable when a step is failed or an attempted step is incomplete."""
+def is_retryable(candidate: Candidate, expected_modules: Iterable[str] | None = None) -> bool:
+    """A candidate is retryable when a step is failed or an expected step is incomplete.
+
+    A budget/interruption can commit ``valid`` after the basic module but before the remaining
+    modules are attempted; those modules are absent from ``candidate.modules`` rather than present
+    with ``complete=False``.  The task checkpoint knows the expected module keys, so callers that
+    have them must pass ``expected_modules`` to make that interrupted candidate recoverable.
+    """
     if candidate.state == "failed":
         return True
     if not candidate.valid:
         return False
+    if expected_modules is not None and set(expected_modules) - set(candidate.modules):
+        return True
     return any(not module.complete for module in candidate.modules.values()) or any(
         not collection.complete for collection in candidate.collections.values()
     )
@@ -58,7 +67,8 @@ def incomplete_valid_count(task: TaskRecord) -> int:
 
 
 def retryable_creator_count(task: TaskRecord) -> int:
-    return sum(1 for candidate in task.checkpoint.candidates if is_retryable(candidate))
+    expected = task.checkpoint.profile_module_keys
+    return sum(1 for candidate in task.checkpoint.candidates if is_retryable(candidate, expected))
 
 
 def requeue_for_retry(task: TaskRecord, scope: RetryScope) -> None:
@@ -84,5 +94,5 @@ def requeue_for_retry(task: TaskRecord, scope: RetryScope) -> None:
             if candidate.state in {"pending", "collecting", "failed"}:
                 candidate.state = "pending"
             continue
-        if candidate.valid and is_retryable(candidate):
+        if candidate.valid and is_retryable(candidate, task.checkpoint.profile_module_keys):
             candidate.state = "pending"

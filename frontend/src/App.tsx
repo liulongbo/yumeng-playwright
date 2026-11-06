@@ -3,6 +3,7 @@ import { ClipboardList, LogOut, MonitorCog, Radar, Settings2, UsersRound } from 
 import { AuthProvider, useAuth } from "./AuthContext";
 import { BrandMark, LoadingState } from "./ui";
 import { CreatorDetailPage, CreatorLibraryDetailPage, CreatorLibraryPage, ExecutionUnitsPage, LoginPage, NewTaskPage, TaskDetailPage, TasksPage } from "./pages";
+import { UpdateServicesPage } from "./updateServices";
 
 function ProtectedLayout() {
   const auth = useAuth();
@@ -20,6 +21,7 @@ function ProtectedLayout() {
         <NavLink to="/tasks" end><ClipboardList size={19} />任务中心</NavLink>
         <NavLink to="/creators"><UsersRound size={19} />达人库</NavLink>
         <NavLink to="/execution-units"><MonitorCog size={19} />执行单元</NavLink>
+        <NavLink to="/settings"><Settings2 size={19} />自动更新</NavLink>
       </nav>
       <div className="sidebar-note"><Radar size={17} /><div><strong>星图采集服务</strong><span>任务在服务端持续运行</span></div></div>
       <div className="account-menu">
@@ -41,9 +43,10 @@ function ProductRoutes() {
       <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
       <Route path="/tasks/:taskId/creators/:creatorId" element={<CreatorDetailPage />} />
       <Route path="/creators" element={<CreatorLibraryPage />} />
+      <Route path="/creators/:creatorId/live" element={<CreatorLibraryDetailPage />} />
       <Route path="/creators/:creatorId" element={<CreatorLibraryDetailPage />} />
       <Route path="/execution-units" element={<ExecutionUnitsPage />} />
-      <Route path="/settings" element={<div className="placeholder"><Settings2 />当前里程碑不包含设置页面</div>} />
+      <Route path="/settings" element={<UpdateServicesPage />} />
     </Route>
     <Route path="*" element={<Navigate to="/tasks" replace />} />
   </Routes>;

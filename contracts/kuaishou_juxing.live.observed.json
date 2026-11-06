@@ -1,0 +1,550 @@
+{
+  "schema_version": "platform_capability_evidence.v1",
+  "platform": "kuaishou_juxing",
+  "contract_version": "juxing-live-square-observed-2026-11-05",
+  "status": "observed",
+  "observed_at": "2026-11-05T21:30:00+08:00",
+  "scope": "live_creator_square",
+  "entry": "https://k.kuaishou.com/?__accountId__=60821564#/star_plaza/live",
+  "entry_discovery": "顶部『找达人』菜单 →『直播广场』；真实 menuitem 点击后 hash=#/star_plaza/live，父级 query 带 __accountId__=60821564",
+  "account": "磁力聚星渠道户子账号 cpg果汁（ID 60821564）",
+  "browser": "Playwright MCP stdio 客户端 + 本机 Chrome；隔离上下文使用 unit-local-mac-03-juxing 导出的会话快照（2026-11-03T12:39Z）；首次进入需在账户选择页点击该子账号『进入』",
+  "evidence_refs": [
+    "docs/evidence/LIVE-02G-juxing-live-detail-investigation.md",
+    "docs/evidence/LIVE-02G-acceptance.md",
+    "docs/tasks/LIVE-02G.md",
+    ".runtime/live03-investigation/detail-9104-full/",
+    ".runtime/live03-investigation/ui-real2/"
+  ],
+  "request_contract": {
+    "method": "POST",
+    "host": "k.kuaishou.com",
+    "path": "/rest/web/star/list",
+    "content_type": "application/json",
+    "body_shape": {
+      "currentPage": "int(1-based)",
+      "pageSize": 20,
+      "starOrderTag": 3,
+      "starOrderType": 0,
+      "taskType": 4,
+      "userName": "string(optional; 昵称/快手ID search)",
+      "viewerCityPercentage": [],
+      "fansCityPercentage": [],
+      "starTagIds": [],
+      "pickList": [],
+      "advertiserPickList": [],
+      "pathSource": "no_filter_live | search_live"
+    },
+    "verified_variants": [
+      {
+        "case": "默认浏览",
+        "body": {
+          "currentPage": 1,
+          "taskType": 4,
+          "pathSource": "no_filter_live"
+        },
+        "total": 5000
+      },
+      {
+        "case": "按快手ID检索",
+        "body": {
+          "currentPage": 1,
+          "taskType": 4,
+          "userName": "841292065",
+          "pathSource": "search_live"
+        },
+        "total": 1
+      }
+    ],
+    "response_paths": {
+      "rows": "starList[]",
+      "identity": "starList[].userId",
+      "detail_key": "starList[].starId",
+      "basic": {
+        "nickname": "starList[].name",
+        "kwai_id": "starList[].kwaiId",
+        "avatar": "starList[].headUrl",
+        "gender": "starList[].gender",
+        "followers": "starList[].fansNumber",
+        "province_code": "starList[].provinceCode",
+        "city_code": "starList[].cityCode",
+        "star_tag": "starList[].starTagStr",
+        "industry_tags": "starList[].industryTagStr",
+        "mcn_name": "starList[].mcnName",
+        "public_settlement": "starList[].publicSettlement"
+      },
+      "live_metrics_list": {
+        "live_quoted_price": "starList[].liveQuotedPrice",
+        "live_expect_cpm": "starList[].liveExpectCpm",
+        "live_expect_viewer": "starList[].liveExpectViewer",
+        "live_max_viewer": "starList[].liveMaxViewer",
+        "live_interaction_rate": "starList[].liveInteractionRate",
+        "live_avg_people_num": "starList[].liveAvgPeopleNum",
+        "live_status": "starList[].liveStatus",
+        "live_active": "starList[].liveActive"
+      },
+      "quotes": "starList[].priceShowInfo[] (businessLine=2 为直播报价；priceTypeName=直播按小时/按天/按商品数；price 为 1/1000 元)",
+      "pagination": {
+        "current_page": "currentPage",
+        "total": "total"
+      }
+    }
+  },
+  "filters": {
+    "state": "labels/controls observed; request mappings not verified",
+    "groups": [
+      {
+        "group": "内容分类",
+        "fields": [
+          "不限 + 美妆/游戏/颜值达人/.../自拍（多项，含更多）"
+        ]
+      },
+      {
+        "group": "所属行业",
+        "fields": [
+          "不限 + 传媒资讯/工具类软件/.../旅游（多项，含更多）"
+        ]
+      },
+      {
+        "group": "星标推荐",
+        "fields": [
+          "不限/近30日粉丝数上升/涨粉黑马/支持对公/机构达人/小麦优质达人/支持CPS带货/星选达人/榜上有名/领域先锋/经验丰富/有商单经验/历史合作过/新芽优质达人/30天内有视频商单经验/90天内有视频商单经验/视频限时价/直播限时价/更多"
+        ]
+      },
+      {
+        "group": "达人信息",
+        "fields": [
+          "粉丝数量",
+          "达人报价",
+          "达人性别",
+          "达人地域",
+          "达人指数"
+        ]
+      },
+      {
+        "group": "受众人群",
+        "fields": [
+          "粉丝画像",
+          "观众画像"
+        ]
+      },
+      {
+        "group": "内容表现",
+        "fields": [
+          "预期观看人数",
+          "最高在线人数",
+          "预期CPM",
+          "限时折扣"
+        ]
+      },
+      {
+        "group": "推荐清单",
+        "fields": [
+          "达人清单",
+          "新游旅程：次元穿越记",
+          "聚星闪光达人",
+          "26年1月沙龙主推达人",
+          "12月CNY主题沙龙达人"
+        ]
+      }
+    ]
+  },
+  "list_columns_observed": [
+    "达人信息",
+    "粉丝数",
+    "预期观看人数",
+    "最高在线人数",
+    "预期CPM",
+    "粉丝增长量",
+    "粉丝增长率",
+    "报价",
+    "操作"
+  ],
+  "default_page": {
+    "result_summary": "为您推荐 1000+ 位达人",
+    "default_conditions": "无默认已选条件（未出现已选条件条）",
+    "page_1_size": 20,
+    "pagination": "底部 ant-pagination：1 2 3 4 5 … 250",
+    "page_2_verification": {
+      "method": "真实 UI 点击第 2 页（ant-pagination-item-2）",
+      "page": 2,
+      "count": 20,
+      "duplicates_with_page_1": 0,
+      "total": 5000
+    }
+  },
+  "detail": {
+    "route": "https://k.kuaishou.com/?__accountId__=60821564#/live-promotion/star/{starId}?openBy=user",
+    "title": "达人主页-磁力聚星",
+    "page_heading": "达人直播主页",
+    "tabs": [
+      "数据概览",
+      "达人指数",
+      "代表作品",
+      "受众分析",
+      "带货数据",
+      "合作情况"
+    ],
+    "identity": "页面显示快手 ID=userId，详情路径使用 starId；同一达人 userId 与 starId 必须分别保留",
+    "attachment_identities": {
+      "userId_52022133": {
+        "starId": "9104",
+        "name": "王者荣耀王小贱（福利主播）",
+        "modules": [
+          "基础信息",
+          "数据概览",
+          "报价",
+          "达人指数",
+          "合作数据概览",
+          "客户评价"
+        ]
+      },
+      "userId_1633604095": {
+        "starId": "451066",
+        "name": "桐桐就酱🐑.",
+        "modules": [
+          "代表作品",
+          "粉丝趋势",
+          "受众画像明细"
+        ]
+      },
+      "note": "用户提供的 Element 附件混合了两个真实达人页面；验收同时使用 9104 和 451066。"
+    },
+    "endpoint_contract_observed": {
+      "POST /rest/web/star/starProfile": {
+        "request_body": {
+          "starId": "$starId",
+          "starType": 4
+        },
+        "response_paths": {
+          "userId": "starProfile.userId",
+          "starId": "starProfile.starId",
+          "name": "starProfile.name",
+          "fansNumber": "starProfile.fansNumber",
+          "address": "starProfile.address",
+          "contentTypeTag": "starProfile.contentTypeTag",
+          "contentFormTag": "starProfile.contentFormTag",
+          "industryTag": "starProfile.industryTag",
+          "verifiedInfo": "starProfile.verifiedInfo",
+          "priceShowInfo": "starProfile.priceShowInfo[]",
+          "liveQuotedInfo": "starProfile.liveQuotedInfo",
+          "livePlayCntExpectancy": "starProfile.livePlayCntExpectancy",
+          "livePcuCnt": "starProfile.livePcuCnt",
+          "liveMaxExpectOnlineViewer": "starProfile.liveMaxExpectOnlineViewer",
+          "liveCpmExpectancy": "starProfile.liveCpmExpectancy",
+          "liveWeeklyTimesCnt": "starProfile.liveWeeklyTimesCnt",
+          "liveBusinessReport": "starProfile.liveBusinessReport",
+          "creditScore": "starProfile.creditScore",
+          "fansIncreaseNum": "starProfile.fansIncreaseNum",
+          "fansIncreaseRateIn30": "starProfile.fansIncreaseRateIn30",
+          "fansIncreaseRateIn90": "starProfile.fansIncreaseRateIn90",
+          "trendData": "starProfile.trendData.30|90",
+          "trendDiffData": "starProfile.trendDiffData.30|90",
+          "viewerFeatureTag": "starProfile.viewerFeatureTag",
+          "viewerDeviceTag": "starProfile.viewerDeviceTag",
+          "viewerAreaTag": "starProfile.viewerAreaTag",
+          "hotBrandInfo": "starProfile.hotBrandInfo",
+          "hotChannelInfo": "starProfile.hotChannelInfo"
+        }
+      },
+      "POST /rest/web/star/starWorksInfo": {
+        "request_body": {
+          "starId": "$starId",
+          "starType": 4
+        },
+        "response_paths": {
+          "personLiveWorks": "starWorksInfo.personLiveWorks[]",
+          "adSocialLiveWorks": "starWorksInfo.adSocialLiveWorks[]",
+          "recentLiveWorks": "starWorksInfo.recentLiveWorks[]",
+          "starWorkReport": "starWorksInfo.starWorkReport"
+        },
+        "work_fields": [
+          "streamId",
+          "coverUrl",
+          "url",
+          "releaseTimeMillis",
+          "durationTimeMillis",
+          "viewCnt",
+          "peakCnt",
+          "likeCnt",
+          "commentCnt",
+          "forwardCnt",
+          "caption",
+          "hasSkuInfo",
+          "orderId"
+        ]
+      },
+      "POST /rest/web/star/listPortrait": {
+        "request_body": {
+          "starId": "$starId",
+          "starType": 4
+        },
+        "response_paths": [
+          "data.viewerPortrait.*",
+          "data.fansPortrait.*"
+        ],
+        "note": "cityPercentage=城市等级、cityLevelPercentage=城市名；语义 key 需纠正"
+      },
+      "POST /rest/web/starIndex/starRadarGraph": {
+        "request_body": {
+          "userId": "$userId",
+          "starType": 4
+        },
+        "response_paths": [
+          "starRadarGraphVO.starIndexCurrent[]",
+          "starRadarGraphVO.starIndexAvg[]"
+        ]
+      },
+      "POST /rest/web/starIndex/starTrendGraph": {
+        "request_body": {
+          "userId": "$userId",
+          "starType": 4
+        },
+        "response_paths": [
+          "starTrendGraphVO.starIndexHistory[]",
+          "starTrendGraphVO.starIndexRank[]",
+          "starTrendGraphVO.starIndexPercent[]"
+        ]
+      },
+      "POST /rest/web/starIndex/info": {
+        "request_body": {
+          "userId": "$userId",
+          "starType": 4
+        },
+        "note": "两样本全 null；直播页不依赖，不进入本次字段"
+      },
+      "POST /rest/web/evaluation/star/score": {
+        "request_body": {
+          "starId": "$starId",
+          "promotionType": 2
+        },
+        "response_paths": [
+          "data.contentQualityScore",
+          "data.cooperation",
+          "data.credit",
+          "data.comprehensive"
+        ]
+      },
+      "POST /rest/web/evaluation/star/list": {
+        "request_body": {
+          "starId": "$starId",
+          "promotionType": 2,
+          "page": "$page",
+          "size": 10
+        },
+        "response_paths": [
+          "data.data[]",
+          "data.total"
+        ],
+        "note": "pageNum/pageSize 返回 0；分页依据 total 和行数；评价无平台 ID"
+      },
+      "POST /rest/web/commerce/live": {
+        "request_body": {
+          "starId": "$starId",
+          "duration": "7|30|90"
+        },
+        "response_paths": [
+          "data.liveCnt",
+          "data.liveWatchCntMedian",
+          "data.liveMaxOnlineCntMedian",
+          "data.goodsCnt",
+          "data.goodsGraph",
+          "data.duration"
+        ],
+        "sample": "9104 7日全0→页面-；30日 4/2313723/45708/14；90日 12/2893961/52297/35；451066 全部无数据"
+      },
+      "POST /rest/web/star/queryVideoPlayCnt": {
+        "request_body": {
+          "starId": "$starId",
+          "type": 4
+        },
+        "response_paths": [
+          "data.starWorkPlayMonthInfo",
+          "data.starWorkPlayWeekInfo",
+          "data.starWorkPlayHourInfo"
+        ],
+        "note": "直播频次；月/周/时；周 0=周日"
+      },
+      "NOT_USED": [
+        "commerce/video",
+        "star/queryCommerceInfo",
+        "star/match/pick/list",
+        "star/match/contact/task/history",
+        "star/playLet/info"
+      ]
+    },
+    "verified_fields": {
+      "basic": [
+        "昵称",
+        "快手ID（userId）",
+        "starId",
+        "地域",
+        "内容分类/标签",
+        "内容形式",
+        "所属行业",
+        "粉丝数",
+        "所属机构",
+        "认证信息"
+      ],
+      "quotes": [
+        "按小时/1小时",
+        "按天/1天",
+        "按商品/1个商品（拼场直播）",
+        "业务类型与计价单位"
+      ],
+      "overview": [
+        "粉丝数",
+        "预期观看人数",
+        "最高在线人数",
+        "预期CPM",
+        "周均直播场次",
+        "近30天信用分",
+        "预期最高在线人数",
+        "历史合作行业",
+        "观众特征/设备/地域摘要"
+      ],
+      "index": [
+        "综合指数",
+        "六维雷达",
+        "同粉丝段均值",
+        "同行业排名/超越比例",
+        "同粉丝段排名/比例",
+        "同类型趋势"
+      ],
+      "content": [
+        "个人作品",
+        "聚星作品",
+        "只看电商带货",
+        "最近15个直播",
+        "观看量/最高在线/评论/分享",
+        "直播频次分布",
+        "粉丝趋势"
+      ],
+      "audience": [
+        "观众画像",
+        "粉丝画像",
+        "性别/年龄/设备品牌/设备价格/设备类型/活跃度/城市等级/省市/兴趣/九大人群/TGI"
+      ],
+      "commerce": [
+        "7/30/90天带货场次",
+        "观看中位数",
+        "最高在线中位数",
+        "商品数",
+        "带货分析",
+        "热销品牌",
+        "优势类目"
+      ],
+      "cooperation": [
+        "30/90天接单率/完单率/订单完成数",
+        "评价汇总",
+        "评价总数",
+        "多条评价明细分页"
+      ]
+    },
+    "sample_values_2026_11_05": {
+      "9104": {
+        "index": {
+          "score": 81.6,
+          "industry_rank": 30538,
+          "industry_percent": 0.7832,
+          "fans_rank": 64,
+          "fans_percent": 0.3905
+        },
+        "works": {
+          "personal": 19,
+          "commercial": 57,
+          "recent": 15,
+          "ecommerce_filtered": 4,
+          "frequency_month": [
+            33,
+            48,
+            9
+          ]
+        },
+        "commerce": {
+          "7d": "NO_DATA",
+          "30d": [
+            4,
+            2313723,
+            45708,
+            14
+          ],
+          "90d": [
+            12,
+            2893961,
+            52297,
+            35
+          ]
+        },
+        "business": {
+          "30d": [
+            0.5641,
+            0.72,
+            18
+          ],
+          "90d": [
+            0.7363,
+            0.8451,
+            60
+          ]
+        },
+        "reviews": {
+          "total": 18,
+          "pages": 2
+        },
+        "credit_score": "NO_DATA"
+      },
+      "451066": {
+        "index": {
+          "score": 85.25,
+          "industry_rank": 13776,
+          "fans_rank": 6387
+        },
+        "works": {
+          "personal": 35,
+          "commercial": 0,
+          "recent": 15,
+          "frequency_month": [
+            26,
+            37,
+            5
+          ]
+        },
+        "business": "NO_DATA",
+        "reviews": {
+          "total": 0
+        },
+        "credit_score": "NO_DATA"
+      }
+    },
+    "coverage_gaps": [
+      "评价无平台 ID；以组合哈希去重，隐藏评价不保存 productName",
+      "设备类型 mobilePercentage 两样本为空，仅有 viewerDeviceTag 文字摘要",
+      "九大人群/兴趣在部分样本为空，按 NO_DATA 保存",
+      "指数趋势两样本全 0，已保留原值并标记 all_zero",
+      "雷达同粉段均值无综合指数维度",
+      "作品 url 为带 auth_key 的有时效播放地址；封面不进入对象存储",
+      "commerce 7 日全 0 与合作 30/90 null/0 在页面显示 -，系统按 NO_DATA 并保留 raw",
+      "page 7+ 与真实终点仍未验证（沿用 LIVE-02 调查）"
+    ]
+  },
+  "identity": {
+    "platform_creator_id_path": "starList[].userId",
+    "detail_path_parameter": "starId",
+    "cross_check": "真实短视频达人 userId=841292065 在直播广场按快手ID检索返回同 userId（starId=2576496）；证明同一平台身份可同时具有短视频与直播数据"
+  },
+  "permission_notes": [
+    "当前子账号可访问直播广场与直播详情，未见直播权限拒绝",
+    "首次进入需在账户选择页选择 cpg果汁(60821564)，否则落在选择账户页"
+  ],
+  "coverage_gaps": [
+    "直播筛选器的请求映射未逐项验证；阶段一仅验证默认浏览与按快手ID检索",
+    "列表 liveAvgPeopleNum 在样本中为 0，与详情 starProfile.liveAvgPeopleNum 不同；不得据此推断字段相等",
+    "代表直播/直播频次分布等标签页数据未完整核验",
+    "page 3+ 与真实终点未验证",
+    "达人指数/信用分等字段可能为空或来自其他标签页，需在阶段二逐项确认",
+    "详情新增字段已通过 9104/451066 真实页面与接口核验",
+    "附件为混合样本，已记录两达人身份与模块归属",
+    "page 7+ 与真实终点仍未验证（沿用 LIVE-02 调查）"
+  ]
+}
